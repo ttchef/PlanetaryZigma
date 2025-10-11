@@ -25,15 +25,19 @@ pub fn main() !void {
     var buffer: [4096 * 4 + 2]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
-    const connection: *db.Connection = try .connect();
-    defer connection.disconnect();
+    // const connection: *db.Connection = try .connect();
+    // defer connection.disconnect();
 
-    const ecs: Ecs = try .init(allocator);
+    var ecs: Ecs = try .init(allocator);
     defer ecs.deinit(allocator);
-    while (true) {
-        std.debug.print("\n======NEW LOOP======\n", .{});
-        ecs.update();
-    }
+
+    const a: Ecs.EcsCmp(&.{ Ecs.Rigidbody, nz.Transform3D(f32), f32, u32 }) = undefined;
+    a.sayAll();
+
+    // while (true) {
+    //     std.debug.print("\n======NEW LOOP======\n", .{});
+    //     ecs.update();
+    // }
 
     // const window = Render.init();
     // defer Render.deinit(window);
