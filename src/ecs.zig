@@ -1,80 +1,139 @@
 const std = @import("std");
-const nz = @import("numz");
 
-available_entities: std.Deque(Entity) = .empty,
+pub const Entity = enum(usize) {
+    _,
 
-pub const Rigidbody = struct {
-    force: nz.Vec3(f32),
-    mass: f32 = 1.0,
+    pub fn get(self: @This(), comptime T: type, world: anytype) ?T {
+        return if (world.signatures.items[@intFromEnum(self)].mask >> @intCast(@TypeOf(world).getCompIndex(T)) == 1)
+            world.getLayoutComp(T).items[@intFromEnum(self)]
+        else
+            null;
+    }
+
+    pub fn getPtr(self: @This(), comptime T: type, world: anytype) ?*T {
+        var val: ?T = if (world.signatures.items[@intFromEnum(self)].mask >> @intCast(@TypeOf(world).getCompIndex(T)) == 1)
+            world.getLayoutComp(T).items[@intFromEnum(self)]
+        else
+            null;
+        return if (val != null) &val.? else null;
+    }
+
+    pub fn set(self: @This(), comptime T: type, val: T, world: anytype) void {
+        world.signatures.items[@intFromEnum(self)].setValue(@TypeOf(world).getCompIndex(T), true);
+        world.getLayoutComp(T).items[@intFromEnum(self)] = val;
+    }
+
+    pub fn getSignature(self: @This(), world: anytype) @TypeOf(world).Signature {
+        return world.signatures.items[@intFromEnum(self)];
+    }
+
+    pub fn getGeneration(self: @This(), world: anytype) usize {
+        return world.generation.items[@intFromEnum(self)];
+    }
 };
 
-pub fn EcsCmp(comps: []const type) type {
-    const L: type = @Type(.{ .@"struct" = .{
-        .fields = blk: {
-            var fields: [comps.len]std.builtin.Type.StructField = undefined;
-            for (comps, &fields) |comp, *field| field.* = .{
-                .name = @typeName(comp),
-                .type = comp,
-                .alignment = @alignOf(comp),
-                .is_comptime = false,
-                .default_value_ptr = null,
-            };
+pub fn World(comps: []const type) type {
+    const types: [comps.len]type = types: {
+        var types: [comps.len]type = @splat(@TypeOf(null));
+        for (comps, &types) |comp, *@"type"| @"type".* = std.ArrayList(comp);
+        break :types types;
+    };
 
-            break :blk &fields;
-        },
-        .decls = &[_]std.builtin.Type.Declaration{},
-        .is_tuple = false,
-        .layout = .auto,
-    } });
+    const kvs = kvs: {
+        var kvs: [comps.len]struct { key: type, value: usize } = undefined;
+        for (comps, &kvs, 0..) |comp, *kv, i| kv.* = .{ .key = comp, .value = i };
+        break :kvs kvs;
+    };
 
     return struct {
-        pub const Layout = L;
-        layout: Layout = undefined,
+        allocator: std.mem.Allocator,
 
-        pub fn sayAll(self: @This()) void {
-            inline for (comps) |comp| {
-                std.debug.print("{s}\n", .{@typeName(@TypeOf(@field(self.layout, @typeName(comp))))});
+        next: std.Deque(Entity) = .empty,
+
+        layout: Layout = undefined,
+        signatures: std.ArrayList(Signature) = .empty,
+        generation: std.ArrayList(usize) = .empty,
+
+        pub const Layout: type = std.meta.Tuple(&types);
+        pub const Signature: type = std.StaticBitSet(comps.len);
+
+        pub fn getCompIndex(comptime T: type) usize {
+            inline for (kvs) |kv| if (kv.key == T) return kv.value;
+            @panic("invalid type of " ++ @typeName(T));
+        }
+
+        pub fn init(allocator: std.mem.Allocator, capacity: ?usize) !@This() {
+            var self: @This() = .{
+                .allocator = allocator,
+                .generation = try .initCapacity(allocator, capacity orelse 1),
+            };
+            inline for (comps) |comp| self.layout[comptime getCompIndex(comp)] = try .initCapacity(allocator, capacity orelse 1);
+            return self;
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.next.deinit(self.allocator);
+            self.generation.deinit(self.allocator);
+            inline for (comps) |comp| self.layout[comptime getCompIndex(comp)].deinit(self.allocator);
+        }
+
+        pub fn getLayoutComp(self: @This(), comptime T: type) std.ArrayList(T) {
+            return self.layout[comptime getCompIndex(T)];
+        }
+
+        pub fn add(self: *@This()) !Entity {
+            const front: usize = @intFromEnum(self.next.popFront() orelse @as(Entity, @enumFromInt(self.generation.items.len)));
+            inline for (comps) |comp| try self.layout[comptime getCompIndex(comp)].insert(self.allocator, front, undefined);
+            try self.signatures.insert(self.allocator, front, .initEmpty());
+            try self.generation.insert(self.allocator, front, 0);
+
+            return @enumFromInt(front);
+        }
+
+        pub fn remove(self: *@This(), entity: Entity) !void {
+            self.generation.items[@intFromEnum(entity)] += 1;
+            try self.next.pushFront(self.allocator, entity);
+        }
+
+        pub fn allocQuery(self: @This(), comptime T: []const type, allocator: std.mem.Allocator) !std.ArrayList(Entity) {
+            var len: usize = std.math.maxInt(usize);
+            inline for (comps) |comp| len = @min(len, self.getLayoutComp(comp).items.len);
+
+            var out: std.ArrayList(Entity) = try .initCapacity(allocator, 128);
+
+            for (0..len) |i| {
+                var found: usize = 0;
+                inline for (T) |comp| {
+                    if (self.signatures.items[i].mask >> @intCast(getCompIndex(comp)) == 1) found += 1;
+                }
+
+                if (found == T.len) try out.append(allocator, @enumFromInt(i));
             }
 
-            //TODO: Use this to get all combos of Archetypes!
-            //TODO: Also add an additional array for entities ID to know what data is associated with what id.
-            // inline for (1..comptime std.math.pow(usize, 2, comps.len)) |mask| {
-            //     inline for (comps, 0..) |num, i| {
-            //         if ((mask >> @intCast(i)) & 1 == 1) {
-            //             std.debug.print("{s}, ", .{@typeName(num)});
-            //         }
-            //     }
-            //     std.debug.print("\n", .{});
-            // }
+            return out;
+        }
+
+        pub fn bufQuery(self: @This(), comptime T: []const type, buffer: []Entity) !usize {
+            @memset(buffer, @enumFromInt(0));
+
+            var len: usize = std.math.maxInt(usize);
+            inline for (comps) |comp| len = @min(len, self.getLayoutComp(comp).items.len);
+
+            var out: usize = 0;
+
+            for (0..len) |i| {
+                var found: usize = 0;
+                inline for (T) |comp| {
+                    if (self.signatures.items[i].mask >> @intCast(getCompIndex(comp)) == 1) found += 1;
+                }
+
+                if (found == T.len) {
+                    out += 1;
+                    buffer[i] = @enumFromInt(i);
+                }
+            }
+
+            return out;
         }
     };
 }
-
-const max_entities = 4096;
-
-pub const Entity = enum(u32) {
-    _,
-};
-
-pub fn init(allocator: std.mem.Allocator) !@This() {
-    //TODO alloc the self with alloc. for seafty reasons down the line.
-    var self: @This() = .{ .available_entities = try .initCapacity(allocator, max_entities) };
-    for (0..max_entities) |i| {
-        self.available_entities.pushBackAssumeCapacity(@enumFromInt(i));
-    }
-    return self;
-}
-
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-    self.available_entities.deinit(allocator);
-}
-
-pub fn update(self: *@This()) void {
-    for (0..max_entities) |i| {
-        std.debug.print("id {d}\n", .{@intFromEnum(self.available_entities.at(i))});
-    }
-}
-
-// pub fn createNewEntity(self: @This()) Entity {
-//     self.available_entities.popFront();
-// }

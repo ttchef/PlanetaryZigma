@@ -2,11 +2,18 @@ mod module_bindings;
 use std::io::Write;
 use std::ptr::{null, null_mut};
 use std::os::raw::c_void;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Instant;
 
 use module_bindings::*;
 
 use spacetimedb_sdk::{credentials, DbContext, Error, Event, Identity, Status, Table, TableWithPrimaryKey};
+
+
+
+
+
+static PLAYER_CONNECT_CALLBACK: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 
 /// The URI of the SpacetimeDB instance hosting our chat database and module.
@@ -35,6 +42,66 @@ pub extern "C" fn free_db_connection(ptr: *mut c_void) {
         }
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn db_run_threaded(db_ctx: *mut c_void) {
+    if !db_ctx.is_null() { 
+        unsafe {
+            let conn = &mut *(db_ctx as *mut DbConnection);
+            conn.run_threaded(); 
+        }
+    }
+}
+
+// #[unsafe(no_mangle)]
+// pub extern "C" struct FFIPlayer {
+//     pub identity: __sdk::Identity,
+//     pub player_id: u32,
+//     pub name: String,
+//     pub position: DbVector3,
+//     pub rotation: DbVector3,
+//     pub direction: DbVector3,
+// }
+
+
+
+fn on_player_inserted(_ctx: &EventContext, player: &Player) {
+    // println!("player {} connected.", player.identity);
+    println!(">>> on_player_inserted() fired for player {}", player.identity);
+
+    let ptr = PLAYER_CONNECT_CALLBACK.load(Ordering::SeqCst);
+    if !ptr.is_null() {
+        println!(">>> callback pointer found, calling it...");
+        let callback: extern "C" fn() = unsafe { std::mem::transmute(ptr) };
+        callback();
+    } else {
+        println!(">>> callback pointer is null (never set or lost visibility?)");
+    }
+
+    // if _ctx.identity() == player.identity {
+    //     if let Some(callback) = *PLAYER_CONNECT_CALLBACK.lock().unwrap() {
+    //         callback(); 
+    //     }
+    // }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn register_player_connect_callback(
+    db_ctx: *mut c_void,
+    func_ptr: *mut c_void
+) {
+    if !db_ctx.is_null() {
+        unsafe {
+            let db_conn = &mut *(db_ctx as *mut DbConnection);
+            PLAYER_CONNECT_CALLBACK.store(func_ptr, Ordering::SeqCst);
+            println!(">>> registered callback pointer {:p}", func_ptr);
+
+            // now hook up the Rust-side event
+            db_conn.db.player().on_insert(on_player_inserted); 
+
+        }
+    }
+}
+
 
 
 /// Load credentials from a file and connect to the database.
@@ -89,14 +156,7 @@ fn on_disconnected(_ctx: &ErrorContext, err: Option<Error>) {
     }
 }
 
-// fn on_player_inserted(_ctx: &EventContext, player: &Player) {
-//     println!("player {} connected.", player.identity);
-//         if _ctx.identity() == player.identity {
 
-//     } else {
-
-//     }
-// }
 
 // fn on_player_update(_ctx: &EventContext, old_player: &Player, new_player: &Player) {
 //     println!("PLAYER UPDATED New x-Pos {}", new_player.position.x);
@@ -108,9 +168,8 @@ fn on_disconnected(_ctx: &ErrorContext, err: Option<Error>) {
 //     println!("\nregister_callbacks\n");
 
 //     // When a new user joins, print a notification.
-//     ctx.db.player().on_insert(on_player_inserted);
 
-//     ctx.db.player().on_update(on_player_update);
+//     // ctx.db.player().on_update(on_player_update);
 
 //     // // When a user's status changes, print a notification.
 //     // ctx.db.user().on_update(on_user_updated);
@@ -125,21 +184,26 @@ fn on_disconnected(_ctx: &ErrorContext, err: Option<Error>) {
 //     // ctx.reducers.on_send_message(on_message_sent);
 // }
 
-// fn on_sub_applied(ctx: &SubscriptionEventContext) {
-//     println!("Fully connected and all subscriptions applied.");
-// }
+fn on_sub_applied(ctx: &SubscriptionEventContext) {
+    println!("Fully connected and all subscriptions applied.");
+}
 
-// fn on_sub_error(_ctx: &ErrorContext, err: Error) {
-//     eprintln!("Subscription failed: {}", err);
-//     std::process::exit(1);
-// }
+fn on_sub_error(_ctx: &ErrorContext, err: Error) {
+    eprintln!("Subscription failed: {}", err);
+    std::process::exit(1);
+}
 
 // /// Register subscriptions for all rows of both tables.
-// fn subscribe_to_tables(ctx: &DbConnection) {
-//     ctx.subscription_builder()
-//         .on_applied(on_sub_applied)
-//         .on_error(on_sub_error)
-//         .subscribe(["SELECT * FROM player"]);
-// }
+#[unsafe(no_mangle)]
+pub extern "C" fn db_subscribe_to_tables(db_ctx: *mut c_void){
+    unsafe {
+        let db_conn = &mut *(db_ctx as *mut DbConnection);
+        db_conn.subscription_builder()
+            .on_applied(on_sub_applied)
+            .on_error(on_sub_error)
+            .subscribe(["SELECT * FROM player"]);
+
+    }
+}
 
 
