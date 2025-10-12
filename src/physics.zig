@@ -1,0 +1,6 @@
+const nz = @import("numz");
+
+pub const Rigidbody = struct {
+    force: nz.Vec3(f32),
+    mass: f32 = 1.0,
+};
