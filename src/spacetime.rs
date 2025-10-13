@@ -1,7 +1,10 @@
 mod module_bindings;
 use std::io::Write;
 use std::ptr::{null, null_mut};
-use std::os::raw::c_void;
+use std::ffi::CString;
+use std::os::raw::{c_char, c_void};
+use std::boxed::Box;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::time::Instant;
 
@@ -10,10 +13,6 @@ use module_bindings::*;
 use spacetimedb_sdk::{credentials, DbContext, Error, Event, Identity, Status, Table, TableWithPrimaryKey};
 
 
-
-
-
-static PLAYER_CONNECT_CALLBACK: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 
 /// The URI of the SpacetimeDB instance hosting our chat database and module.
@@ -53,50 +52,70 @@ pub extern "C" fn db_run_threaded(db_ctx: *mut c_void) {
     }
 }
 
-// #[unsafe(no_mangle)]
-// pub extern "C" struct FFIPlayer {
-//     pub identity: __sdk::Identity,
-//     pub player_id: u32,
-//     pub name: String,
-//     pub position: DbVector3,
-//     pub rotation: DbVector3,
-//     pub direction: DbVector3,
-// }
-
-
-
-fn on_player_inserted(_ctx: &EventContext, player: &Player) {
-    // println!("player {} connected.", player.identity);
-    println!(">>> on_player_inserted() fired for player {}", player.identity);
-
-    let ptr = PLAYER_CONNECT_CALLBACK.load(Ordering::SeqCst);
-    if !ptr.is_null() {
-        println!(">>> callback pointer found, calling it...");
-        let callback: extern "C" fn() = unsafe { std::mem::transmute(ptr) };
-        callback();
-    } else {
-        println!(">>> callback pointer is null (never set or lost visibility?)");
-    }
-
-    // if _ctx.identity() == player.identity {
-    //     if let Some(callback) = *PLAYER_CONNECT_CALLBACK.lock().unwrap() {
-    //         callback(); 
-    //     }
-    // }
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct CVector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
+#[repr(C)]
+pub struct CPlayer {
+    pub identity: [u8; 32],
+    pub player_id: u32,
+    pub name: *const c_char,
+    pub position: CVector3,
+    pub rotation: CVector3,
+    pub direction: CVector3,
+
+    
+}
+
+impl From<Player> for CPlayer {
+    fn from(player: Player) -> Self {
+        let mut id_bytes = [0u8; 32];
+        let c_name = CString::new(player.name.clone()).unwrap();
+        Self {
+            identity: id_bytes,
+            player_id: player.player_id,
+            name: c_name.into_raw(), // ownership transferred to C/Zig
+            position: CVector3 { x: player.position.x, y: player.position.y, z: player.position.z },
+            rotation: CVector3 { x: player.rotation.x, y: player.rotation.y, z: player.rotation.z },
+            direction: CVector3 { x: player.direction.x, y: player.direction.y, z: player.direction.z },
+        }
+    }
+}
+
+// free helper for Zig to call when done with the CPlayer
+#[unsafe(no_mangle)]
+pub extern "C" fn free_cplayer(ptr: *mut CPlayer) {
+    if ptr.is_null() { return; }
+    unsafe {
+        let boxed = Box::from_raw(ptr);
+        if !boxed.name.is_null() {
+            let _ = CString::from_raw(boxed.name as *mut c_char); 
+        }
+    }
+}
+
+
 #[unsafe(no_mangle)]
 pub extern "C" fn register_player_connect_callback(
     db_ctx: *mut c_void,
-    func_ptr: *mut c_void
+    game_state: *mut c_void,
+    func_ptr: extern "C" fn(player: &CPlayer, game_state: *mut c_void)
 ) {
     if !db_ctx.is_null() {
         unsafe {
             let db_conn = &mut *(db_ctx as *mut DbConnection);
-            PLAYER_CONNECT_CALLBACK.store(func_ptr, Ordering::SeqCst);
-            println!(">>> registered callback pointer {:p}", func_ptr);
+            let state = Arc::new(AtomicPtr::new(game_state));
 
-            // now hook up the Rust-side event
-            db_conn.db.player().on_insert(on_player_inserted); 
+            db_conn.db.player().on_insert(move |db_ctx, player|{
+                let game_state = state.clone();
+                let gs_ptr = game_state.load(std::sync::atomic::Ordering::SeqCst);
+                let ptr = CPlayer::from(player.clone());
+                func_ptr(&ptr, gs_ptr);
+            } ); 
 
         }
     }
