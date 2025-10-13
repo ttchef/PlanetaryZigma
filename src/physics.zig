@@ -1,3 +1,4 @@
+const std = @import("std");
 const nz = @import("numz");
 
 pub const Rigidbody = struct {
