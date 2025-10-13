@@ -3,7 +3,7 @@ const glfw = @import("glfw");
 const gl = @import("gl");
 const nz = @import("numz");
 const physics = @import("physics.zig");
-const Ecs = @import("ecs.zig");
+const ecs = @import("ecs");
 const Render = @import("render.zig");
 
 pub const db = struct {
@@ -35,7 +35,7 @@ pub fn player_connect() callconv(.c) void {
     std.debug.print("Player connect\n", .{});
 }
 
-pub const World = Ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
+pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
 pub fn main() !void {
     var buffer: [4096 * 4 + 2]u8 = undefined;

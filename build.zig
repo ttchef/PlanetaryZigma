@@ -19,6 +19,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).module("numz");
 
+    const ecs = b.dependency("ecs", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("ecs");
+
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -46,6 +51,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "glfw", .module = zig_glfw },
                 .{ .name = "gl", .module = zig_opengl },
                 .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
                 .{ .name = "stb", .module = stb.createModule() },
             },
         }),
