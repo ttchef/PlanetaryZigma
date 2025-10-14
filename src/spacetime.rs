@@ -1,16 +1,16 @@
 mod module_bindings;
-use std::io::Write;
-use std::ptr::{null, null_mut};
+// use std::io::Write;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 use std::boxed::Box;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicPtr, Ordering};
-use std::time::Instant;
+use std::sync::atomic::{AtomicPtr};
+// use std::time::Instant;
 
 use module_bindings::*;
 
-use spacetimedb_sdk::{credentials, DbContext, Error, Event, Identity, Status, Table, TableWithPrimaryKey};
+// use spacetimedb_sdk::{credentials, DbContext, Error, Event, Identity, Status, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{credentials, DbContext, Error, Identity, Table};
 
 
 
@@ -37,7 +37,7 @@ pub extern "C" fn free_db_connection(ptr: *mut c_void) {
     if !ptr.is_null() {
         unsafe {
             // Recover the Box and drop it
-            Box::from_raw(ptr as *mut DbConnection);
+            let _ = Box::from_raw(ptr as *mut DbConnection);
         }
     }
 }
@@ -73,7 +73,7 @@ pub struct CPlayer {
 
 impl From<Player> for CPlayer {
     fn from(player: Player) -> Self {
-        let mut id_bytes = [0u8; 32];
+        let id_bytes = [0u8; 32];
         let c_name = CString::new(player.name.clone()).unwrap();
         Self {
             identity: id_bytes,
@@ -101,16 +101,16 @@ pub extern "C" fn free_cplayer(ptr: *mut CPlayer) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn register_player_connect_callback(
-    db_ctx: *mut c_void,
+    _db_ctx: *mut c_void,
     game_state: *mut c_void,
     func_ptr: extern "C" fn(player: &CPlayer, game_state: *mut c_void)
 ) {
-    if !db_ctx.is_null() {
+    if !_db_ctx.is_null() {
         unsafe {
-            let db_conn = &mut *(db_ctx as *mut DbConnection);
+            let db_conn = &mut *(_db_ctx as *mut DbConnection);
             let state = Arc::new(AtomicPtr::new(game_state));
 
-            db_conn.db.player().on_insert(move |db_ctx, player|{
+            db_conn.db.player().on_insert(move |_db_ctx, player|{
                 let game_state = state.clone();
                 let gs_ptr = game_state.load(std::sync::atomic::Ordering::SeqCst);
                 let ptr = CPlayer::from(player.clone());
@@ -204,6 +204,7 @@ fn on_disconnected(_ctx: &ErrorContext, err: Option<Error>) {
 // }
 
 fn on_sub_applied(ctx: &SubscriptionEventContext) {
+    let _ = ctx;
     println!("Fully connected and all subscriptions applied.");
 }
 
