@@ -7,6 +7,15 @@ const ecs = @import("ecs");
 const Render = @import("render.zig");
 
 pub const db = struct {
+    pub var events: struct {
+        lock: std.Thread.Mutex = .{},
+        queue: std.Deque(Event) = .empty,
+    } = .{};
+
+    pub const Event = union(enum) {
+        player_connect: Player,
+    };
+
     pub const Callback = union(enum) {
         pub const PlayerConnect = *const fn (*Player, *World) callconv(.c) void;
 
@@ -73,45 +82,57 @@ pub const db = struct {
 
 // your callback that Rust will call
 pub fn playerConnect(player: *db.Player, world: *World) callconv(.c) void {
+    _ = world;
     std.debug.print("Player connected:\n", .{});
     std.debug.print("\tid: {}\n", .{player.player_id});
     std.debug.print("\tname: {s}\n", .{player.name});
     std.debug.print("\tpos: ({}, {}, {})\n", .{ player.position[0], player.position[1], player.position[2] });
 
-    const e = world.*.add() catch return;
-    e.set(nz.Transform3D(f32), .{}, world.*);
+    db.events.lock.lock();
+    db.events.queue.pushBackAssumeCapacity(.{ .player_connect = player.* });
+    db.events.lock.unlock();
+
+    // std.debug.print("Entities {d}", .{world.signatures.items.len});
     // std.debug.print("TOT {d}:\n", .{world.?.generation.items.len});
 }
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
 pub fn main() !void {
-    var buffer: [4096 * 4 + 2]u8 = undefined;
+    var buffer: [4096 * 100]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
+    try db.events.queue.ensureTotalCapacity(allocator, 1000);
+
     const connection: db.Connection = try db.connect();
     defer connection.close();
+
+    std.debug.print("In PTR: {*}\n", .{&world});
 
     connection.setCallback(.{ .player_connect = playerConnect }, &world);
     connection.subscribeToTables();
 
     connection.runThreaded();
 
+    const e = world.add() catch return;
+    e.set(nz.Transform3D(f32), .{}, world);
+
     std.Thread.sleep(3000);
 
     while (true) {
+        try proccessEvents(&world);
 
         // std.debug.print("\n======NEW LOOP======\n", .{});
-        // var query = try world.allocQuery(&.{nz.Transform3D(f32)}, allocator);
-        // defer query.deinit(allocator);
+        var query = try world.allocQuery(&.{physics.Rigidbody}, allocator);
+        defer query.deinit(allocator);
 
-        // for (query.items) |entity| {
-        //     _ = entity;
-        //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
-        // }
+        for (query.items) |entity| {
+            std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
+            // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
+        }
     }
 
     // const window = Render.init();
@@ -127,6 +148,20 @@ pub fn main() !void {
     //     Render.update(window, delta_time);
     //     Render.draw(pipeline, window);
     // }
+}
+
+pub fn proccessEvents(world: *World) !void {
+    db.events.lock.lock();
+    defer db.events.lock.unlock();
+    while (db.events.queue.popFront()) |event| {
+        switch (event) {
+            .player_connect => |player_info| {
+                const player = try world.*.add();
+                player.set(nz.Transform3D(f32), .{ .position = player_info.position }, world.*);
+                player.set(physics.Rigidbody, .{}, world.*);
+            },
+        }
+    }
 }
 
 pub fn getDeltaTime() !f32 {

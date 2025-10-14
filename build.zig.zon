@@ -17,8 +17,8 @@
             .hash = "numz-0.0.2-V-sGm1GVAAAUDV9QaOB2kWcDWBADDF14zx6fLCCF3JOg",
         },
         .ecs = .{
-            .url = "git+https://github.com/HaraldWik/zig-ecs#899f5193dbb76f17e1f11a66d06d9a95d1fad624",
-            .hash = "ecs-0.0.0-8vkfl7UWAACDMvK169cDUTnRN6sY9QJ2IKqMC-W1DYCy",
+            .url = "git+https://github.com/HaraldWik/zig-ecs#b1d6c7ac2c4b9d8776b008359312ed5988ddfb9a",
+            .hash = "ecs-0.0.0-8vkflyAXAADg4Tm0ABVY03txm8uteg7nWnKNn2sXxgfC",
         },
         .stb = .{
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",

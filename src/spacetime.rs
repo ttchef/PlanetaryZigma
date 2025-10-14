@@ -111,8 +111,7 @@ pub extern "C" fn register_player_connect_callback(
             let state = Arc::new(AtomicPtr::new(game_state));
 
             db_conn.db.player().on_insert(move |_db_ctx, player|{
-                let game_state = state.clone();
-                let gs_ptr = game_state.load(std::sync::atomic::Ordering::SeqCst);
+                let gs_ptr = state.load(std::sync::atomic::Ordering::SeqCst);
                 let ptr = CPlayer::from(player.clone());
                 func_ptr(&ptr, gs_ptr);
             } ); 
