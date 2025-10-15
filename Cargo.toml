@@ -9,4 +9,4 @@ spacetimedb-sdk = "1.4.0"
 [lib]
 name = "spacetime"
 crate-type = ["staticlib"]
-path = "src/spacetime.rs"   
+path = "src/net/spacetime.rs"   
