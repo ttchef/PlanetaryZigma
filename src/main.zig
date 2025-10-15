@@ -19,8 +19,6 @@ pub fn main() !void {
     var spacetime: Spacetime = try .init(allocator);
     defer spacetime.deinit();
 
-    std.debug.print("In PTR: {*}\n", .{&world});
-
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
 

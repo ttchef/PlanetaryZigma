@@ -1,42 +1,34 @@
 mod module_bindings;
-// use std::io::Write;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 use std::boxed::Box;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicPtr};
-// use std::time::Instant;
 
 use module_bindings::*;
 
-// use spacetimedb_sdk::{credentials, DbContext, Error, Event, Identity, Status, Table, TableWithPrimaryKey};
 use spacetimedb_sdk::{credentials, DbContext, Error, Identity, Table};
 
 
 
 
-/// The URI of the SpacetimeDB instance hosting our chat database and module.
 const HOST: &str = "http://localhost:3000";
 // const HOST: &str = "https://gorgeous-hygiene-respect-demand.trycloudflare.com/";
 
-/// The database name we chose when we published our module.
 const DB_NAME: &str = "zigma";
 
 
 #[unsafe(no_mangle)]
-pub extern "C" fn connect_to_db_ffi() -> *mut c_void {
-    // Create the Rust DbConnection
+pub extern "C" fn db_connect() -> *mut c_void {
     let conn = connect_to_db();
 
-    // Box it and leak it so we can return a pointer
     Box::into_raw(Box::new(conn)) as *mut c_void
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn free_db_connection(ptr: *mut c_void) {
+pub extern "C" fn db_disconnect(ptr: *mut c_void) {
     if !ptr.is_null() {
         unsafe {
-            // Recover the Box and drop it
             let _ = Box::from_raw(ptr as *mut DbConnection);
         }
     }
@@ -86,21 +78,9 @@ impl From<Player> for CPlayer {
     }
 }
 
-// free helper for Zig to call when done with the CPlayer
-#[unsafe(no_mangle)]
-pub extern "C" fn free_cplayer(ptr: *mut CPlayer) {
-    if ptr.is_null() { return; }
-    unsafe {
-        let boxed = Box::from_raw(ptr);
-        if !boxed.name.is_null() {
-            let _ = CString::from_raw(boxed.name as *mut c_char); 
-        }
-    }
-}
-
 
 #[unsafe(no_mangle)]
-pub extern "C" fn register_player_connect_callback(
+pub extern "C" fn db_register_player_connect_callback(
     _db_ctx: *mut c_void,
     game_state: *mut c_void,
     func_ptr: extern "C" fn(player: &CPlayer, game_state: *mut c_void)
