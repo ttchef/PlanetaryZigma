@@ -89,8 +89,8 @@ pub fn playerConnect(player: *db.Player, world: *World) callconv(.c) void {
     std.debug.print("\tpos: ({}, {}, {})\n", .{ player.position[0], player.position[1], player.position[2] });
 
     db.events.lock.lock();
+    defer db.events.lock.unlock();
     db.events.queue.pushBackAssumeCapacity(.{ .player_connect = player.* });
-    db.events.lock.unlock();
 
     // std.debug.print("Entities {d}", .{world.signatures.items.len});
     // std.debug.print("TOT {d}:\n", .{world.?.generation.items.len});
