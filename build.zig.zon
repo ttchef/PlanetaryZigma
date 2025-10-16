@@ -20,8 +20,16 @@
             .url = "git+https://github.com/HaraldWik/zig-ecs#b1d6c7ac2c4b9d8776b008359312ed5988ddfb9a",
             .hash = "ecs-0.0.0-8vkflyAXAADg4Tm0ABVY03txm8uteg7nWnKNn2sXxgfC",
         },
+        .vklaw = .{
+            .url = "git+https://github.com/HaraldWik/vklaw#3a1214904009f66dfa0b794e6b4e13d3e5cc610d",
+            .hash = "vklaw-0.0.0-q1-LybPmFADiMU9_tZbxG9EcQESoIp28MjKoX8RA-qnY",
+        },
         .stb = .{
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
+            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+        },
+        .vma = .{
+            .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
     },

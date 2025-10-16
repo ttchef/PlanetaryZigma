@@ -4,10 +4,8 @@ const gl = @import("gl");
 const glfw = @import("glfw");
 const nz = @import("numz");
 const stb = @import("stb");
+const World = @import("main.zig").World;
 
-pub var players: [32]Player = undefined;
-pub var local_player_id: usize = 0;
-pub var player_count: usize = 0;
 pub var model: Model = undefined;
 pub var player_image: Image = undefined;
 pub var player_texture: gl.Texture = undefined;
@@ -135,19 +133,18 @@ pub export fn update(
     window: *glfw.Window,
     delta_time: f32,
 ) void {
+    _ = window;
+    _ = delta_time;
     glfw.io.events.poll();
-    for (0..@min(player_count, 32)) |i| {
-        if (players[i].id == local_player_id) {
-            players[i].update(window, delta_time);
-            return;
-        }
-    }
+    // for (0..@min(player_count, 32)) |i| {
+    //     if (players[i].id == local_player_id) {
+    //         players[i].update(window, delta_time);
+    //         return;
+    //     }
+    // }
 }
 
-pub export fn draw(
-    program: gl.Program,
-    window: *glfw.Window,
-) void {
+pub export fn draw(program: gl.Program, window: *glfw.Window, world: *World) void {
     const width: usize, const height: usize = window.getSize().toArray();
 
     gl.State.enable(.blend, null);
@@ -157,13 +154,13 @@ pub export fn draw(
     gl.clear.color(0.1, 0.5, 0.3, 1.0);
     gl.clear.depth(1000);
     gl.draw.viewport(0, 0, width, height);
-    var camera_mat: nz.Mat4x4(f32) = undefined;
-    for (0..@min(player_count, 32)) |i| {
-        if (players[i].id == local_player_id) {
-            camera_mat = camera.toMat4x4(players[0].transform, @floatFromInt(width), @floatFromInt(height), 1.0, 10_000.0);
-            break;
-        }
-    }
+    const camera_mat: nz.Mat4x4(f32) = .identity;
+    // for (0..world.entity_count) |i| {
+    //     if (players[i].id == local_player_id) {
+    //         camera_mat = camera.toMat4x4(players[0].transform, @floatFromInt(width), @floatFromInt(height), 1.0, 10_000.0);
+    //         break;
+    //     }
+    // }
     program.use();
 
     program.setUniform("u_camera", .{ .f32x4x4 = camera_mat.d }) catch {
@@ -173,12 +170,12 @@ pub export fn draw(
 
     player_texture.bind(0);
 
-    for (0..player_count) |i| {
-        if (players[i].id == local_player_id) continue;
+    for (0..world.entity_count) |i| {
+        var transform: nz.Transform3D(f32) = .{};
+        transform.position = .{ 0, 0, @floatFromInt(i) };
         var prng: std.Random.DefaultPrng = .init(@intCast(i));
         const random = prng.random();
         model.color = .new(random.float(f32), random.float(f32), random.float(f32));
-        model.transform = players[i].transform;
         model.draw(program) catch {
             std.log.debug("ERR-1", .{});
             continue;
@@ -204,31 +201,31 @@ pub export fn draw(
     };
 }
 
-pub export fn player_connect_local(id: u32) void {
-    std.log.debug("Player local id {d}, tot player {d}", .{ id, player_count });
-    local_player_id = id;
-    player_connect_remote(id);
-}
+// pub export fn player_connect_local(id: u32) void {
+//     std.log.debug("Player local id {d}, tot player {d}", .{ id, player_count });
+//     local_player_id = id;
+//     player_connect_remote(id);
+// }
 
-pub export fn player_connect_remote(id: u32) void {
-    std.log.debug("Player COnnected {d}", .{player_count});
-    players[player_count] = .{ .id = id };
-    player_count += 1;
-}
+// pub export fn player_connect_remote(id: u32) void {
+//     std.log.debug("Player COnnected {d}", .{player_count});
+//     players[player_count] = .{ .id = id };
+//     player_count += 1;
+// }
 
-pub export fn update_player_pos(id: u32, new_pos: DbVector3) void {
-    for (0..@min(player_count, 32)) |i| {
-        if (players[i].id == id) {
-            std.log.debug(" FOUND PLAYER {d}", .{id});
-            players[i].transform.position = .{ new_pos.x, new_pos.y, new_pos.z };
-            return;
-        }
-    }
-}
+// pub export fn update_player_pos(id: u32, new_pos: DbVector3) void {
+//     for (0..@min(player_count, 32)) |i| {
+//         if (players[i].id == id) {
+//             std.log.debug(" FOUND PLAYER {d}", .{id});
+//             players[i].transform.position = .{ new_pos.x, new_pos.y, new_pos.z };
+//             return;
+//         }
+//     }
+// }
 
-pub export fn player_disconnect() void {
-    player_count -= 1;
-}
+// pub export fn player_disconnect() void {
+//     player_count -= 1;
+// }
 
 pub export fn is_key_down(
     key: c_int,

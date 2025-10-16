@@ -24,6 +24,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).module("ecs");
 
+    const vklaw = b.dependency("vklaw", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("vklaw");
+
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -52,6 +57,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "gl", .module = zig_opengl },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
+                .{ .name = "vklaw", .module = vklaw },
                 .{ .name = "stb", .module = stb.createModule() },
             },
         }),
@@ -63,6 +69,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("openssl", .{});
     exe.root_module.addLibraryPath(b.path("target/release/"));
     exe.root_module.linkSystemLibrary("spacetime", .{});
+    exe.root_module.linkSystemLibrary("vulkan", .{});
 
     b.installArtifact(exe);
 
@@ -76,11 +83,15 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "glfw", .module = zig_glfw },
                 .{ .name = "gl", .module = zig_opengl },
                 .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
+                .{ .name = "vklaw", .module = vklaw },
                 .{ .name = "stb", .module = stb.createModule() },
             },
         }),
         .linkage = .dynamic,
     });
+
+    render_lib.root_module.linkSystemLibrary("vulkan", .{});
 
     b.installArtifact(render_lib);
 
