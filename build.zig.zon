@@ -20,6 +20,10 @@
             .url = "git+https://github.com/HaraldWik/zig-ecs#b1d6c7ac2c4b9d8776b008359312ed5988ddfb9a",
             .hash = "ecs-0.0.0-8vkflyAXAADg4Tm0ABVY03txm8uteg7nWnKNn2sXxgfC",
         },
+        .vulkan_headers = .{
+            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
+            .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
+        },
         .stb = .{
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",

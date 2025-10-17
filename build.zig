@@ -4,25 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_glfw = b.dependency("zig_glfw", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("zig_glfw");
+    const zig_glfw = b.dependency("zig_glfw", .{ .target = target, .optimize = optimize }).module("zig_glfw");
+    const zig_opengl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
+    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
+    const ecs = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
+    const vulkan_header_dep = b.dependency("vulkan_headers", .{});
 
-    const zig_opengl = b.dependency("zig_opengl", .{
+    const vulkan_headers = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#include "vulkan/vulkan.h"
+        ),
         .target = target,
         .optimize = optimize,
-    }).module("zig_opengl");
-
-    const numz = b.dependency("numz", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("numz");
-
-    const ecs = b.dependency("ecs", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("ecs");
+    }).createModule();
+    vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
 
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
@@ -53,6 +48,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "stb", .module = stb.createModule() },
+                .{ .name = "vulkan", .module = vulkan_headers },
             },
         }),
     });
