@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0-dev.253+4314c9653",
     .dependencies = .{
         .zig_glfw = .{
-            .url = "git+https://github.com/HaraldWik/zig-glfw#86fbdfb634dac11e7bba72e584007c4fb731fb39",
-            .hash = "zig_glfw-0.1.0-u6zPw32_AAAOLY7Z3ejNoAMnwuCTFyMttT1-O5HfdXzF",
+            .url = "git+https://github.com/HaraldWik/zig-glfw#91728e2a95ee16bfcd6f88d7c2ab8b0512691420",
+            .hash = "zig_glfw-0.1.0-u6zPw6nAAABYAXVxfoDm5ATLz0xOqN8R56drjMYHdurU",
         },
         .zig_opengl = .{
             .url = "git+https://github.com/HaraldWik/zig-opengl#8b5e8bc1cb461bdf2be79d0735595678c758eaf1",
@@ -20,16 +20,16 @@
             .url = "git+https://github.com/HaraldWik/zig-ecs#b1d6c7ac2c4b9d8776b008359312ed5988ddfb9a",
             .hash = "ecs-0.0.0-8vkflyAXAADg4Tm0ABVY03txm8uteg7nWnKNn2sXxgfC",
         },
-        .vklaw = .{
-            .url = "git+https://github.com/HaraldWik/vklaw#3a1214904009f66dfa0b794e6b4e13d3e5cc610d",
-            .hash = "vklaw-0.0.0-q1-LybPmFADiMU9_tZbxG9EcQESoIp28MjKoX8RA-qnY",
-        },
-        .stb = .{
-            .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
-            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+        .vulkan_headers = .{
+            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
+            .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
         },
         .vma = .{
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
+            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+        },
+        .stb = .{
+            .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
     },
