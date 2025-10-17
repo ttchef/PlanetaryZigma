@@ -19,11 +19,6 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
 
-    const vklaw = b.dependency("vklaw", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("vklaw");
-
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -52,9 +47,8 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "gl", .module = zig_opengl },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
-                .{ .name = "vklaw", .module = vklaw },
-                .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "vulkan", .module = vulkan_headers },
+                .{ .name = "stb", .module = stb.createModule() },
             },
         }),
     });
@@ -80,7 +74,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "gl", .module = zig_opengl },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
-                .{ .name = "vklaw", .module = vklaw },
+                .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "stb", .module = stb.createModule() },
             },
         }),

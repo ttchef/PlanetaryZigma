@@ -6,7 +6,7 @@ const physics = @import("physics.zig");
 const ecs = @import("ecs");
 const Render = @import("render.zig");
 const Spacetime = @import("net/Spacetime.zig");
-const vk = @import("vklaw");
+const vk = @import("render/vulkan.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
@@ -29,17 +29,25 @@ pub fn main() !void {
     const pipeline = Render.initPipeline();
     defer Render.deinitPipeline(pipeline);
 
-    const instance: *vk.Instance = try .init(null, &vk.Instance.CreateInfo{
-        .application_info = &.{
-            .api_version = vk.makeApiVersion(0, 0, 0, 0),
-            .application_name = "lucas",
-            .engine_name = "trash",
+    var instance: vk.c.VkInstance = undefined;
+    try vk.check(vk.c.vkCreateInstance(&vk.c.VkInstanceCreateInfo{
+        .sType = vk.c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &vk.c.VkApplicationInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = vk.c.VK_API_VERSION_1_3,
         },
-        .layers = &.{
-            "VK_LAYER_KHRONOS_validation",
+    }, null, &instance));
+
+    const vkCreateInstance = try vk.Func.Proc(.createInstance).load(instance);
+
+    var instance2: vk.c.VkInstance = undefined;
+    try vk.check(vkCreateInstance(&vk.c.VkInstanceCreateInfo{
+        .sType = vk.c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &vk.c.VkApplicationInfo{
+            .sType = vk.c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .apiVersion = vk.c.VK_API_VERSION_1_3,
         },
-    });
-    defer instance.deinit(null);
+    }, null, &instance2));
 
     std.Thread.sleep(3000);
 
