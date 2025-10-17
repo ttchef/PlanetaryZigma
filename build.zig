@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_glfw = b.dependency("zig_glfw", .{ .target = target, .optimize = optimize }).module("zig_glfw");
+    const zig_glfw = b.dependency("zig_glfw", .{ .target = target, .optimize = optimize, .vulkan = true }).module("zig_glfw");
     const zig_opengl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
     const ecs = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");

@@ -1,12 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const glfw = @import("glfw");
-const gl = @import("gl");
 const nz = @import("numz");
 const physics = @import("physics.zig");
 const ecs = @import("ecs");
-const Render = @import("render.zig");
+const Renderer = @import("render/Renderer.zig");
 const Spacetime = @import("net/Spacetime.zig");
-const vk = @import("render/vulkan.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
@@ -23,50 +22,61 @@ pub fn main() !void {
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
 
-    const window = Render.init();
-    defer Render.deinit(window);
+    try glfw.init();
+    defer glfw.deinit();
+    glfw.Window.Hint.set(.{ .client_api = .none });
+    const window: *glfw.Window = try .init(.{
+        .title = "Hello, world!",
+        .size = .{ .width = 900, .height = 800 },
+    });
+    defer window.deinit();
 
-    const pipeline = Render.initPipeline();
-    defer Render.deinitPipeline(pipeline);
-
-    var instance: vk.c.VkInstance = undefined;
-    try vk.check(vk.c.vkCreateInstance(&vk.c.VkInstanceCreateInfo{
-        .sType = vk.c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &vk.c.VkApplicationInfo{
-            .sType = vk.c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .apiVersion = vk.c.VK_API_VERSION_1_3,
+    const renderer: Renderer = try .init(.{
+        .instance = .{
+            .extensions = &.{
+                "VK_KHR_surface",
+                switch (builtin.target.os.tag) {
+                    .windows => "VK_KHR_win32_surface",
+                    .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
+                    .macos => "VK_MVK_macos_surface",
+                    else => @compileError("Unsupported OS"),
+                },
+                "VK_EXT_debug_utils",
+                "VK_PRESENT_MODE_MAILBOX_KHR",
+            },
+            .layers = &.{"VK_LAYER_KHRONOS_validation"},
         },
-    }, null, &instance));
-
-    const vkCreateInstance = try vk.Func.Proc(.createInstance).load(instance);
-
-    var instance2: vk.c.VkInstance = undefined;
-    try vk.check(vkCreateInstance(&vk.c.VkInstanceCreateInfo{
-        .sType = vk.c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &vk.c.VkApplicationInfo{
-            .sType = vk.c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
-            .apiVersion = vk.c.VK_API_VERSION_1_3,
+        .device = .{
+            .extensions = &.{"VK_KHR_swapchain"},
         },
-    }, null, &instance2));
+        .surface = .{
+            .data = window,
+            .init = initVulkanSurface,
+        },
+    });
+    defer renderer.deinit();
+
+    // const pipeline = Render.initPipeline();
+    // defer Render.deinitPipeline(pipeline);
 
     std.Thread.sleep(3000);
 
     while (!window.shouldClose()) {
-        var time: f32 = 0;
-        try proccessEvents(&spacetime, &world);
+        //     var time: f32 = 0;
+        //     try proccessEvents(&spacetime, &world);
 
-        const delta_time = try getDeltaTime();
-        time += delta_time;
-        Render.update(window, delta_time);
-        Render.draw(pipeline, window, &world);
-        // std.debug.print("\n======NEW LOOP======\n", .{});
-        // var query = try world.allocQuery(&.{physics.Rigidbody}, allocator);
-        // defer query.deinit(allocator);
+        //     const delta_time = try getDeltaTime();
+        //     time += delta_time;
+        //     Render.update(window, delta_time);
+        //     Render.draw(pipeline, window, &world);
+        //     // std.debug.print("\n======NEW LOOP======\n", .{});
+        //     // var query = try world.allocQuery(&.{physics.Rigidbody}, allocator);
+        //     // defer query.deinit(allocator);
 
-        // for (query.items) |entity| {
-        //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
-        //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
-        // }
+        //     // for (query.items) |entity| {
+        //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
+        //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
+        //     // }
     }
 }
 
@@ -82,6 +92,11 @@ pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
             },
         }
     }
+}
+
+pub fn initVulkanSurface(instance: *Renderer.vk.Instance, window: *anyopaque) !*anyopaque {
+    const surface = glfw.vulkan.initSurface(@ptrCast(instance), @ptrCast(window), null);
+    return surface orelse return error.SdlVulkanCreateSurface;
 }
 
 pub fn getDeltaTime() !f32 {
