@@ -9,6 +9,9 @@ const Spacetime = @import("net/Spacetime.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
+const width: u32 = 900;
+const heigth: u32 = 800;
+
 pub fn main() !void {
     var buffer: [4096 * 100]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -27,33 +30,31 @@ pub fn main() !void {
     glfw.Window.Hint.set(.{ .client_api = .none });
     const window: *glfw.Window = try .init(.{
         .title = "Hello, world!",
-        .size = .{ .width = 900, .height = 800 },
+        .size = .{ .width = width, .height = heigth },
     });
     defer window.deinit();
 
-    const renderer: Renderer = try .init(.{
-        .instance = .{
-            .extensions = &.{
-                "VK_KHR_surface",
-                switch (builtin.target.os.tag) {
-                    .windows => "VK_KHR_win32_surface",
-                    .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
-                    .macos => "VK_MVK_macos_surface",
-                    else => @compileError("Unsupported OS"),
-                },
-                "VK_EXT_debug_utils",
-                "VK_PRESENT_MODE_MAILBOX_KHR",
+    const renderer: Renderer = try .init(.{ .instance = .{
+        .extensions = &.{
+            "VK_KHR_surface",
+            switch (builtin.target.os.tag) {
+                .windows => "VK_KHR_win32_surface",
+                .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
+                .macos => "VK_MVK_macos_surface",
+                else => @compileError("Unsupported OS"),
             },
-            .layers = &.{"VK_LAYER_KHRONOS_validation"},
+            Renderer.vk.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         },
-        .device = .{
-            .extensions = &.{"VK_KHR_swapchain"},
-        },
-        .surface = .{
-            .data = window,
-            .init = initVulkanSurface,
-        },
-    });
+        .layers = &.{"VK_LAYER_KHRONOS_validation"},
+    }, .device = .{
+        .extensions = &.{"VK_KHR_swapchain"},
+    }, .surface = .{
+        .data = window,
+        .init = initVulkanSurface,
+    }, .swapchain = .{
+        .width = width,
+        .heigth = heigth,
+    } });
     defer renderer.deinit();
 
     // const pipeline = Render.initPipeline();
@@ -93,10 +94,12 @@ pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
         }
     }
 }
+pub extern fn glfwCreateWindowSurface(instance: *Renderer.vk.Instance, user_data: *anyopaque, allocator: ?*const anyopaque, surface: *?*Renderer.vk.Surface) c_int;
 
 pub fn initVulkanSurface(instance: *Renderer.vk.Instance, window: *anyopaque) !*anyopaque {
-    const surface = glfw.vulkan.initSurface(@ptrCast(instance), @ptrCast(window), null);
-    return surface orelse return error.SdlVulkanCreateSurface;
+    var surface: ?*Renderer.vk.Surface = null;
+    _ = glfwCreateWindowSurface(@ptrCast(instance), @ptrCast(window), null, &surface);
+    return surface orelse return error.VulkanCreateSurface;
 }
 
 pub fn getDeltaTime() !f32 {
