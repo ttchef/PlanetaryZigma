@@ -63,6 +63,7 @@ pub fn main() !void {
     std.Thread.sleep(3000);
 
     while (!window.shouldClose()) {
+        try renderer.draw();
         //     var time: f32 = 0;
         //     try proccessEvents(&spacetime, &world);
 

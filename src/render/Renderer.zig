@@ -51,11 +51,46 @@ pub fn init(config: Config) !@This() {
 }
 
 pub fn draw(self: @This()) !void {
-    _ = self;
-    // const image_index = vk.c.vkAcquireNextImageKHR(self.device.toC(), self.swapchain.swapchain, 1000000000, self.)
-    // vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, pFences: [*c]const ?*struct_VkFence_T, waitAll: u32, timeout: u64))
-    // VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
-    // VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
+    var image_index: u32 = undefined;
+    const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight];
+    try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
+    try vk.check(vk.c.vkResetFences(self.device.toC(), 1, &current_frame.render_fence));
+    try vk.check(vk.c.vkAcquireNextImageKHR(
+        self.device.toC(),
+        self.swapchain.swapchain,
+        1000000000,
+        current_frame.swapchain_semaphore,
+        null,
+        &image_index,
+    ));
+
+    const cmd_buffer = current_frame.command_buffer;
+    try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
+    var cmd_begin_info: vk.c.VkCommandBufferBeginInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = vk.c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
+
+    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
+    var clear_value: vk.c.VkClearColorValue = .{ .float32 = .{ 0.0, 0.0, std.math.sin(@as(f32, @floatFromInt(self.swapchain.current_frame_inflight)) / 120.0), 1.0 } };
+
+    var clear_range: vk.c.VkImageSubresourceRange = .{
+        .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = vk.c.VK_REMAINING_MIP_LEVELS,
+        .baseArrayLayer = 0,
+        .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
+    };
+
+    vk.c.vkCmdClearColorImage(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
+
+    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+    try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
+
+    //TODO https://vkguide.dev/docs/new_chapter_1/vulkan_mainloop_code/
+    // VkSemaphoreSubmitInfo
 }
 
 pub fn deinit(self: @This()) void {
