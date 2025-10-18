@@ -212,3 +212,26 @@ pub const Device = opaque {
         return @ptrCast(queue);
     }
 };
+
+pub const CommandPool = opaque {
+    pub inline fn toC(self: *@This()) c.VkCommandPool {
+        return @ptrCast(self);
+    }
+
+    pub fn init(device: *Device, graphics_family_index: u32) !*@This() {
+        const command_pool_info: c.VkCommandPoolCreateInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = null,
+            .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = graphics_family_index,
+        };
+
+        var command_pool: c.VkCommandPool = undefined;
+        try check(c.vkCreateCommandPool(device.toC(), &command_pool_info, null, &command_pool));
+        return @ptrCast(command_pool);
+    }
+
+    pub fn deinit(self: *@This(), device: *Device) void {
+        c.vkDestroyCommandPool(device.toC(), self.toC(), null);
+    }
+};

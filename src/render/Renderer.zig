@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const vk = @import("Vulkan/vulkan.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 
@@ -7,6 +8,7 @@ surface: *vk.Surface,
 physical_device: *vk.PhysicalDevice,
 device: *vk.Device,
 swapchain: Swapchain,
+command_pool: *vk.CommandPool,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -27,13 +29,17 @@ pub fn init(config: Config) !@This() {
     const surface: *vk.Surface = if (config.surface.init != null and config.surface.data != null) @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) else try vk.Surface.init(instance);
     const physical_device: *vk.PhysicalDevice, const queue_family_index: u32 = try vk.PhysicalDevice.find(instance, surface);
     const device: *vk.Device = try .init(physical_device, queue_family_index, config.device.extensions);
-    const swapchain: Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+    const command_pool: *vk.CommandPool = try .init(device, queue_family_index);
+
+    var swapchain: Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+    try swapchain.createSwapchainImages(device, command_pool);
+
     // TODO
-    // Command Pool
-    // Swapchain Images
     // Desctiptors, Pools
     // Shaders
     // Pipeline
+
+    std.debug.print("Address {*}\n", .{instance});
 
     return .{
         .instance = instance,
@@ -42,10 +48,14 @@ pub fn init(config: Config) !@This() {
         .physical_device = physical_device,
         .device = device,
         .swapchain = swapchain,
+        .command_pool = command_pool,
     };
 }
 
 pub fn deinit(self: @This()) void {
+    _ = vk.c.vkDeviceWaitIdle(self.device.toC());
+    self.swapchain.deinit(self.device, self.command_pool);
+    self.command_pool.deinit(self.device);
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
