@@ -2,15 +2,19 @@ const std = @import("std");
 const vk = @import("vulkan.zig");
 const check = @import("utils.zig").check;
 const Func = @import("utils.zig").Func;
+const MAX_FRAMES_INFLIGHT: usize = 3;
 
 swapchain: vk.c.VkSwapchainKHR,
-images: [16]Image,
+vk_images: [16]vk.c.VkImage,
 image_count: u32,
 format: vk.c.VkFormat,
 width: u32,
 height: u32,
 
-pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, surface: *vk.Surface, width: u32, height: u32) !@This() {
+current_frame_inflight: u32 = 0,
+frames: [MAX_FRAMES_INFLIGHT]FrameData = undefined,
+
+pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_pool: *vk.CommandPool, surface: *vk.Surface, width: u32, height: u32) !@This() {
     var swapchain: vk.c.VkSwapchainKHR = undefined;
 
     var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
@@ -19,21 +23,21 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, surface: *v
         return error.aaa;
     };
 
-    var formatCount: u32 = 0;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &formatCount, null));
+    var format_count: u32 = 0;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, null));
 
     var formats: [16]vk.c.VkSurfaceFormatKHR = undefined;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &formatCount, &formats[0]));
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, &formats[0]));
 
     var chosenFormat: vk.c.VkSurfaceFormatKHR = formats[0];
-    for (0..formatCount) |i| {
+    for (0..format_count) |i| {
         if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_SRGB) {
             chosenFormat = formats[i];
             break;
         }
     }
 
-    var createInfo: vk.c.VkSwapchainCreateInfoKHR = .{
+    var swapchain_info: vk.c.VkSwapchainCreateInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface.toC(),
         .minImageCount = capabilities.minImageCount,
@@ -49,44 +53,57 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, surface: *v
         .clipped = 1,
     };
 
-    try check(vk.c.vkCreateSwapchainKHR(device.toC(), &createInfo, null, &swapchain));
+    try check(vk.c.vkCreateSwapchainKHR(device.toC(), &swapchain_info, null, &swapchain));
+
+    var frames: [MAX_FRAMES_INFLIGHT]FrameData = undefined;
+    for (0..MAX_FRAMES_INFLIGHT) |i| {
+        frames[i] = try .init(device, command_pool);
+    }
 
     return .{
         .swapchain = swapchain,
-        .images = undefined,
+        .vk_images = undefined,
         .image_count = undefined,
         .format = chosenFormat.format,
         .width = width,
         .height = height,
+        .current_frame_inflight = 0,
+        .frames = frames,
     };
 }
 
 pub fn deinit(
     self: @This(),
+    device: *vk.Device,
+    command_pool: *vk.CommandPool,
 ) void {
-    vk.c.vkDestroySwapchainKHR(self.device, self.swapchain, null);
-}
-
-pub fn createSwapchainImages(
-    self: *@This(),
-    command_pool: vk.c.VkCommandPool,
-) !void {
-    try check(vk.c.vkGetSwapchainImagesKHR(self.device, self.swapchain, &self.image_count, null));
-    if (self.image_count > 16) @panic("More than 16 VkImages\n");
-
-    var vk_images: [16]vk.c.VkImage = undefined;
-    try check(vk.c.vkGetSwapchainImagesKHR(self.device, self.swapchain, &self.image_count, &vk_images[0]));
-
-    for (0..self.image_count) |i| {
-        self.swapchain_images[i] = try .init(self.device, command_pool, self.vk_images[i]);
+    for (self.frames[0..MAX_FRAMES_INFLIGHT]) |image| {
+        image.deinit(device, command_pool);
     }
+    vk.c.vkDestroySwapchainKHR(device.toC(), self.swapchain, null);
 }
+
+// pub fn createSwapchainImages(
+//     self: *@This(),
+//     device: *vk.Device,
+//     command_pool: *vk.CommandPool,
+// ) !void {
+//     try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), self.swapchain, &self.image_count, null));
+//     if (self.image_count > 16) @panic("More than 16 VkImages\n");
+
+//     var vk_images: [16]vk.c.VkImage = undefined;
+//     try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), self.swapchain, &self.image_count, &vk_images[0]));
+
+//     for (0..self.image_count) |i| {
+//         self.images[i] = try .init(device, command_pool, vk_images[i]);
+//     }
+// }
 
 pub fn recreate(
     self: *@This(),
     surface: vk.c.VkSurfaceKHR,
-    physical_device: vk.c.VkPhysicalDevice,
-    command_pool: vk.c.VkCommandPool,
+    physical_device: vk.VkPhysicalDevice,
+    command_pool: vk.VkCommandPool,
     image_index: *u32,
     width: u32,
     height: u32,
@@ -105,38 +122,53 @@ pub fn recreate(
     image_index.* = 0;
 }
 
-pub const Image = struct {
-    vk_image: vk.c.VkImage,
+const FrameData = struct {
     command_buffer: vk.c.VkCommandBuffer,
     render_done_semaphore: vk.c.VkSemaphore,
+    swapchain_semaphore: vk.c.VkSemaphore,
+    render_fence: vk.c.VkFence,
 
-    pub fn init(device: vk.c.VkDevice, command_pool: vk.c.VkCommandPool, image: vk.c.VkImage) !@This() {
-        var allocInfo: vk.c.VkCommandBufferAllocateInfo = .{
+    pub fn init(device: *vk.Device, command_pool: *vk.CommandPool) !@This() {
+        var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = command_pool,
+            .commandPool = command_pool.toC(),
             .level = vk.c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1,
         };
 
         var command_buffer: vk.c.VkCommandBuffer = undefined;
-        try check(vk.c.vkAllocateCommandBuffers(device, &allocInfo, &command_buffer));
+        try check(vk.c.vkAllocateCommandBuffers(device.toC(), &alloc_info, &command_buffer));
 
         var semaphoreCreateInfo: vk.c.VkSemaphoreCreateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
 
         var render_done_semaphore: vk.c.VkSemaphore = undefined;
-        try check(vk.c.vkCreateSemaphore(device, &semaphoreCreateInfo, null, &render_done_semaphore));
+        try check(vk.c.vkCreateSemaphore(device.toC(), &semaphoreCreateInfo, null, &render_done_semaphore));
+
+        var swapchain_semaphore: vk.c.VkSemaphore = undefined;
+        try check(vk.c.vkCreateSemaphore(device.toC(), &semaphoreCreateInfo, null, &swapchain_semaphore));
+
+        var fence_info: vk.c.VkFenceCreateInfo = .{
+            .sType = vk.c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = vk.c.VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+
+        var render_fence: vk.c.VkFence = undefined;
+        try check(vk.c.vkCreateFence(device.toC(), &fence_info, null, &render_fence));
 
         return .{
-            .vk_image = image,
             .command_buffer = command_buffer,
             .render_done_semaphore = render_done_semaphore,
+            .swapchain_semaphore = swapchain_semaphore,
+            .render_fence = render_fence,
         };
     }
 
-    pub fn deinit(self: @This(), device: vk.c.VkDevice, command_pool: vk.c.VkCommandPool) void {
-        vk.c.vkDestroySemaphore(device, self.render_done_semaphore, null);
-        vk.c.vkFreeCommandBuffers(device, command_pool, 1, &self.command_buffer);
+    pub fn deinit(self: @This(), device: *vk.Device, command_pool: *vk.CommandPool) void {
+        vk.c.vkDestroySemaphore(device.toC(), self.render_done_semaphore, null);
+        vk.c.vkDestroySemaphore(device.toC(), self.swapchain_semaphore, null);
+        vk.c.vkDestroyFence(device.toC(), self.render_fence, null);
+        vk.c.vkFreeCommandBuffers(device.toC(), command_pool.toC(), 1, &self.command_buffer);
     }
 };

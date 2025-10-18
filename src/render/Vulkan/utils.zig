@@ -1337,3 +1337,170 @@ pub const Func = enum {
         };
     }
 };
+
+pub fn imageMemBarrier(
+    cmd_buf: c.VkCommandBuffer,
+    image: c.VkImage,
+    format: c.VkFormat,
+    OldLayout: c.VkImageLayout,
+    NewLayout: c.VkImageLayout,
+) !void {
+    var barrier: c.VkImageMemoryBarrier = .{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = null,
+        .srcAccessMask = 0,
+        .dstAccessMask = 0,
+        .oldLayout = OldLayout,
+        .newLayout = NewLayout,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    var sourceStage: c.VkPipelineStageFlags = c.VK_PIPELINE_STAGE_NONE;
+    var destinationStage: c.VkPipelineStageFlags = c.VK_PIPELINE_STAGE_NONE;
+
+    if (NewLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL or
+        (format == c.VK_FORMAT_D16_UNORM) or
+        (format == c.VK_FORMAT_X8_D24_UNORM_PACK32) or
+        (format == c.VK_FORMAT_D32_SFLOAT) or
+        (format == c.VK_FORMAT_S8_UINT) or
+        (format == c.VK_FORMAT_D16_UNORM_S8_UINT) or
+        (format == c.VK_FORMAT_D24_UNORM_S8_UINT))
+    {
+        barrier.subresourceRange.aspectMask = c.VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        // if (HasStencilComponent(Format)) {
+        //     barrier.subresourceRange.aspectMask |= c.VK_IMAGE_ASPECT_STENCIL_BIT;
+        // }
+    } else {
+        barrier.subresourceRange.aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+
+    if (OldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and NewLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (OldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and NewLayout == c.VK_IMAGE_LAYOUT_GENERAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+
+    if (OldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and
+        NewLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } // Convert back from read-only to updateable */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } //* Convert from updateable texture to shader read-only */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and
+        NewLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } //* Convert depth texture from undefined state to depth-stencil buffer */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and NewLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    } //* Wait for render pass to complete */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = 0; // c.VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = 0;
+        sourceStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } //* Convert back from read-only to color attachment */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } //* Convert from updateable texture to shader read-only */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } //* Convert back from read-only to depth attachment */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    } //* Convert from updateable depth texture to shader read-only */
+    else if (OldLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (OldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and NewLayout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } else if (OldLayout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+        barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = 0;
+
+        sourceStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    } else if (OldLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+        barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_NONE;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    } else if (OldLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and NewLayout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        sourceStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } else {
+        @panic("\nunsupported layout transition!\n");
+    }
+
+    c.vkCmdPipelineBarrier(
+        cmd_buf,
+        sourceStage,
+        destinationStage,
+        0,
+        0,
+        null,
+        0,
+        null,
+        1,
+        &barrier,
+    );
+}

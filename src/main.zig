@@ -63,6 +63,7 @@ pub fn main() !void {
     std.Thread.sleep(3000);
 
     while (!window.shouldClose()) {
+        try renderer.draw();
         //     var time: f32 = 0;
         //     try proccessEvents(&spacetime, &world);
 
@@ -78,6 +79,7 @@ pub fn main() !void {
         //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
+        break;
     }
 }
 
