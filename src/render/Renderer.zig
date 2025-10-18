@@ -30,9 +30,7 @@ pub fn init(config: Config) !@This() {
     const physical_device: *vk.PhysicalDevice, const queue_family_index: u32 = try vk.PhysicalDevice.find(instance, surface);
     const device: *vk.Device = try .init(physical_device, queue_family_index, config.device.extensions);
     const command_pool: *vk.CommandPool = try .init(device, queue_family_index);
-
-    var swapchain: Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
-    try swapchain.createSwapchainImages(device, command_pool);
+    const swapchain: Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
     // Desctiptors, Pools
@@ -50,6 +48,14 @@ pub fn init(config: Config) !@This() {
         .swapchain = swapchain,
         .command_pool = command_pool,
     };
+}
+
+pub fn draw(self: @This()) !void {
+    _ = self;
+    // const image_index = vk.c.vkAcquireNextImageKHR(self.device.toC(), self.swapchain.swapchain, 1000000000, self.)
+    // vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, pFences: [*c]const ?*struct_VkFence_T, waitAll: u32, timeout: u64))
+    // VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
+    // VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
 }
 
 pub fn deinit(self: @This()) void {
