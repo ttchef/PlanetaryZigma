@@ -43,6 +43,13 @@ pub fn main() !void {
             Renderer.vk.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         },
         .layers = &.{"VK_LAYER_KHRONOS_validation"},
+        .debug_config = .{
+            .severities = .{
+                .warning = true,
+                .verbose = true,
+                .@"error" = true,
+            },
+        },
     }, .device = .{
         .extensions = &.{"VK_KHR_swapchain"},
     }, .surface = .{

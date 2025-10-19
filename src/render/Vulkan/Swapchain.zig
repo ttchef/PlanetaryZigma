@@ -52,13 +52,20 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_poo
 
     try check(vk.c.vkCreateSwapchainKHR(device.toC(), &swapchain_info, null, &swapchain));
 
+    var image_count: u32 = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), swapchain, &image_count, null));
+    if (image_count > 16) @panic("More than 16 VkImages\n");
+
+    var vk_images: [16]vk.c.VkImage = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), swapchain, &image_count, &vk_images[0]));
+
     var frames: [max_frames_inflight]FrameData = undefined;
     for (&frames) |*frame| frame.* = try .init(device, command_pool);
 
     return .{
         .swapchain = swapchain,
-        .vk_images = undefined,
-        .image_count = undefined,
+        .vk_images = vk_images,
+        .image_count = image_count,
         .format = chosen_format.format,
         .width = width,
         .height = height,

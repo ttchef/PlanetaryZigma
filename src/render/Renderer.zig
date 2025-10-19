@@ -1,17 +1,19 @@
 const std = @import("std");
 pub const vk = @import("Vulkan/vulkan.zig");
+const Swapchain = @import("Vulkan/Swapchain.zig");
 
 instance: *vk.Instance,
 debug_messenger: *vk.DebugMessenger,
 surface: *vk.Surface,
 physical_device: *vk.PhysicalDevice,
 device: *vk.Device,
-swapchain: vk.Swapchain,
+swapchain: Swapchain,
 command_pool: *vk.CommandPool,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
     layers: ?[]const [*:0]const u8 = null,
+    debug_config: vk.DebugMessenger.Config = .{},
 } = .{}, device: struct {
     extensions: ?[]const [*:0]const u8 = null,
 } = .{}, surface: struct {
@@ -24,12 +26,12 @@ pub const Config = struct { instance: struct {
 
 pub fn init(config: Config) !@This() {
     const instance: *vk.Instance = try .init(config.instance.extensions, config.instance.layers);
-    const debug_messenger: *vk.DebugMessenger = try .init(instance, .{});
+    const debug_messenger: *vk.DebugMessenger = try .init(instance, config.instance.debug_config);
     const surface: *vk.Surface = if (config.surface.init != null and config.surface.data != null) @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) else try vk.Surface.init(instance);
     const physical_device: *vk.PhysicalDevice, const queue_family_index: u32 = try vk.PhysicalDevice.find(instance, surface);
     const device: *vk.Device = try .init(physical_device, queue_family_index, config.device.extensions);
     const command_pool: *vk.CommandPool = try .init(device, queue_family_index);
-    const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
+    const swapchain: Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
     // Desctiptors, Pools
@@ -49,7 +51,7 @@ pub fn init(config: Config) !@This() {
     };
 }
 
-pub fn draw(self: @This()) !void {
+pub fn draw(self: *@This()) !void {
     var image_index: u32 = undefined;
     const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight];
     try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
@@ -88,8 +90,43 @@ pub fn draw(self: @This()) !void {
 
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
-    //TODO https://vkguide.dev/docs/new_chapter_1/vulkan_mainloop_code/
-    // VkSemaphoreSubmitInfo
+    var submit_info: vk.c.VkSubmitInfo2 = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreInfoCount = 1,
+        .pWaitSemaphoreInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = current_frame.swapchain_semaphore,
+            .stageMask = vk.c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
+            .value = 1,
+        },
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = current_frame.render_done_semaphore,
+            .stageMask = vk.c.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+            .value = 1,
+        },
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = cmd_buffer,
+        },
+    };
+
+    try vk.check(vk.c.vkQueueSubmit2(null, 1, &submit_info, current_frame.render_fence));
+
+    var present_info: vk.c.VkPresentInfoKHR = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pSwapchains = &self.swapchain.swapchain,
+        .swapchainCount = 1,
+        .pWaitSemaphores = &current_frame.render_done_semaphore,
+        .waitSemaphoreCount = 1,
+        .pImageIndices = &image_index,
+    };
+
+    try vk.check(vk.c.vkQueuePresentKHR(null, &present_info));
+
+    self.swapchain.current_frame_inflight += 1;
 }
 
 pub fn deinit(self: @This()) void {
