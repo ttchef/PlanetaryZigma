@@ -53,7 +53,7 @@ pub fn init(config: Config) !@This() {
 
 pub fn draw(self: *@This()) !void {
     var image_index: u32 = undefined;
-    const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight];
+    const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
     try vk.check(vk.c.vkResetFences(self.device.toC(), 1, &current_frame.render_fence));
     try vk.check(vk.c.vkAcquireNextImageKHR(
@@ -113,7 +113,7 @@ pub fn draw(self: *@This()) !void {
         },
     };
 
-    try vk.check(vk.c.vkQueueSubmit2(null, 1, &submit_info, current_frame.render_fence));
+    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index).toC(), 1, &submit_info, current_frame.render_fence));
 
     var present_info: vk.c.VkPresentInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -124,9 +124,11 @@ pub fn draw(self: *@This()) !void {
         .pImageIndices = &image_index,
     };
 
-    try vk.check(vk.c.vkQueuePresentKHR(null, &present_info));
+    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index).toC(), &present_info));
 
     self.swapchain.current_frame_inflight += 1;
+    //https://vkguide.dev/docs/new_chapter_2/vulkan_new_rendering/
+    //TODO: VMA.
 }
 
 pub fn deinit(self: @This()) void {

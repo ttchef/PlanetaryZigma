@@ -31,7 +31,7 @@ pub fn main() !void {
     });
     defer window.deinit();
 
-    const renderer: Renderer = try .init(.{ .instance = .{
+    var renderer: Renderer = try .init(.{ .instance = .{
         .extensions = &.{
             "VK_KHR_surface",
             switch (builtin.target.os.tag) {
@@ -83,7 +83,7 @@ pub fn main() !void {
         //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
-        break;
+        // break;
     }
 }
 
