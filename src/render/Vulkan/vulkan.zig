@@ -117,12 +117,11 @@ pub const Surface = opaque {
     }
 };
 
-pub const PhysicalDevice = opaque {
-    pub inline fn toC(self: *@This()) c.VkPhysicalDevice {
-        return @ptrCast(self);
-    }
+pub const PhysicalDevice = struct {
+    ptr: c.VkPhysicalDevice,
+    queue_family_index: u32,
 
-    pub fn find(instance: *Instance, surface: *Surface) !struct { *@This(), u32 } {
+    pub fn find(instance: *Instance, surface: *Surface) !@This() {
         var device_count: u32 = 0;
         try check(c.vkEnumeratePhysicalDevices(instance.toC(), &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
@@ -134,26 +133,25 @@ pub const PhysicalDevice = opaque {
             var properties: c.VkPhysicalDeviceProperties = undefined;
             c.vkGetPhysicalDeviceProperties(device, &properties);
 
-            var queue_family_count: u32 = 0;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, null);
+            var family_count: u32 = 0;
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, null);
 
-            var queue_families: [16]c.VkQueueFamilyProperties = undefined;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, &queue_families);
+            var families: [16]c.VkQueueFamilyProperties = undefined;
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, &families);
 
-            for (queue_families[0..queue_family_count], 0..) |queue_family, queue_family_index| {
-                const supports_graphics = (queue_family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
+            for (families[0..family_count], 0..) |family, i| {
+                const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
 
-                var present_supported: c.VkBool32 = 0;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(queue_family_index), surface.toC(), &present_supported));
+                var present_supported: c.VkBool32 = undefined;
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), surface.toC(), &present_supported));
 
                 if (supports_graphics and present_supported != 0) {
-                    std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, queue_family_index });
+                    std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
 
-                    return .{ @ptrCast(device), @intCast(queue_family_index) };
+                    return .{ .ptr = device, .queue_family_index = @intCast(i) };
                 }
             }
         }
-
         return error.NoSuitablePhysicalDevice;
     }
 };
@@ -169,7 +167,7 @@ pub const Device = opaque {
         }
     };
 
-    pub fn init(physical_device: *PhysicalDevice, queue_family_index: u32, extensions: ?[]const [*:0]const u8) !*@This() {
+    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !*@This() {
         var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
             .dynamicRendering = c.VK_TRUE,
@@ -179,14 +177,14 @@ pub const Device = opaque {
         const queue_info: c.VkDeviceQueueCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = &dynamic_rendering_features,
-            .queueFamilyIndex = queue_family_index,
+            .queueFamilyIndex = physical_device.queue_family_index,
             .queueCount = 1,
             .pQueuePriorities = &queue_priority,
             .flags = 0,
         };
 
         var features: c.VkPhysicalDeviceFeatures = undefined;
-        c.vkGetPhysicalDeviceFeatures(physical_device.toC(), &features);
+        c.vkGetPhysicalDeviceFeatures(physical_device.ptr, &features);
 
         const device_info = c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -198,9 +196,9 @@ pub const Device = opaque {
         };
 
         var device: c.VkDevice = undefined;
-        try check(c.vkCreateDevice(physical_device.toC(), &device_info, null, &device));
+        try check(c.vkCreateDevice(physical_device.ptr, &device_info, null, &device));
         var queue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(device, queue_family_index, 0, &queue);
+        c.vkGetDeviceQueue(device, physical_device.queue_family_index, 0, &queue);
 
         return @ptrCast(device);
     }
@@ -221,12 +219,12 @@ pub const CommandPool = opaque {
         return @ptrCast(self);
     }
 
-    pub fn init(device: *Device, graphics_family_index: u32) !*@This() {
+    pub fn init(device: *Device, queue_family_index: u32) !*@This() {
         const command_pool_info: c.VkCommandPoolCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = null,
             .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = graphics_family_index,
+            .queueFamilyIndex = queue_family_index,
         };
 
         var command_pool: c.VkCommandPool = undefined;

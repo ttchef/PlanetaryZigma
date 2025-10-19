@@ -4,7 +4,7 @@ pub const vk = @import("Vulkan/vulkan.zig");
 instance: *vk.Instance,
 debug_messenger: *vk.DebugMessenger,
 surface: *vk.Surface,
-physical_device: *vk.PhysicalDevice,
+physical_device: vk.PhysicalDevice,
 device: *vk.Device,
 swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
@@ -26,9 +26,9 @@ pub fn init(config: Config) !@This() {
     const instance: *vk.Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: *vk.DebugMessenger = try .init(instance, .{});
     const surface: *vk.Surface = if (config.surface.init != null and config.surface.data != null) @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) else try vk.Surface.init(instance);
-    const physical_device: *vk.PhysicalDevice, const queue_family_index: u32 = try vk.PhysicalDevice.find(instance, surface);
-    const device: *vk.Device = try .init(physical_device, queue_family_index, config.device.extensions);
-    const command_pool: *vk.CommandPool = try .init(device, queue_family_index);
+    const physical_device: vk.PhysicalDevice = try .find(instance, surface);
+    const device: *vk.Device = try .init(physical_device, config.device.extensions);
+    const command_pool: *vk.CommandPool = try .init(device, physical_device.queue_family_index);
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
