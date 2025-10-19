@@ -1,1 +1,1 @@
-/home/lucas/projects/Youtube/PlanetaryZigma/spacetime/server/target/wasm32-unknown-unknown/release/spacetime_module.wasm: /home/lucas/projects/Youtube/PlanetaryZigma/spacetime/server/src/lib.rs
+/home/admin/projects/PlanetaryZigma/spacetime/server/target/wasm32-unknown-unknown/release/spacetime_module.wasm: /home/admin/projects/PlanetaryZigma/spacetime/server/src/command.rs /home/admin/projects/PlanetaryZigma/spacetime/server/src/lib.rs /home/admin/projects/PlanetaryZigma/spacetime/server/src/math.rs

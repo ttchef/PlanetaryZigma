@@ -14,17 +14,17 @@ height: u32,
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
-pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_pool: *vk.CommandPool, surface: *vk.Surface, width: u32, height: u32) !@This() {
+pub fn init(physical_device: vk.PhysicalDevice, device: *vk.Device, command_pool: *vk.CommandPool, surface: *vk.Surface, width: u32, height: u32) !@This() {
     var swapchain: vk.c.VkSwapchainKHR = undefined;
 
     var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.toC(), surface.toC(), &capabilities));
+    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.ptr, surface.toC(), &capabilities));
 
     var format_count: u32 = 0;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, null));
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.ptr, surface.toC(), &format_count, null));
 
     var formats: [16]vk.c.VkSurfaceFormatKHR = undefined;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, &formats[0]));
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.ptr, surface.toC(), &format_count, &formats[0]));
 
     var chosen_format: vk.c.VkSurfaceFormatKHR = formats[0];
     for (0..format_count) |i| {
