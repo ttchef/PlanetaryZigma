@@ -207,7 +207,7 @@ pub const Device = opaque {
         c.vkDestroyDevice(self.toC(), null);
     }
 
-    pub inline fn getQueue(self: *@This(), index: u32) Queue {
+    pub inline fn getQueue(self: *@This(), index: u32) *Queue {
         var queue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(self.toC(), index, 0, &queue);
         return @ptrCast(queue);

@@ -1380,9 +1380,8 @@ pub fn imageMemBarrier(
         // if (HasStencilComponent(Format)) {
         //     barrier.subresourceRange.aspectMask |= c.VK_IMAGE_ASPECT_STENCIL_BIT;
         // }
-    } else barrier.subresourceRange.aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT;
-
-    if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and new_layout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    } //else barrier.subresourceRange.aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT;
+    else if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and new_layout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
 
@@ -1394,9 +1393,7 @@ pub fn imageMemBarrier(
 
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-
-    if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_UNDEFINED and
         new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         barrier.srcAccessMask = 0;
@@ -1479,6 +1476,12 @@ pub fn imageMemBarrier(
 
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_GENERAL and new_layout == c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+        barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_NONE;
+
+        source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destination_stage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     } else if (old_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
         barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -1486,6 +1489,5 @@ pub fn imageMemBarrier(
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else @panic("Unsupported layout transition!");
-
     c.vkCmdPipelineBarrier(cmd_buf, source_stage, destination_stage, 0, 0, null, 0, null, 1, &barrier);
 }
