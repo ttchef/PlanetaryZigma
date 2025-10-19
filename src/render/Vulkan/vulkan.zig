@@ -5,6 +5,8 @@ pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
 
+pub const Swapchain = @import("Swapchain.zig");
+
 pub const Instance = opaque {
     pub inline fn toC(self: *@This()) c.VkInstance {
         return @ptrCast(self);

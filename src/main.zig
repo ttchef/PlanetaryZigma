@@ -9,9 +9,6 @@ const Spacetime = @import("net/Spacetime.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
-const width: u32 = 900;
-const heigth: u32 = 800;
-
 pub fn main() !void {
     var buffer: [4096 * 100]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -30,7 +27,7 @@ pub fn main() !void {
     glfw.Window.Hint.set(.{ .client_api = .none });
     const window: *glfw.Window = try .init(.{
         .title = "Hello, world!",
-        .size = .{ .width = width, .height = heigth },
+        .size = .{ .width = 900, .height = 800 },
     });
     defer window.deinit();
 
@@ -52,8 +49,8 @@ pub fn main() !void {
         .data = window,
         .init = initVulkanSurface,
     }, .swapchain = .{
-        .width = width,
-        .heigth = heigth,
+        .width = @intCast(window.getSize().width),
+        .heigth = @intCast(window.getSize().height),
     } });
     defer renderer.deinit();
 

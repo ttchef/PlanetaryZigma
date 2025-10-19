@@ -2,7 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan.zig");
 const check = @import("utils.zig").check;
 const Func = @import("utils.zig").Func;
-const MAX_FRAMES_INFLIGHT: usize = 3;
+const max_frames_inflight: usize = 3;
 
 swapchain: vk.c.VkSwapchainKHR,
 vk_images: [16]vk.c.VkImage,
@@ -12,16 +12,13 @@ width: u32,
 height: u32,
 
 current_frame_inflight: u32 = 0,
-frames: [MAX_FRAMES_INFLIGHT]FrameData = undefined,
+frames: [max_frames_inflight]FrameData = undefined,
 
 pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_pool: *vk.CommandPool, surface: *vk.Surface, width: u32, height: u32) !@This() {
     var swapchain: vk.c.VkSwapchainKHR = undefined;
 
     var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
-    check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.toC(), surface.toC(), &capabilities)) catch {
-        std.log.err("\n\nMEGA ERR\n\n", .{});
-        return error.aaa;
-    };
+    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.toC(), surface.toC(), &capabilities));
 
     var format_count: u32 = 0;
     try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, null));
@@ -29,10 +26,10 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_poo
     var formats: [16]vk.c.VkSurfaceFormatKHR = undefined;
     try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.toC(), surface.toC(), &format_count, &formats[0]));
 
-    var chosenFormat: vk.c.VkSurfaceFormatKHR = formats[0];
+    var chosen_format: vk.c.VkSurfaceFormatKHR = formats[0];
     for (0..format_count) |i| {
         if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_SRGB) {
-            chosenFormat = formats[i];
+            chosen_format = formats[i];
             break;
         }
     }
@@ -41,8 +38,8 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_poo
         .sType = vk.c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface.toC(),
         .minImageCount = capabilities.minImageCount,
-        .imageFormat = chosenFormat.format,
-        .imageColorSpace = chosenFormat.colorSpace,
+        .imageFormat = chosen_format.format,
+        .imageColorSpace = chosen_format.colorSpace,
         .imageExtent = .{ .width = width, .height = height },
         .imageArrayLayers = 1,
         .imageUsage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
@@ -55,16 +52,14 @@ pub fn init(physical_device: *vk.PhysicalDevice, device: *vk.Device, command_poo
 
     try check(vk.c.vkCreateSwapchainKHR(device.toC(), &swapchain_info, null, &swapchain));
 
-    var frames: [MAX_FRAMES_INFLIGHT]FrameData = undefined;
-    for (0..MAX_FRAMES_INFLIGHT) |i| {
-        frames[i] = try .init(device, command_pool);
-    }
+    var frames: [max_frames_inflight]FrameData = undefined;
+    for (&frames) |*frame| frame.* = try .init(device, command_pool);
 
     return .{
         .swapchain = swapchain,
         .vk_images = undefined,
         .image_count = undefined,
-        .format = chosenFormat.format,
+        .format = chosen_format.format,
         .width = width,
         .height = height,
         .current_frame_inflight = 0,
@@ -77,9 +72,7 @@ pub fn deinit(
     device: *vk.Device,
     command_pool: *vk.CommandPool,
 ) void {
-    for (self.frames[0..MAX_FRAMES_INFLIGHT]) |image| {
-        image.deinit(device, command_pool);
-    }
+    for (self.frames) |frame| frame.deinit(device, command_pool);
     vk.c.vkDestroySwapchainKHR(device.toC(), self.swapchain, null);
 }
 
@@ -110,9 +103,7 @@ pub fn recreate(
 ) !void {
     try check(vk.c.vkDeviceWaitIdle(self.device));
 
-    for (0..self.image_count) |i| {
-        self.swapchain_images[i].deinit(self.device, command_pool);
-    }
+    for (self.swapchain_images[0..@intCast(self.image_count)]) |image| image.deinit(self.device, command_pool);
 
     self.deinit();
     self.* = try init(physical_device, self.device, surface, width, height);
