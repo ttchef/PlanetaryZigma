@@ -4,7 +4,7 @@ const glfw = @import("glfw");
 const nz = @import("numz");
 const physics = @import("physics.zig");
 const ecs = @import("ecs");
-const Renderer = @import("render/Renderer.zig");
+const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });

@@ -25,8 +25,8 @@
             .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
         },
         .vma = .{
-            .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
-            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
+            .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.0.1",
+            .hash = "N-V-__8AAHeWOQABqWHSzsYkiKh9vr8y4hszFdUU0OKecnjX",
         },
         .stb = .{
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",

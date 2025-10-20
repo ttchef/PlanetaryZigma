@@ -19,6 +19,15 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
 
+    const vma_dep = b.dependency("vma", .{});
+    const vma = b.addTranslateC(.{
+        .root_source_file = vma_dep.path("include/vk_mem_alloc.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    vma.addCMacro("VMA_IMPLEMENTATION", "1");
+    vma.addIncludePath(vulkan_header_dep.path("include/"));
+
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -36,6 +45,29 @@ pub fn build(b: *std.Build) void {
         "cargo", "build", "--release",
     });
 
+    const renderer = b.addLibrary(.{
+        .name = "renderer",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/render/Renderer.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "glfw", .module = zig_glfw },
+                .{ .name = "gl", .module = zig_opengl },
+                .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
+                .{ .name = "vulkan", .module = vulkan_headers },
+                .{ .name = "vma", .module = vma },
+                .{ .name = "stb", .module = stb.createModule() },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+
+    renderer.root_module.linkSystemLibrary("vulkan", .{});
+
+    b.installArtifact(renderer);
+
     const exe = b.addExecutable(.{
         .name = "PlanetaryZigma",
         .root_module = b.createModule(.{
@@ -48,7 +80,9 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
+                .{ .name = "vma", .module = vma },
                 .{ .name = "stb", .module = stb.createModule() },
+                .{ .name = "Renderer", .module = renderer.root_module },
             },
         }),
     });
@@ -62,28 +96,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("vulkan", .{});
 
     b.installArtifact(exe);
-
-    const render_lib = b.addLibrary(.{
-        .name = "render",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/render.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "glfw", .module = zig_glfw },
-                .{ .name = "gl", .module = zig_opengl },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
-                .{ .name = "vulkan", .module = vulkan_headers },
-                .{ .name = "stb", .module = stb.createModule() },
-            },
-        }),
-        .linkage = .dynamic,
-    });
-
-    render_lib.root_module.linkSystemLibrary("vulkan", .{});
-
-    b.installArtifact(render_lib);
 
     const run_step = b.step("run", "Run the app");
     const run_cmd = b.addRunArtifact(exe);
