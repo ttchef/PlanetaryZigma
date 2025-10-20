@@ -1,6 +1,8 @@
 const std = @import("std");
+const vma = @import("vma");
 pub const vk = @import("Vulkan/vulkan.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
+const Image = @import("Vulkan/Image.zig");
 
 instance: *vk.Instance,
 debug_messenger: *vk.DebugMessenger,
@@ -9,6 +11,9 @@ physical_device: vk.PhysicalDevice,
 device: *vk.Device,
 swapchain: Swapchain,
 command_pool: *vk.CommandPool,
+vulkan_mem_alloc: vma.VmaAllocator,
+draw_image: Image,
+draw_extent: vk.c.VkExtent2D,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -40,6 +45,30 @@ pub fn init(config: Config) !@This() {
 
     std.debug.print("Address {*}\n", .{instance});
 
+    // TODO: Initialize VMA properly
+    var vma_info: vma.VmaAllocatorCreateInfo = .{
+        .physicalDevice = @ptrCast(physical_device.ptr),
+        .device = @ptrCast(device),
+        .instance = @ptrCast(instance),
+        .flags = vma.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+    };
+    var vulkan_mem_alloc: vma.VmaAllocator = undefined;
+    try vk.check(vma.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));
+
+    var draw_image: Image = .{
+        .imageFormat = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        .imageExtent = .{
+            .width = config.swapchain.width,
+            .height = config.swapchain.heigth,
+            .depth = 1,
+        },
+    };
+    const draw_image_usages_flags: vk.c.VkImageUsageFlags =
+        vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        vk.c.VK_IMAGE_USAGE_STORAGE_BIT |
+        vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -48,6 +77,7 @@ pub fn init(config: Config) !@This() {
         .device = device,
         .swapchain = swapchain,
         .command_pool = command_pool,
+        .vulkan_mem_alloc = vulkan_mem_alloc,
     };
 }
 
@@ -135,6 +165,7 @@ pub fn deinit(self: @This()) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.toC());
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
+    vma.vmaDestroyAllocator(self.vulkan_mem_alloc);
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
