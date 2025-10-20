@@ -56,8 +56,8 @@ pub fn init(config: Config) !@This() {
     try vk.check(vma.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));
 
     var draw_image: Image = .{
-        .imageFormat = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
-        .imageExtent = .{
+        .image_format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        .image_extent = .{
             .width = config.swapchain.width,
             .height = config.swapchain.heigth,
             .depth = 1,

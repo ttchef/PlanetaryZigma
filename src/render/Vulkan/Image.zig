@@ -2,7 +2,7 @@ const vk = @import("vulkan.zig");
 const vma = @import("vma");
 
 image: vk.c.VkImage = undefined,
-imageView: vk.c.VkImageView = undefined,
-allocation: vma.VmaAllocation = undefined,
-imageExtent: vk.c.VkExtent3D = undefined,
-imageFormat: vk.c.VkFormat = undefined,
+image_view: vk.c.VkImageView = undefined,
+vma_allocation: vma.VmaAllocation = undefined,
+image_extent: vk.c.VkExtent3D = undefined,
+image_format: vk.c.VkFormat = undefined,
