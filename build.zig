@@ -25,7 +25,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).createModule();
-    vma.addCMacro("VMA_IMPLEMENTATION", "1");
     vma.addIncludePath(vulkan_header_dep.path("include/"));
 
     const stb = b.addTranslateC(.{
@@ -84,6 +83,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "Renderer", .module = renderer.root_module },
             },
+            .link_libcpp = true,
         }),
     });
 
@@ -94,6 +94,17 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addLibraryPath(b.path("target/release/"));
     exe.root_module.linkSystemLibrary("spacetime", .{});
     exe.root_module.linkSystemLibrary("vulkan", .{});
+
+    // Add VMA implementation
+    exe.addCSourceFile(.{
+        .file = b.addWriteFiles().add("vma_impl.cpp",
+            \\#define VMA_IMPLEMENTATION
+            \\#include "vk_mem_alloc.h"
+        ),
+        .flags = &.{"-std=c++14"},
+    });
+    exe.addIncludePath(vma_dep.path("include/"));
+    exe.addIncludePath(vulkan_header_dep.path("include/"));
 
     b.installArtifact(exe);
 
