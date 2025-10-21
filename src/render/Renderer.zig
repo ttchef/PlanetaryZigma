@@ -1,19 +1,16 @@
 const std = @import("std");
-const vma = @import("vma");
 pub const vk = @import("Vulkan/vulkan.zig");
-const Swapchain = @import("Vulkan/Swapchain.zig");
-const Image = @import("Vulkan/Image.zig");
 
 instance: *vk.Instance,
 debug_messenger: *vk.DebugMessenger,
 surface: *vk.Surface,
 physical_device: vk.PhysicalDevice,
 device: *vk.Device,
-swapchain: Swapchain,
+swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
-vulkan_mem_alloc: vma.VmaAllocator,
-draw_image: Image,
-draw_extent: vk.c.VkExtent2D,
+
+vulkan_mem_alloc: vk.Vma,
+draw_image: vk.Image,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -46,28 +43,8 @@ pub fn init(config: Config) !@This() {
     std.debug.print("Address {*}\n", .{instance});
 
     // TODO: Initialize VMA properly
-    var vma_info: vma.VmaAllocatorCreateInfo = .{
-        .physicalDevice = @ptrCast(physical_device.ptr),
-        .device = @ptrCast(device),
-        .instance = @ptrCast(instance),
-        .flags = vma.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
-    };
-    var vulkan_mem_alloc: vma.VmaAllocator = undefined;
-    try vk.check(vma.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));
-
-    var draw_image: Image = .{
-        .imageFormat = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
-        .imageExtent = .{
-            .width = config.swapchain.width,
-            .height = config.swapchain.heigth,
-            .depth = 1,
-        },
-    };
-    const draw_image_usages_flags: vk.c.VkImageUsageFlags =
-        vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-        vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-        vk.c.VK_IMAGE_USAGE_STORAGE_BIT |
-        vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
+    const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
     return .{
         .instance = instance,
@@ -78,6 +55,7 @@ pub fn init(config: Config) !@This() {
         .swapchain = swapchain,
         .command_pool = command_pool,
         .vulkan_mem_alloc = vulkan_mem_alloc,
+        .draw_image = draw_image,
     };
 }
 
@@ -103,7 +81,7 @@ pub fn draw(self: *@This()) !void {
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
+    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
     var clear_value: vk.c.VkClearColorValue = .{ .float32 = .{ 0.0, 0.0, std.math.sin(@as(f32, @floatFromInt(self.swapchain.current_frame_inflight)) / 120.0), 1.0 } };
 
     var clear_range: vk.c.VkImageSubresourceRange = .{
@@ -114,9 +92,20 @@ pub fn draw(self: *@This()) !void {
         .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
     };
 
-    vk.c.vkCmdClearColorImage(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
+    vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
 
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    vk.copyImageToImage(
+        cmd_buffer,
+        self.draw_image.image,
+        self.swapchain.vk_images[image_index],
+        self.draw_image.image_extent,
+        self.swapchain.extent,
+    );
+
+    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
@@ -165,7 +154,10 @@ pub fn deinit(self: @This()) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.toC());
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
-    vma.vmaDestroyAllocator(self.vulkan_mem_alloc);
+
+    self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
+    self.vulkan_mem_alloc.deinit();
+
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);

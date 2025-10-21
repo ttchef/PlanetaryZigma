@@ -10,14 +10,18 @@ const Spacetime = @import("net/Spacetime.zig");
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
 pub fn main() !void {
-    var buffer: [4096 * 100]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
+    // var buffer: [4096 * 100]u8 = undefined;
+    // var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    // const allocator = fba.allocator();
+    var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = true, .safety = true }) = .init;
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
     var spacetime: Spacetime = try .init(allocator);
-    defer spacetime.deinit();
+    defer spacetime.deinit(allocator);
 
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
@@ -83,7 +87,7 @@ pub fn main() !void {
         //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
-        // break;
+        break;
     }
 }
 

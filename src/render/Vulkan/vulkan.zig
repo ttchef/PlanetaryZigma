@@ -4,8 +4,11 @@ pub const c = @import("vulkan");
 pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
+pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 
 pub const Swapchain = @import("Swapchain.zig");
+pub const Image = @import("Image.zig");
+pub const Vma = @import("Vma.zig");
 
 pub const Instance = opaque {
     pub inline fn toC(self: *@This()) c.VkInstance {

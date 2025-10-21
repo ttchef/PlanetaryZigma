@@ -59,7 +59,9 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     };
 }
 
-pub fn deinit(self: @This()) void {
+pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+    self.events.queue.deinit(allocator);
+    allocator.destroy(self.events);
     c.db_disconnect(self.connection);
 }
 
