@@ -1488,22 +1488,28 @@ pub fn imageMemBarrier(
 
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_GENERAL and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
+
+        source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destination_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else @panic("Unsupported layout transition!");
     c.vkCmdPipelineBarrier(cmd_buf, source_stage, destination_stage, 0, 0, null, 0, null, 1, &barrier);
 }
 
-pub fn copy_image_to_image(cmd: c.VkCommandBuffer, source: c.VkImage, destination: c.VkImage, srcSize: c.VkExtent2D, dstSize: c.VkExtent2D) void {
+pub fn copyImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: c.VkImage, srcSize: c.VkExtent3D, dstSize: c.VkExtent3D) void {
     var blit_region: c.VkImageBlit2 = .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .pNext = null,
         .srcOffsets = .{ .{}, .{
-            .x = srcSize.width,
-            .y = srcSize.height,
+            .x = @intCast(srcSize.width),
+            .y = @intCast(srcSize.height),
             .z = 1,
         } },
         .dstOffsets = .{ .{}, .{
-            .x = dstSize.width,
-            .y = dstSize.height,
+            .x = @intCast(dstSize.width),
+            .y = @intCast(dstSize.height),
             .z = 1,
         } },
         .srcSubresource = .{
