@@ -13,7 +13,6 @@ swapchain: Swapchain,
 command_pool: *vk.CommandPool,
 vulkan_mem_alloc: vma.VmaAllocator,
 draw_image: Image,
-draw_extent: vk.c.VkExtent2D,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -56,7 +55,7 @@ pub fn init(config: Config) !@This() {
     try vk.check(vma.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));
 
     var draw_image: Image = .{
-        .image_format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
         .image_extent = .{
             .width = config.swapchain.width,
             .height = config.swapchain.heigth,
@@ -69,6 +68,50 @@ pub fn init(config: Config) !@This() {
         vk.c.VK_IMAGE_USAGE_STORAGE_BIT |
         vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
+    var img_info: vk.c.VkImageCreateInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = null,
+        .imageType = vk.c.VK_IMAGE_TYPE_2D,
+        .format = draw_image.format,
+        .extent = draw_image.image_extent,
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk.c.VK_SAMPLE_COUNT_1_BIT,
+        .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL,
+        .usage = draw_image_usages_flags,
+    };
+
+    var vma_alloc_info: vma.VmaAllocationCreateInfo = .{
+        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        .requiredFlags = vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+
+    _ = vma.vmaCreateImage(
+        vulkan_mem_alloc,
+        @ptrCast(&img_info),
+        &vma_alloc_info,
+        &draw_image.image,
+        &draw_image.vma_allocation,
+        null,
+    );
+
+    var image_view_info: vk.c.VkImageViewCreateInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = null,
+        .viewType = vk.c.VK_IMAGE_VIEW_TYPE_2D,
+        .image = draw_image.image,
+        .format = draw_image.format,
+        .subresourceRange = .{
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        },
+    };
+
+    try vk.check(vk.c.vkCreateImageView(device.toC(), &image_view_info, null, &draw_image.image_view));
+
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -78,6 +121,7 @@ pub fn init(config: Config) !@This() {
         .swapchain = swapchain,
         .command_pool = command_pool,
         .vulkan_mem_alloc = vulkan_mem_alloc,
+        .draw_image = draw_image,
     };
 }
 
@@ -165,7 +209,11 @@ pub fn deinit(self: @This()) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.toC());
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
+
+    vk.c.vkDestroyImageView(self.device.toC(), self.draw_image.image_view, null);
+    vma.vmaDestroyImage(self.vulkan_mem_alloc, @ptrCast(self.draw_image.image), self.draw_image.vma_allocation);
     vma.vmaDestroyAllocator(self.vulkan_mem_alloc);
+
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);

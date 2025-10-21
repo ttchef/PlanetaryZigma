@@ -1491,3 +1491,46 @@ pub fn imageMemBarrier(
     } else @panic("Unsupported layout transition!");
     c.vkCmdPipelineBarrier(cmd_buf, source_stage, destination_stage, 0, 0, null, 0, null, 1, &barrier);
 }
+
+pub fn copy_image_to_image(cmd: c.VkCommandBuffer, source: c.VkImage, destination: c.VkImage, srcSize: c.VkExtent2D, dstSize: c.VkExtent2D) void {
+    var blit_region: c.VkImageBlit2 = .{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+        .pNext = null,
+        .srcOffsets = .{ .{}, .{
+            .x = srcSize.width,
+            .y = srcSize.height,
+            .z = 1,
+        } },
+        .dstOffsets = .{ .{}, .{
+            .x = dstSize.width,
+            .y = dstSize.height,
+            .z = 1,
+        } },
+        .srcSubresource = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .mipLevel = 0,
+        },
+        .dstSubresource = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .mipLevel = 0,
+        },
+    };
+
+    var blit_info: c.VkBlitImageInfo2 = .{
+        .sType = c.VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+        .pNext = null,
+        .dstImage = destination,
+        .dstImageLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcImage = source,
+        .srcImageLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .filter = c.VK_FILTER_LINEAR,
+        .regionCount = 1,
+        .pRegions = &blit_region,
+    };
+
+    c.vkCmdBlitImage2(cmd, &blit_info);
+}
