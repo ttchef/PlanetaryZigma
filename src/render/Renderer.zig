@@ -9,6 +9,8 @@ device: *vk.Device,
 swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
 
+descriptor: vk.Descriptor,
+
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
 
@@ -35,17 +37,17 @@ pub fn init(config: Config) !@This() {
     const command_pool: *vk.CommandPool = try .init(device, physical_device.queue_family_index);
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
+    const descriptor: vk.Descriptor = try .init();
+
     // TODO
     // Desctiptors, Pools
     // Shaders
     // Pipeline
 
-    std.debug.print("Address {*}\n", .{instance});
-
-    // TODO: Initialize VMA properly
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
+    std.debug.print("Address {*}\n", .{instance});
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -54,6 +56,7 @@ pub fn init(config: Config) !@This() {
         .device = device,
         .swapchain = swapchain,
         .command_pool = command_pool,
+        .descriptor = descriptor,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .draw_image = draw_image,
     };

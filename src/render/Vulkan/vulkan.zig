@@ -9,6 +9,7 @@ pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
+pub const Descriptor = @import("Descriptor.zig");
 
 pub const Instance = opaque {
     pub inline fn toC(self: *@This()) c.VkInstance {
