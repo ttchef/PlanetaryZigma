@@ -113,4 +113,20 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| run_cmd.addArgs(args);
+
+    compileShaders(b) catch unreachable;
+}
+
+fn compileShaders(b: *std.Build) !void {
+    try std.fs.cwd().makePath(b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
+    const shaders: []const []const u8 = &.{"gradient.comp"};
+    for (shaders) |shader| {
+        const cmp_cmd = b.addSystemCommand(&.{
+            "glslc",
+            b.fmt("assets/shaders/{s}", .{shader}),
+            "-o",
+            b.fmt("zig-out/shaders/{s}.spv", .{shader}),
+        });
+        b.default_step.dependOn(&cmp_cmd.step);
+    }
 }

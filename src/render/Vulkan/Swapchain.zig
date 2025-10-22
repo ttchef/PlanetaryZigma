@@ -81,22 +81,6 @@ pub fn deinit(
     vk.c.vkDestroySwapchainKHR(device.toC(), self.swapchain, null);
 }
 
-// pub fn createSwapchainImages(
-//     self: *@This(),
-//     device: *vk.Device,
-//     command_pool: *vk.CommandPool,
-// ) !void {
-//     try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), self.swapchain, &self.image_count, null));
-//     if (self.image_count > 16) @panic("More than 16 VkImages\n");
-
-//     var vk_images: [16]vk.c.VkImage = undefined;
-//     try check(vk.c.vkGetSwapchainImagesKHR(device.toC(), self.swapchain, &self.image_count, &vk_images[0]));
-
-//     for (0..self.image_count) |i| {
-//         self.images[i] = try .init(device, command_pool, vk_images[i]);
-//     }
-// }
-
 pub fn recreate(
     self: *@This(),
     surface: vk.c.VkSurfaceKHR,

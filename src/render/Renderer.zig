@@ -9,6 +9,9 @@ device: *vk.Device,
 swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
 
+descriptor: vk.Descriptor,
+pipeline: vk.Pipeline,
+
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
 
@@ -36,16 +39,16 @@ pub fn init(config: Config) !@This() {
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
-    // Desctiptors, Pools
-    // Shaders
     // Pipeline
 
-    std.debug.print("Address {*}\n", .{instance});
-
-    // TODO: Initialize VMA properly
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
+    //TODO: DONT PASS IMAGE TO DESCRIPTOR
+    const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
+    const pipeline: vk.Pipeline = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
+
+    std.debug.print("Address {*}\n", .{instance});
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -54,6 +57,8 @@ pub fn init(config: Config) !@This() {
         .device = device,
         .swapchain = swapchain,
         .command_pool = command_pool,
+        .descriptor = descriptor,
+        .pipeline = pipeline,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .draw_image = draw_image,
     };
@@ -82,17 +87,24 @@ pub fn draw(self: *@This()) !void {
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
     try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
-    var clear_value: vk.c.VkClearColorValue = .{ .float32 = .{ 0.0, 0.0, std.math.sin(@as(f32, @floatFromInt(self.swapchain.current_frame_inflight)) / 120.0), 1.0 } };
+    // var clear_value: vk.c.VkClearColorValue = .{ .float32 = .{ 0.0, 0.0, std.math.sin(@as(f32, @floatFromInt(self.swapchain.current_frame_inflight)) / 120.0), 1.0 } };
+    // var clear_range: vk.c.VkImageSubresourceRange = .{
+    //     .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+    //     .baseMipLevel = 0,
+    //     .levelCount = vk.c.VK_REMAINING_MIP_LEVELS,
+    //     .baseArrayLayer = 0,
+    //     .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
+    // };
+    // vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline);
+    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline_layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
 
-    var clear_range: vk.c.VkImageSubresourceRange = .{
-        .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = vk.c.VK_REMAINING_MIP_LEVELS,
-        .baseArrayLayer = 0,
-        .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
-    };
-
-    vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
+    vk.c.vkCmdDispatch(
+        cmd_buffer,
+        @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.width)) / 16)),
+        @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.height)) / 16)),
+        1,
+    );
 
     try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -155,6 +167,7 @@ pub fn deinit(self: @This()) void {
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
 
+    self.descriptor.deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
     self.vulkan_mem_alloc.deinit();
 

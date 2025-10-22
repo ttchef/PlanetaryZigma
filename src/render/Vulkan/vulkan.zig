@@ -9,6 +9,8 @@ pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
+pub const Descriptor = @import("Descriptor.zig");
+pub const Pipeline: type = @import("Pipeline.zig");
 
 pub const Instance = opaque {
     pub inline fn toC(self: *@This()) c.VkInstance {
@@ -50,9 +52,10 @@ pub const DebugMessenger = opaque {
 
     pub const Config = struct {
         severities: struct {
-            verbose: bool = false,
+            verbose: bool = true,
             warning: bool = true,
             @"error": bool = true,
+            info: bool = true,
         } = .{},
     };
 
@@ -61,7 +64,8 @@ pub const DebugMessenger = opaque {
         const message_severity: u32 = @intCast(
             if (config.severities.verbose) c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT else 0 |
             if (config.severities.warning) c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT else 0 |
-            if (config.severities.@"error") c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT else 0);
+            if (config.severities.@"error") c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT else 0 |
+            if (config.severities.info)  c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT else 0);
         // zig fmt: on
 
         const message_type: u32 = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
