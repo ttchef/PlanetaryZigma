@@ -52,6 +52,7 @@ pub fn main() !void {
                 .warning = true,
                 .verbose = true,
                 .@"error" = true,
+                .info = true,
             },
         },
     }, .device = .{
