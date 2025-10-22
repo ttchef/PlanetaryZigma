@@ -87,7 +87,7 @@ pub fn main() !void {
         //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
-        break;
+        // break;
     }
 }
 

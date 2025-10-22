@@ -118,6 +118,7 @@ pub fn build(b: *std.Build) void {
 }
 
 fn compileShaders(b: *std.Build) !void {
+    try std.fs.cwd().makePath(b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
     const shaders: []const []const u8 = &.{"gradient.comp"};
     for (shaders) |shader| {
         const cmp_cmd = b.addSystemCommand(&.{

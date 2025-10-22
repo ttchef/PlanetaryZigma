@@ -10,6 +10,7 @@ pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
+pub const Pipeline: type = @import("Pipeline.zig");
 
 pub const Instance = opaque {
     pub inline fn toC(self: *@This()) c.VkInstance {
@@ -51,7 +52,7 @@ pub const DebugMessenger = opaque {
 
     pub const Config = struct {
         severities: struct {
-            verbose: bool = false,
+            verbose: bool = true,
             warning: bool = true,
             @"error": bool = true,
         } = .{},
