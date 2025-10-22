@@ -37,8 +37,6 @@ pub fn init(config: Config) !@This() {
     const command_pool: *vk.CommandPool = try .init(device, physical_device.queue_family_index);
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
-    const descriptor: vk.Descriptor = try .init();
-
     // TODO
     // Desctiptors, Pools
     // Shaders
@@ -46,6 +44,7 @@ pub fn init(config: Config) !@This() {
 
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
+    const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
 
     std.debug.print("Address {*}\n", .{instance});
     return .{
@@ -158,6 +157,7 @@ pub fn deinit(self: @This()) void {
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
 
+    self.descriptor.deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
     self.vulkan_mem_alloc.deinit();
 
