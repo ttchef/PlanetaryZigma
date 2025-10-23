@@ -10,10 +10,10 @@ swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
 
 descriptor: vk.Descriptor,
-pipeline: vk.Pipeline,
+// pipeline: vk.Pipeline,
 
 vulkan_mem_alloc: vk.Vma,
-draw_image: vk.Image,
+// draw_image: vk.Image,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -44,9 +44,9 @@ pub fn init(config: Config) !@This() {
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
-    //TODO: DONT PASS IMAGE TO DESCRIPTOR
+    // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
-    const pipeline: vk.Pipeline = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
+    // const pipeline: vk.Pipeline = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
 
     std.debug.print("Address {*}\n", .{instance});
     return .{
@@ -58,13 +58,14 @@ pub fn init(config: Config) !@This() {
         .swapchain = swapchain,
         .command_pool = command_pool,
         .descriptor = descriptor,
-        .pipeline = pipeline,
+        // .pipeline = pipeline,
         .vulkan_mem_alloc = vulkan_mem_alloc,
-        .draw_image = draw_image,
+        // .draw_image = draw_image,
     };
 }
 
 pub fn draw(self: *@This()) !void {
+    if (true) return;
     var image_index: u32 = undefined;
     const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
@@ -168,7 +169,7 @@ pub fn deinit(self: @This()) void {
     self.command_pool.deinit(self.device);
 
     self.descriptor.deinit(self.device);
-    self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
+    // self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
     self.vulkan_mem_alloc.deinit();
 
     self.device.deinit();

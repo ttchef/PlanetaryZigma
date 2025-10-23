@@ -10,7 +10,7 @@ shader: vk.c.VkShaderModule,
 //TODO: DONT TAKE IN  draw_iamge: vk.c.VkImage HERE
 pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     const max_sets: i32 = 10;
-    var descriptor_pool_size: []const vk.c.VkDescriptorPoolSize = &.{
+    const descriptor_pool_size: []const vk.c.VkDescriptorPoolSize = &.{
         .{ .type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 1 * max_sets },
     };
 
@@ -19,23 +19,22 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
         .flags = 0,
         .maxSets = max_sets,
         .poolSizeCount = @intCast(descriptor_pool_size.len),
-        .pPoolSizes = @ptrCast(&descriptor_pool_size),
+        .pPoolSizes = @ptrCast(descriptor_pool_size),
     };
 
     var pool: vk.c.VkDescriptorPool = undefined;
     try vk.check(vk.c.vkCreateDescriptorPool(device.toC(), &pool_info, null, &pool));
 
-    var new_bind: []const vk.c.VkDescriptorSetLayoutBinding = &.{.{
+    const new_bind: []const vk.c.VkDescriptorSetLayoutBinding = &.{.{
         .binding = 0,
         .descriptorCount = 1,
-        .descriptorType = vk.c.VK_SHADER_STAGE_COMPUTE_BIT | vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
+        .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     }};
 
     var descriptor_set_layout_info: vk.c.VkDescriptorSetLayoutCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pBindings = @ptrCast(&new_bind),
         .bindingCount = @intCast(new_bind.len),
-        .flags = vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
+        .pBindings = @ptrCast(new_bind),
     };
 
     var set: vk.c.VkDescriptorSetLayout = undefined;
@@ -44,7 +43,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     var alloc_info: vk.c.VkDescriptorSetAllocateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = null,
-        .descriptorPool = @ptrCast(&pool),
+        .descriptorPool = @ptrCast(pool),
         .descriptorSetCount = 1,
         .pSetLayouts = &set,
     };
@@ -95,9 +94,12 @@ fn loadShaderModule(device: *vk.Device, path: []const u8) !vk.c.VkShaderModule {
     const n = try file.readAll(&buffer);
     const source = buffer[0..n];
 
+    std.debug.print("buffer: \n{s}\n", .{buffer});
+    std.debug.print("source: \n{s}\n", .{source});
+
     var create_info: vk.c.VkShaderModuleCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = n,
+        .codeSize = n / 4,
         .pCode = @ptrCast(&source),
     };
 

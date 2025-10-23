@@ -13,6 +13,7 @@ pub fn main() !void {
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
+
     var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = true, .safety = true }) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -38,6 +39,7 @@ pub fn main() !void {
     var renderer: Renderer = try .init(.{ .instance = .{
         .extensions = &.{
             "VK_KHR_surface",
+            "VK_EXT_debug_utils",
             switch (builtin.target.os.tag) {
                 .windows => "VK_KHR_win32_surface",
                 .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
@@ -56,7 +58,7 @@ pub fn main() !void {
             },
         },
     }, .device = .{
-        .extensions = &.{"VK_KHR_swapchain"},
+        .extensions = &.{ "VK_KHR_swapchain", "VK_EXT_descriptor_buffer" },
     }, .surface = .{
         .data = window,
         .init = initVulkanSurface,

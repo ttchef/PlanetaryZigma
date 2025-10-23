@@ -18,7 +18,27 @@ pub const Instance = opaque {
     }
 
     pub fn init(extensions: ?[]const [*:0]const u8, layers: ?[]const [*:0]const u8) !*@This() {
-        // TODO: Add checks so no invalid extensions or layers get past
+        var extension_count: u32 = undefined;
+        try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, null));
+        var extension_properties: [128]c.VkExtensionProperties = undefined;
+        try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, &extension_properties));
+        check_ext: for (extensions orelse &.{}) |extension| {
+            for (extension_properties[0..extension_count]) |cmp_ext|
+                if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
+            std.log.err("Missing extention: {s}\n", .{extension});
+            return error.MissingExtension;
+        }
+
+        var layer_count: u32 = undefined;
+        try check(c.vkEnumerateInstanceLayerProperties(&layer_count, null));
+        var layer_properties: [128]c.VkLayerProperties = undefined;
+        try check(c.vkEnumerateInstanceLayerProperties(&layer_count, &layer_properties));
+        check_layer: for (layers orelse &.{}) |layer| {
+            for (layer_properties[0..layer_count]) |cmp_layer|
+                if (std.mem.eql(u8, std.mem.span(layer), std.mem.sliceTo(&cmp_layer.layerName, 0))) continue :check_layer;
+            std.log.err("Missing layer: {s}\n", .{layer});
+            return error.MissingLayer;
+        }
 
         var create_info: c.VkInstanceCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -60,13 +80,14 @@ pub const DebugMessenger = opaque {
     };
 
     pub fn init(instance: *Instance, config: Config) !*@This() {
-        // zig fmt: off
-        const message_severity: u32 = @intCast(
-            if (config.severities.verbose) c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT else 0 |
-            if (config.severities.warning) c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT else 0 |
-            if (config.severities.@"error") c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT else 0 |
-            if (config.severities.info)  c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT else 0);
-        // zig fmt: on
+        std.debug.print("config2 {any}\n", .{config.severities});
+
+        var message_severity: u32 = 0;
+        if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+        if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+        if (config.severities.@"error") message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        if (config.severities.info) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+        std.debug.print("VALUE {d}\n", .{message_severity});
 
         const message_type: u32 = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
             c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
@@ -96,10 +117,10 @@ pub const DebugMessenger = opaque {
 
     fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {
         switch (severity) {
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => std.log.info("VK {s}", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => std.log.info("VK {s}", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => std.log.warn("VK {s}", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => std.log.err("VK {s}", .{callback_data.*.pMessage}),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => std.log.info("VK:\n{s}\n", .{callback_data.*.pMessage}),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => std.log.info("VK:\n{s}\n", .{callback_data.*.pMessage}),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => std.log.warn("VK:\n{s}\n", .{callback_data.*.pMessage}),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => std.log.err("VK:\n{s}\n", .{callback_data.*.pMessage}),
             else => unreachable,
         }
 
@@ -175,15 +196,16 @@ pub const Device = opaque {
     };
 
     pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !*@This() {
-        var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .dynamicRendering = c.VK_TRUE,
-        };
+        // var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
+        //     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        //     .dynamicRendering = c.VK_TRUE,
+        // };
 
         var queue_priority: f32 = 1.0;
         const queue_info: c.VkDeviceQueueCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = &dynamic_rendering_features,
+            // .pNext = &dynamic_rendering_features,
+            .pNext = null,
             .queueFamilyIndex = physical_device.queue_family_index,
             .queueCount = 1,
             .pQueuePriorities = &queue_priority,
@@ -193,8 +215,15 @@ pub const Device = opaque {
         var features: c.VkPhysicalDeviceFeatures = undefined;
         c.vkGetPhysicalDeviceFeatures(physical_device.ptr, &features);
 
+        var buffer_device_address_features = c.VkPhysicalDeviceBufferDeviceAddressFeatures{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+            .pNext = null,
+            .bufferDeviceAddress = c.VK_TRUE,
+        };
+
         const device_info = c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &buffer_device_address_features,
             .queueCreateInfoCount = 1,
             .pQueueCreateInfos = &queue_info,
             .pEnabledFeatures = &features,
