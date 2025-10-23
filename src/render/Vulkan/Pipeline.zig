@@ -33,3 +33,8 @@ pub fn init(device: *vk.Device, _drawImageDescriptorLayout: vk.c.VkDescriptorSet
         .pipeline_layout = pipeline_layout,
     };
 }
+
+pub fn deinit(self: @This(), device: *vk.Device) void {
+    vk.c.vkDestroyPipeline(device.toC(), self.pipeline, null);
+    vk.c.vkDestroyPipelineLayout(device.toC(), self.pipeline_layout, null);
+}

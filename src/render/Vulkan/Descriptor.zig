@@ -16,7 +16,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
 
     var pool_info: vk.c.VkDescriptorPoolCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = 0,
+        .flags = vk.c.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
         .maxSets = max_sets,
         .poolSizeCount = @intCast(descriptor_pool_size.len),
         .pPoolSizes = @ptrCast(descriptor_pool_size),
@@ -29,6 +29,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
         .binding = 0,
         .descriptorCount = 1,
         .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        .stageFlags = vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
     }};
 
     var descriptor_set_layout_info: vk.c.VkDescriptorSetLayoutCreateInfo = .{
@@ -79,7 +80,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
 }
 
 pub fn deinit(self: @This(), device: *vk.Device) void {
-    _ = vk.c.vkFreeDescriptorSets(device.toC(), self.descriptor_pool, 1, @ptrCast(@alignCast(self._drawImageDescriptors)));
+    _ = vk.c.vkFreeDescriptorSets(device.toC(), self.descriptor_pool, 1, &self._drawImageDescriptors);
     vk.c.vkDestroyShaderModule(device.toC(), self.shader, null);
     vk.c.vkDestroyDescriptorPool(device.toC(), self.descriptor_pool, null);
     vk.c.vkDestroyDescriptorSetLayout(device.toC(), self._drawImageDescriptorLayou, null);
@@ -89,18 +90,14 @@ fn loadShaderModule(device: *vk.Device, path: []const u8) !vk.c.VkShaderModule {
     const file: std.fs.File = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    var buffer: [4096]u8 = undefined;
+    var buffer: [1024]u32 = undefined;
 
-    const n = try file.readAll(&buffer);
-    const source = buffer[0..n];
-
-    std.debug.print("buffer: \n{s}\n", .{buffer});
-    std.debug.print("source: \n{s}\n", .{source});
+    const bytes_read = try file.readAll(std.mem.sliceAsBytes(buffer[0..]));
 
     var create_info: vk.c.VkShaderModuleCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = n / 4,
-        .pCode = @ptrCast(&source),
+        .codeSize = bytes_read,
+        .pCode = @ptrCast(&buffer),
     };
 
     var shader_module: vk.c.VkShaderModule = undefined;

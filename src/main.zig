@@ -58,7 +58,10 @@ pub fn main() !void {
             },
         },
     }, .device = .{
-        .extensions = &.{ "VK_KHR_swapchain", "VK_EXT_descriptor_buffer" },
+        .extensions = &.{
+            "VK_KHR_swapchain",
+            "VK_EXT_descriptor_buffer",
+        },
     }, .surface = .{
         .data = window,
         .init = initVulkanSurface,
@@ -67,9 +70,6 @@ pub fn main() !void {
         .heigth = @intCast(window.getSize().height),
     } });
     defer renderer.deinit();
-
-    // const pipeline = Render.initPipeline();
-    // defer Render.deinitPipeline(pipeline);
 
     std.Thread.sleep(3000);
 
