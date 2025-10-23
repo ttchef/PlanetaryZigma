@@ -39,12 +39,12 @@ pub fn init(config: Config) !@This() {
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
-    // Pipeline
+    //GRAPHICS pipeline
 
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
-    //TODO: DONT PASS IMAGE TO DESCRIPTOR
+    // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     const pipeline: vk.Pipeline = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
 
@@ -98,7 +98,6 @@ pub fn draw(self: *@This()) !void {
     // vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline);
     vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline_layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
-
     vk.c.vkCmdDispatch(
         cmd_buffer,
         @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.width)) / 16)),
@@ -122,7 +121,7 @@ pub fn draw(self: *@This()) !void {
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
     var submit_info: vk.c.VkSubmitInfo2 = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
         .waitSemaphoreInfoCount = 1,
         .pWaitSemaphoreInfos = &.{
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -158,8 +157,6 @@ pub fn draw(self: *@This()) !void {
     try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index).toC(), &present_info));
 
     self.swapchain.current_frame_inflight += 1;
-    //https://vkguide.dev/docs/new_chapter_2/vulkan_new_rendering/
-    //TODO: VMA.
 }
 
 pub fn deinit(self: @This()) void {
@@ -168,6 +165,7 @@ pub fn deinit(self: @This()) void {
     self.command_pool.deinit(self.device);
 
     self.descriptor.deinit(self.device);
+    self.pipeline.deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
     self.vulkan_mem_alloc.deinit();
 

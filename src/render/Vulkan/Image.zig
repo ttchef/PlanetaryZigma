@@ -8,6 +8,7 @@ image_extent: vk.c.VkExtent3D = undefined,
 format: vk.c.VkFormat = undefined,
 
 pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c.VkFormat, extent: vk.c.VkExtent3D) !@This() {
+    _ = format;
     const draw_image_usages_flags: vk.c.VkImageUsageFlags =
         vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -18,7 +19,7 @@ pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c
         .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = null,
         .imageType = vk.c.VK_IMAGE_TYPE_2D,
-        .format = format,
+        .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
         .extent = extent,
         .mipLevels = 1,
         .arrayLayers = 1,
@@ -48,7 +49,7 @@ pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c
         .pNext = null,
         .viewType = vk.c.VK_IMAGE_VIEW_TYPE_2D,
         .image = image,
-        .format = format,
+        .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
         .subresourceRange = .{
             .baseMipLevel = 0,
             .levelCount = 1,
