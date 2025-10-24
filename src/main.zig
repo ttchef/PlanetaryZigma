@@ -73,13 +73,13 @@ pub fn main() !void {
 
     std.Thread.sleep(3000);
 
+    var time: f32 = 0;
     while (!window.shouldClose()) {
-        try renderer.draw();
-        //     var time: f32 = 0;
+        const delta_time = try getDeltaTime();
+        time += delta_time;
+        try renderer.draw(time);
         //     try proccessEvents(&spacetime, &world);
 
-        //     const delta_time = try getDeltaTime();
-        //     time += delta_time;
         //     Render.update(window, delta_time);
         //     Render.draw(pipeline, window, &world);
         //     // std.debug.print("\n======NEW LOOP======\n", .{});

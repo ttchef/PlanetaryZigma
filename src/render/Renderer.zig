@@ -1,4 +1,5 @@
 const std = @import("std");
+const nz = @import("numz");
 pub const vk = @import("Vulkan/vulkan.zig");
 
 instance: *vk.Instance,
@@ -10,7 +11,10 @@ swapchain: vk.Swapchain,
 command_pool: *vk.CommandPool,
 
 descriptor: vk.Descriptor,
-pipeline: vk.Pipeline,
+
+pipelines: [16]vk.Pipeline,
+max_pipelines: usize = 0,
+current_pipeline: usize = 0,
 
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
@@ -46,7 +50,12 @@ pub fn init(config: Config) !@This() {
 
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
-    const pipeline: vk.Pipeline = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
+    var pipelines: [16]vk.Pipeline = undefined;
+    pipelines[0] = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
+    pipelines[0].data.data1 = .{ 1, 0, 0, 1 };
+    pipelines[0].data.data2 = .{ 0, 0, 1, 1 };
+    pipelines[1] = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.gradient_color);
+    pipelines[1].data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
     std.debug.print("Address {*}\n", .{instance});
     return .{
@@ -58,13 +67,15 @@ pub fn init(config: Config) !@This() {
         .swapchain = swapchain,
         .command_pool = command_pool,
         .descriptor = descriptor,
-        .pipeline = pipeline,
+        .pipelines = pipelines,
+        .current_pipeline = 0,
+        .max_pipelines = 2,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .draw_image = draw_image,
     };
 }
 
-pub fn draw(self: *@This()) !void {
+pub fn draw(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
     const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
@@ -96,8 +107,18 @@ pub fn draw(self: *@This()) !void {
     //     .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
     // };
     // vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline);
-    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, self.pipeline.pipeline_layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
+
+    std.debug.print("time {d}\n", .{time});
+    self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
+    std.debug.print("time converted {d}\n", .{self.current_pipeline});
+
+    const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
+
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
+    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline_layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
+
+    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.pipeline_layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.ComputePushConstant), &pipeline.data);
+
     vk.c.vkCmdDispatch(
         cmd_buffer,
         @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.width)) / 16)),
@@ -165,7 +186,8 @@ pub fn deinit(self: @This()) void {
     self.command_pool.deinit(self.device);
 
     self.descriptor.deinit(self.device);
-    self.pipeline.deinit(self.device);
+    for (0..self.max_pipelines) |i|
+        self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
     self.vulkan_mem_alloc.deinit();
 

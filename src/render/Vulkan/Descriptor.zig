@@ -6,6 +6,7 @@ descriptor_pool: vk.c.VkDescriptorPool,
 _drawImageDescriptorLayou: vk.c.VkDescriptorSetLayout,
 //TODO: DONT keep shader in descriptors?
 shader: vk.c.VkShaderModule,
+gradient_color: vk.c.VkShaderModule,
 
 //TODO: DONT TAKE IN  draw_iamge: vk.c.VkImage HERE
 pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
@@ -70,18 +71,21 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     vk.c.vkUpdateDescriptorSets(device.toC(), 1, &drawImageWrite, 0, null);
 
     const shader = try loadShaderModule(device, "zig-out/shaders/gradient.comp.spv");
+    const gradient_color = try loadShaderModule(device, "zig-out/shaders/gradient_color.comp.spv");
 
     return .{
         ._drawImageDescriptorLayou = set,
         ._drawImageDescriptors = ds,
         .descriptor_pool = pool,
         .shader = shader,
+        .gradient_color = gradient_color,
     };
 }
 
 pub fn deinit(self: @This(), device: *vk.Device) void {
     _ = vk.c.vkFreeDescriptorSets(device.toC(), self.descriptor_pool, 1, &self._drawImageDescriptors);
     vk.c.vkDestroyShaderModule(device.toC(), self.shader, null);
+    vk.c.vkDestroyShaderModule(device.toC(), self.gradient_color, null);
     vk.c.vkDestroyDescriptorPool(device.toC(), self.descriptor_pool, null);
     vk.c.vkDestroyDescriptorSetLayout(device.toC(), self._drawImageDescriptorLayou, null);
 }
