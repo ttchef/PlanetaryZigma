@@ -119,13 +119,16 @@ pub fn build(b: *std.Build) void {
 
 fn compileShaders(b: *std.Build) !void {
     try std.fs.cwd().makePath(b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
-    const shaders: []const []const u8 = &.{"gradient.comp"};
-    for (shaders) |shader| {
+    const dir = try std.fs.cwd().openDir("assets/shaders/", .{ .iterate = true });
+    var it = dir.iterate();
+
+    while (try it.next()) |entry| {
+        if (entry.kind != .file) continue;
         const cmp_cmd = b.addSystemCommand(&.{
             "glslc",
-            b.fmt("assets/shaders/{s}", .{shader}),
+            b.fmt("assets/shaders/{s}", .{entry.name}),
             "-o",
-            b.fmt("zig-out/shaders/{s}.spv", .{shader}),
+            b.fmt("zig-out/shaders/{s}.spv", .{entry.name}),
         });
         b.default_step.dependOn(&cmp_cmd.step);
     }

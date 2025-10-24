@@ -1471,7 +1471,7 @@ pub fn imageMemBarrier(
         source_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     } else if (old_layout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-        barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.srcAccessMask = 0;
         barrier.dstAccessMask = c.VK_ACCESS_NONE;
 
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
