@@ -51,11 +51,13 @@ pub fn init(config: Config) !@This() {
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     var pipelines: [16]vk.Pipeline = undefined;
-    pipelines[0] = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.shader);
-    pipelines[0].data.data1 = .{ 1, 0, 0, 1 };
-    pipelines[0].data.data2 = .{ 0, 0, 1, 1 };
-    pipelines[1] = try .init(device, descriptor._drawImageDescriptorLayou, descriptor.gradient_color);
-    pipelines[1].data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
+    var compute1: vk.Pipeline.Config = .{ .compute = .{} };
+    pipelines[0] = try .init(device, &compute1, descriptor._drawImageDescriptorLayou, descriptor.shader);
+    pipelines[0].data.compute.data1 = .{ 1, 0, 0, 1 };
+    pipelines[0].data.compute.data2 = .{ 0, 0, 1, 1 };
+    var compute2: vk.Pipeline.Config = .{ .compute = .{} };
+    pipelines[1] = try .init(device, &compute2, descriptor._drawImageDescriptorLayou, descriptor.gradient_color);
+    pipelines[1].data.compute.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
     std.debug.print("Address {*}\n", .{instance});
     return .{
@@ -114,10 +116,10 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
 
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
-    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline_layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle);
+    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
 
-    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.pipeline_layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.ComputePushConstant), &pipeline.data);
+    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.ComputePushConstant), &pipeline.data);
 
     vk.c.vkCmdDispatch(
         cmd_buffer,
