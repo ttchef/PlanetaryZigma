@@ -4,9 +4,6 @@ const vk = @import("vulkan.zig");
 _drawImageDescriptors: vk.c.VkDescriptorSet,
 descriptor_pool: vk.c.VkDescriptorPool,
 _drawImageDescriptorLayou: vk.c.VkDescriptorSetLayout,
-//TODO: DONT keep shader in descriptors?
-shader: vk.c.VkShaderModule,
-gradient_color: vk.c.VkShaderModule,
 
 //TODO: DONT TAKE IN  draw_iamge: vk.c.VkImage HERE
 pub fn init(device: vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
@@ -70,41 +67,15 @@ pub fn init(device: vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
 
     vk.c.vkUpdateDescriptorSets(device.handle, 1, &drawImageWrite, 0, null);
 
-    const shader = try loadShaderModule(device, "zig-out/shaders/gradient.comp.spv");
-    const gradient_color = try loadShaderModule(device, "zig-out/shaders/gradient_color.comp.spv");
-
     return .{
         ._drawImageDescriptorLayou = set,
         ._drawImageDescriptors = ds,
         .descriptor_pool = pool,
-        .shader = shader,
-        .gradient_color = gradient_color,
     };
 }
 
 pub fn deinit(self: @This(), device: vk.Device) void {
     _ = vk.c.vkFreeDescriptorSets(device.handle, self.descriptor_pool, 1, &self._drawImageDescriptors);
-    vk.c.vkDestroyShaderModule(device.handle, self.shader, null);
-    vk.c.vkDestroyShaderModule(device.handle, self.gradient_color, null);
     vk.c.vkDestroyDescriptorPool(device.handle, self.descriptor_pool, null);
     vk.c.vkDestroyDescriptorSetLayout(device.handle, self._drawImageDescriptorLayou, null);
-}
-
-fn loadShaderModule(device: vk.Device, path: []const u8) !vk.c.VkShaderModule {
-    const file: std.fs.File = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-
-    var buffer: [1024]u32 = undefined;
-
-    const bytes_read = try file.readAll(std.mem.sliceAsBytes(buffer[0..]));
-
-    var create_info: vk.c.VkShaderModuleCreateInfo = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = bytes_read,
-        .pCode = @ptrCast(&buffer),
-    };
-
-    var shader_module: vk.c.VkShaderModule = undefined;
-    try vk.check(vk.c.vkCreateShaderModule(device.handle, &create_info, null, &shader_module));
-    return shader_module;
 }

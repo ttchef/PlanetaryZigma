@@ -3,6 +3,7 @@ const std = @import("std");
 pub const c = @import("vulkan");
 pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
+pub const LoadShader = @import("utils.zig").loadShaderModule;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
 pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 
@@ -10,7 +11,7 @@ pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
-pub const Pipeline: type = @import("Pipeline.zig");
+pub const Pipeline = @import("pipeline.zig").Pipeline;
 
 pub const Instance = struct {
     handle: c.VkInstance,

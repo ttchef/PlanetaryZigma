@@ -11,6 +11,7 @@ swapchain: vk.Swapchain,
 command_pool: vk.CommandPool,
 
 descriptor: vk.Descriptor,
+descriptor_graphics: vk.Descriptor,
 
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
@@ -50,14 +51,67 @@ pub fn init(config: Config) !@This() {
 
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
+    const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
+
+    const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
+    const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
+
     var pipelines: [16]vk.Pipeline = undefined;
-    var compute1: vk.Pipeline.Config = .{ .compute = .{} };
-    pipelines[0] = try .init(device, &compute1, descriptor._drawImageDescriptorLayou, &.{descriptor.shader});
-    pipelines[0].data.compute.data1 = .{ 1, 0, 0, 1 };
-    pipelines[0].data.compute.data2 = .{ 0, 0, 1, 1 };
-    var compute2: vk.Pipeline.Config = .{ .compute = .{} };
-    pipelines[1] = try .init(device, &compute2, descriptor._drawImageDescriptorLayou, &.{descriptor.gradient_color});
-    pipelines[1].data.compute.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
+    var config_comp1: vk.Pipeline.Compute.Config = .{
+        .descriptor_set_layouts = &.{descriptor._drawImageDescriptorLayou},
+        .shader = .{
+            .module = shader,
+        },
+    };
+    pipelines[0] = try .initCompute(device, &config_comp1);
+    pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
+    pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
+
+    var config_comp2: vk.Pipeline.Compute.Config = .{
+        .descriptor_set_layouts = &.{descriptor._drawImageDescriptorLayou},
+        .shader = .{
+            .module = gradient_color,
+        },
+    };
+    pipelines[1] = try .initCompute(device, &config_comp2);
+    pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
+
+    vk.c.vkDestroyShaderModule(device.handle, shader, null);
+    vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
+
+    //TODO GET GRAPHICS PIPELINE WORKING
+    // const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.fragspv");
+    // const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gcolored_triangle.vert.spv");
+
+    // var color_blend: vk.c.VkPipelineColorBlendAttachmentState = .{
+    //     .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
+    // };
+    // var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
+    // var config_graphics: vk.Pipeline.Graphics.Config = .{
+    //     .viewport_state = .{
+    //         .scissorCount = 1,
+    //         .viewportCount = 1,
+    //     },
+    //     .color_blend_state = .{
+    //         .attachmentCount = 1,
+    //         .logicOp = vk.c.VK_LOGIC_OP_COPY,
+    //         .pAttachments = &color_blend,
+    //     },
+    //     .dynamic_state = .{
+    //         .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+    //         .dynamicStateCount = 2,
+    //         .pDynamicStates = &state[0],
+    //     },
+    //     .vertex_shaders = .{
+    //         .module = vert,
+    //     },
+    //     .fragment_shaders = .{
+    //         .module = frag,
+    //     },
+    //     .geometry_shader = null,
+    //     .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
+    // };
+    // pipelines[2] = try .initGraphics(device, &config_graphics);
 
     std.debug.print("Address {*}\n", .{instance.handle});
     return .{
@@ -74,6 +128,7 @@ pub fn init(config: Config) !@This() {
         .max_pipelines = 2,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .draw_image = draw_image,
+        .descriptor_graphics = descriptor_graphics,
     };
 }
 
@@ -109,17 +164,15 @@ pub fn draw(self: *@This(), time: f32) !void {
     //     .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
     // };
     // vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
-
-    std.debug.print("time {d}\n", .{time});
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
-    std.debug.print("time converted {d}\n", .{self.current_pipeline});
+    std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
 
     const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
 
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle);
-    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().handle);
+    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
 
-    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.ComputePushConstant), &pipeline.data);
+    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.get().layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.Compute.PushConstant), &pipeline.compute.data);
 
     vk.c.vkCmdDispatch(
         cmd_buffer,

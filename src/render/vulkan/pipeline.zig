@@ -6,28 +6,33 @@ pub const Pipeline = union(enum) {
     compute: Compute,
     graphics: Graphics,
 
-    pub const Compute = struct {
-        handle: *vk.c.VkPipeline,
-        layout: *vk.c.VkPipelineLayout,
+    pub const Shader = struct {
+        module: vk.c.VkShaderModule,
+        entry_name: ?[*:0]const u8 = null,
+        specialization: [*c]const vk.c.VkSpecializationInfo = null,
+    };
 
-        pub const Config = struct {
-            shader_module: vk.c.VkShaderModule,
-            shader_stage: vk.c.VkPipelineShaderStageCreateInfo = .{
-                .module = null,
-                .pName = "main",
-                .pSpecializationInfo = null,
-            },
-            shader: struct {
-                module: vk.c.VkShaderModule,
-                entry_name: "main",
-            },
-            descriptor_set_layouts: []vk.c.VkDescriptorSetLayout,
+    pub const Compute = struct {
+        handle: vk.c.VkPipeline,
+        layout: vk.c.VkPipelineLayout,
+        data: PushConstant,
+
+        pub const PushConstant = struct {
+            data1: nz.Vec4(f32) = @splat(0),
+            data2: nz.Vec4(f32) = @splat(0),
+            data3: nz.Vec4(f32) = @splat(0),
+            data4: nz.Vec4(f32) = @splat(0),
         };
 
-        pub fn init(device: vk.Device, config: Config) !@This() {
+        pub const Config = struct {
+            shader: Shader,
+            descriptor_set_layouts: []const vk.c.VkDescriptorSetLayout,
+        };
+
+        pub fn init(device: vk.Device, config: *Config) !@This() {
             var layout_create_info: vk.c.VkPipelineLayoutCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pSetLayouts = &config.descriptor_set_layouts,
+                .pSetLayouts = @ptrCast(config.descriptor_set_layouts),
                 .setLayoutCount = @intCast(config.descriptor_set_layouts.len),
                 .pPushConstantRanges = &.{
                     .offset = 0,
@@ -37,33 +42,43 @@ pub const Pipeline = union(enum) {
                 .pushConstantRangeCount = 1,
             };
 
-            var layout: *vk.c.VkPipelineLayout = undefined;
+            var layout: vk.c.VkPipelineLayout = undefined;
             try vk.check(vk.c.vkCreatePipelineLayout(device.handle, &layout_create_info, null, &layout));
 
             var pipeline_create_info: vk.c.VkComputePipelineCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-                .stage = vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
+                .stage = .{
+                    .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
+                    .module = config.shader.module,
+                    .pName = config.shader.entry_name orelse "main",
+                    .pSpecializationInfo = config.shader.specialization,
+                },
                 .layout = layout,
                 .basePipelineHandle = null,
                 .basePipelineIndex = -1,
             };
 
-            var pipeline: *vk.c.VkPipeline = undefined;
+            var pipeline: vk.c.VkPipeline = undefined;
             try vk.check(vk.c.vkCreateComputePipelines(device.handle, null, 1, &pipeline_create_info, null, &pipeline));
-            return .{ .handle = pipeline, .layout = layout };
+            return .{
+                .handle = pipeline,
+                .layout = layout,
+                .data = .{},
+            };
         }
     };
 
     pub const Graphics = struct {
-        handle: *vk.c.VkPipeline,
-        layout: *vk.c.VkPipelineLayout,
+        handle: vk.c.VkPipeline,
+        layout: vk.c.VkPipelineLayout,
 
         pub const Config = struct {
             vertex_shaders: Shader,
             fragment_shaders: Shader,
             geometry_shader: ?Shader,
 
-            descriptor_set_layouts: []vk.c.VkDescriptorSetLayout,
+            descriptor_set_layouts: []const vk.c.VkDescriptorSetLayout,
 
             vertex_input_state: vk.c.VkPipelineVertexInputStateCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -110,27 +125,21 @@ pub const Pipeline = union(enum) {
             base_pipeline_index: i32 = -1,
         };
 
-        pub const Shader = struct {
-            module: vk.c.VkShaderModule,
-            entry_name: ?[*:0]const u8 = null,
-            specialization: [*c]const vk.c.VkSpecializationInfo,
-        };
-
-        pub fn init(device: vk.Device, config: Config) !@This() {
+        pub fn init(device: vk.Device, config: *Config) !@This() {
             var layout_create_info: vk.c.VkPipelineLayoutCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pSetLayouts = &config.descriptor_set_layouts,
                 .setLayoutCount = @intCast(config.descriptor_set_layouts.len),
-                .pPushConstantRanges = &.{
-                    .offset = 0,
-                    .size = @sizeOf(PushConstant),
-                    .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT |
-                        if (config.geometry_shader != null) vk.c.VK_SHADER_STAGE_GEOMETRY_BIT else 0,
-                },
-                .pushConstantRangeCount = 1,
+                // .pPushConstantRanges = &.{
+                //     .offset = 0,
+                //     .size = @sizeOf(PushConstant),
+                //     .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT |
+                //         if (config.geometry_shader != null) vk.c.VK_SHADER_STAGE_GEOMETRY_BIT else 0,
+                // },
+                .pushConstantRangeCount = 0,
             };
 
-            var layout: *vk.c.VkPipelineLayout = undefined;
+            var layout: vk.c.VkPipelineLayout = undefined;
             try vk.check(vk.c.vkCreatePipelineLayout(device.handle, &layout_create_info, null, &layout));
 
             const stage_count: usize = 2 + if (config.geometry_shader != null) 1 else 0;
@@ -147,7 +156,7 @@ pub const Pipeline = union(enum) {
                         &stage_infos,
                     ) |_, shader, stage_bit, *stage_info| {
                         stage_info.* = .{
-                            .pNext = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                            .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                             .stage = stage_bit,
                             .module = shader.module,
                             .pName = shader.entry_name orelse "main",
@@ -181,23 +190,22 @@ pub const Pipeline = union(enum) {
         }
     };
 
-    pub const PushConstant = struct {
-        data1: nz.Vec4(f32),
-        data2: nz.Vec4(f32),
-        data3: nz.Vec4(f32),
-        data4: nz.Vec4(f32),
-    };
-
-    pub fn initCompute(device: vk.Device, config: Compute.Config) !@This() {
+    pub fn initCompute(device: vk.Device, config: *Compute.Config) !@This() {
         return .{ .compute = try .init(device, config) };
     }
 
-    pub fn initGraphics(device: vk.Device, config: Graphics.Config) !@This() {
+    pub fn initGraphics(device: vk.Device, config: *Graphics.Config) !@This() {
         return .{ .graphics = try .init(device, config) };
     }
 
     pub fn deinit(self: @This(), device: vk.Device) void {
-        vk.c.vkDestroyPipelineLayout(device.handle, self.layout, null);
-        vk.c.vkDestroyPipeline(device.handle, self.handle, null);
+        vk.c.vkDestroyPipelineLayout(device.handle, self.get().layout, null);
+        vk.c.vkDestroyPipeline(device.handle, self.get().handle, null);
+    }
+
+    pub fn get(self: @This()) struct { handle: vk.c.VkPipeline, layout: vk.c.VkPipelineLayout } {
+        return switch (self) {
+            inline else => |pipeline| .{ .handle = pipeline.handle, .layout = pipeline.layout },
+        };
     }
 };
