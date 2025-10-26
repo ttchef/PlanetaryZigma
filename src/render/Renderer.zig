@@ -52,11 +52,11 @@ pub fn init(config: Config) !@This() {
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     var pipelines: [16]vk.Pipeline = undefined;
     var compute1: vk.Pipeline.Config = .{ .compute = .{} };
-    pipelines[0] = try .init(device, &compute1, descriptor._drawImageDescriptorLayou, descriptor.shader);
+    pipelines[0] = try .init(device, &compute1, descriptor._drawImageDescriptorLayou, &.{descriptor.shader});
     pipelines[0].data.compute.data1 = .{ 1, 0, 0, 1 };
     pipelines[0].data.compute.data2 = .{ 0, 0, 1, 1 };
     var compute2: vk.Pipeline.Config = .{ .compute = .{} };
-    pipelines[1] = try .init(device, &compute2, descriptor._drawImageDescriptorLayou, descriptor.gradient_color);
+    pipelines[1] = try .init(device, &compute2, descriptor._drawImageDescriptorLayou, &.{descriptor.gradient_color});
     pipelines[1].data.compute.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
     std.debug.print("Address {*}\n", .{instance});
