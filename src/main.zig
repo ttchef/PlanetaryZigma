@@ -107,11 +107,11 @@ pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
         }
     }
 }
-pub extern fn glfwCreateWindowSurface(instance: *Renderer.vk.Instance, user_data: *anyopaque, allocator: ?*const anyopaque, surface: *?*Renderer.vk.Surface) c_int;
+pub extern fn glfwCreateWindowSurface(instance: Renderer.vk.c.VkInstance, user_data: *anyopaque, allocator: ?*const anyopaque, surface: *?*Renderer.vk.Surface) c_int;
 
-pub fn initVulkanSurface(instance: *Renderer.vk.Instance, window: *anyopaque) !*anyopaque {
+pub fn initVulkanSurface(instance: Renderer.vk.Instance, window: *anyopaque) !*anyopaque {
     var surface: ?*Renderer.vk.Surface = null;
-    _ = glfwCreateWindowSurface(@ptrCast(instance), @ptrCast(window), null, &surface);
+    _ = glfwCreateWindowSurface(instance.handle, @ptrCast(window), null, &surface);
     return surface orelse return error.VulkanCreateSurface;
 }
 

@@ -3,6 +3,7 @@ const std = @import("std");
 pub const c = @import("vulkan");
 pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
+pub const LoadShader = @import("utils.zig").loadShaderModule;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
 pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 
@@ -10,14 +11,12 @@ pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
-pub const Pipeline: type = @import("Pipeline.zig");
+pub const Pipeline = @import("pipeline.zig").Pipeline;
 
-pub const Instance = opaque {
-    pub inline fn toC(self: *@This()) c.VkInstance {
-        return @ptrCast(self);
-    }
+pub const Instance = struct {
+    handle: c.VkInstance,
 
-    pub fn init(extensions: ?[]const [*:0]const u8, layers: ?[]const [*:0]const u8) !*@This() {
+    pub fn init(extensions: ?[]const [*:0]const u8, layers: ?[]const [*:0]const u8) !@This() {
         var extension_count: u32 = undefined;
         try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, null));
         var extension_properties: [128]c.VkExtensionProperties = undefined;
@@ -57,18 +56,16 @@ pub const Instance = opaque {
 
         var instance: c.VkInstance = undefined;
         try check(c.vkCreateInstance(&create_info, null, &instance));
-        return @ptrCast(instance);
+        return .{ .handle = instance };
     }
 
-    pub fn deinit(self: *@This()) void {
-        c.vkDestroyInstance(self.toC(), null);
+    pub fn deinit(self: @This()) void {
+        c.vkDestroyInstance(self.handle, null);
     }
 };
 
-pub const DebugMessenger = opaque {
-    pub inline fn toC(self: *@This()) c.VkDebugUtilsMessengerEXT {
-        return @ptrCast(self);
-    }
+pub const DebugMessenger = struct {
+    handle: c.VkDebugUtilsMessengerEXT,
 
     pub const Config = struct {
         severities: struct {
@@ -79,7 +76,7 @@ pub const DebugMessenger = opaque {
         } = .{},
     };
 
-    pub fn init(instance: *Instance, config: Config) !*@This() {
+    pub fn init(instance: Instance, config: Config) !@This() {
         var message_severity: u32 = 0;
         if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
         if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
@@ -102,14 +99,14 @@ pub const DebugMessenger = opaque {
 
         var messenger: c.VkDebugUtilsMessengerEXT = undefined;
         const createDebugUtilsMessengerExt = try Func.Proc(.createDebugUtilsMessengerEXT).load(instance);
-        try check(createDebugUtilsMessengerExt(instance.toC(), &create_info, null, &messenger));
+        try check(createDebugUtilsMessengerExt(instance.handle, &create_info, null, &messenger));
 
-        return @ptrCast(messenger);
+        return .{ .handle = messenger };
     }
 
-    pub fn deinit(self: *@This(), instance: *Instance) void {
+    pub fn deinit(self: @This(), instance: Instance) void {
         const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
-        destroyDebugUtilsMessenger(instance.toC(), self.toC(), null);
+        destroyDebugUtilsMessenger(instance.handle, self.handle, null);
     }
 
     fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {
@@ -125,34 +122,32 @@ pub const DebugMessenger = opaque {
     }
 };
 
-pub const Surface = opaque {
-    pub inline fn toC(self: *@This()) c.VkSurfaceKHR {
-        return @ptrCast(self);
-    }
+pub const Surface = struct {
+    handle: c.VkSurfaceKHR,
 
-    pub fn init(_: *Instance) !*@This() {
+    pub fn init(_: Instance) !@This() {
         // TODO: Make not hard coded and allow for other windowing libraries
 
         @panic("Not implemented use the surface sub config instead");
         // return @ptrCast(null);
     }
 
-    pub fn deinit(self: *@This(), instance: *Instance) void {
-        c.vkDestroySurfaceKHR(instance.toC(), self.toC(), null);
+    pub fn deinit(self: @This(), instance: Instance) void {
+        c.vkDestroySurfaceKHR(instance.handle, self.handle, null);
     }
 };
 
 pub const PhysicalDevice = struct {
-    ptr: c.VkPhysicalDevice,
+    handle: c.VkPhysicalDevice,
     queue_family_index: u32,
 
-    pub fn find(instance: *Instance, surface: *Surface) !@This() {
+    pub fn find(instance: Instance, surface: Surface) !@This() {
         var device_count: u32 = 0;
-        try check(c.vkEnumeratePhysicalDevices(instance.toC(), &device_count, null));
+        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
 
         var devices: [8]c.VkPhysicalDevice = undefined;
-        try check(c.vkEnumeratePhysicalDevices(instance.toC(), &device_count, &devices));
+        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, &devices));
 
         for (devices[0..device_count]) |device| {
             var properties: c.VkPhysicalDeviceProperties = undefined;
@@ -168,12 +163,12 @@ pub const PhysicalDevice = struct {
                 const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
 
                 var present_supported: c.VkBool32 = undefined;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), surface.toC(), &present_supported));
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), surface.handle, &present_supported));
 
                 if (supports_graphics and present_supported != 0) {
                     std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
 
-                    return .{ .ptr = device, .queue_family_index = @intCast(i) };
+                    return .{ .handle = device, .queue_family_index = @intCast(i) };
                 }
             }
         }
@@ -181,22 +176,14 @@ pub const PhysicalDevice = struct {
     }
 };
 
-pub const Device = opaque {
-    pub inline fn toC(self: *@This()) c.VkDevice {
-        return @ptrCast(self);
-    }
+pub const Device = struct {
+    handle: c.VkDevice,
 
-    pub const Queue = opaque {
-        pub inline fn toC(self: *Queue) c.VkQueue {
-            return @ptrCast(self);
-        }
-    };
-
-    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !*@This() {
+    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !@This() {
         var extension_count: u32 = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.ptr, null, &extension_count, null));
+        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
         var extension_properties: [516]c.VkExtensionProperties = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.ptr, null, &extension_count, &extension_properties));
+        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, &extension_properties));
         check_ext: for (extensions orelse &.{}) |extension| {
             for (extension_properties[0..extension_count]) |cmp_ext|
                 if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
@@ -221,7 +208,7 @@ pub const Device = opaque {
         };
 
         var features: c.VkPhysicalDeviceFeatures = undefined;
-        c.vkGetPhysicalDeviceFeatures(physical_device.ptr, &features);
+        c.vkGetPhysicalDeviceFeatures(physical_device.handle, &features);
 
         var sync2_features: c.VkPhysicalDeviceSynchronization2Features = .{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
@@ -246,30 +233,28 @@ pub const Device = opaque {
         };
 
         var device: c.VkDevice = undefined;
-        try check(c.vkCreateDevice(physical_device.ptr, &device_info, null, &device));
+        try check(c.vkCreateDevice(physical_device.handle, &device_info, null, &device));
         var queue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(device, physical_device.queue_family_index, 0, &queue);
 
-        return @ptrCast(device);
+        return .{ .handle = device };
     }
 
-    pub fn deinit(self: *@This()) void {
-        c.vkDestroyDevice(self.toC(), null);
+    pub fn deinit(self: @This()) void {
+        c.vkDestroyDevice(self.handle, null);
     }
 
-    pub inline fn getQueue(self: *@This(), index: u32) *Queue {
+    pub inline fn getQueue(self: @This(), index: u32) c.VkQueue {
         var queue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(self.toC(), index, 0, &queue);
-        return @ptrCast(queue);
+        c.vkGetDeviceQueue(self.handle, index, 0, &queue);
+        return queue;
     }
 };
 
-pub const CommandPool = opaque {
-    pub inline fn toC(self: *@This()) c.VkCommandPool {
-        return @ptrCast(self);
-    }
+pub const CommandPool = struct {
+    handle: c.VkCommandPool,
 
-    pub fn init(device: *Device, queue_family_index: u32) !*@This() {
+    pub fn init(device: Device, queue_family_index: u32) !@This() {
         const command_pool_info: c.VkCommandPoolCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = null,
@@ -278,11 +263,11 @@ pub const CommandPool = opaque {
         };
 
         var command_pool: c.VkCommandPool = undefined;
-        try check(c.vkCreateCommandPool(device.toC(), &command_pool_info, null, &command_pool));
-        return @ptrCast(command_pool);
+        try check(c.vkCreateCommandPool(device.handle, &command_pool_info, null, &command_pool));
+        return .{ .handle = command_pool };
     }
 
-    pub fn deinit(self: *@This(), device: *Device) void {
-        c.vkDestroyCommandPool(device.toC(), self.toC(), null);
+    pub fn deinit(self: @This(), device: Device) void {
+        c.vkDestroyCommandPool(device.handle, self.handle, null);
     }
 };

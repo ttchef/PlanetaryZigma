@@ -7,7 +7,7 @@ vma_allocation: vma.VmaAllocation = undefined,
 image_extent: vk.c.VkExtent3D = undefined,
 format: vk.c.VkFormat = undefined,
 
-pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c.VkFormat, extent: vk.c.VkExtent3D) !@This() {
+pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: vk.Device, format: vk.c.VkFormat, extent: vk.c.VkExtent3D) !@This() {
     _ = format;
     const draw_image_usages_flags: vk.c.VkImageUsageFlags =
         vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
@@ -60,7 +60,7 @@ pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c
     };
 
     var image_view: vk.c.VkImageView = undefined;
-    try vk.check(vk.c.vkCreateImageView(device.toC(), &image_view_info, null, &image_view));
+    try vk.check(vk.c.vkCreateImageView(device.handle, &image_view_info, null, &image_view));
 
     return .{
         .format = vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -71,7 +71,7 @@ pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: *vk.Device, format: vk.c
     };
 }
 
-pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: *vk.Device) void {
-    vk.c.vkDestroyImageView(device.toC(), self.image_view, null);
+pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
+    vk.c.vkDestroyImageView(device.handle, self.image_view, null);
     vma.vmaDestroyImage(vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(self.image), self.vma_allocation);
 }

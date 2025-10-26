@@ -3,11 +3,11 @@ const vk = @import("vulkan.zig");
 
 vulkan_mem_alloc: vma.VmaAllocator = undefined,
 
-pub fn init(instance: *vk.Instance, physical_device: vk.PhysicalDevice, device: *vk.Device) !@This() {
+pub fn init(instance: vk.Instance, physical_device: vk.PhysicalDevice, device: vk.Device) !@This() {
     var vma_info: vma.VmaAllocatorCreateInfo = .{
-        .physicalDevice = @ptrCast(physical_device.ptr),
-        .device = @ptrCast(device.toC()),
-        .instance = @ptrCast(instance.toC()),
+        .physicalDevice = @ptrCast(physical_device.handle),
+        .device = @ptrCast(device.handle),
+        .instance = @ptrCast(instance.handle),
         .flags = vma.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
     };
 

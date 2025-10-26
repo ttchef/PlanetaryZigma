@@ -1331,7 +1331,7 @@ pub const Func = enum {
             };
 
             pub fn load(instance: anytype) !Inner {
-                const ptr = c.vkGetInstanceProcAddr(instance.toC(), name) orelse @panic("failed to find proc " ++ @tagName(func));
+                const ptr = c.vkGetInstanceProcAddr(instance.handle, name) orelse @panic("failed to find proc " ++ @tagName(func));
                 return @ptrCast(ptr);
             }
         };
@@ -1539,4 +1539,23 @@ pub fn copyImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: 
     };
 
     c.vkCmdBlitImage2(cmd, &blit_info);
+}
+
+pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule {
+    const file: std.fs.File = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    var buffer: [1024]u32 = undefined;
+
+    const bytes_read = try file.readAll(std.mem.sliceAsBytes(buffer[0..]));
+
+    var create_info: c.VkShaderModuleCreateInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = bytes_read,
+        .pCode = @ptrCast(&buffer),
+    };
+
+    var shader_module: c.VkShaderModule = undefined;
+    try check(c.vkCreateShaderModule(device, &create_info, null, &shader_module));
+    return shader_module;
 }
