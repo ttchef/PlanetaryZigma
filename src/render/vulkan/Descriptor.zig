@@ -24,7 +24,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     };
 
     var pool: vk.c.VkDescriptorPool = undefined;
-    try vk.check(vk.c.vkCreateDescriptorPool(device.toC(), &pool_info, null, &pool));
+    try vk.check(vk.c.vkCreateDescriptorPool(device.handle, &pool_info, null, &pool));
 
     const new_bind: []const vk.c.VkDescriptorSetLayoutBinding = &.{.{
         .binding = 0,
@@ -40,7 +40,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     };
 
     var set: vk.c.VkDescriptorSetLayout = undefined;
-    try vk.check((vk.c.vkCreateDescriptorSetLayout(device.toC(), &descriptor_set_layout_info, null, &set)));
+    try vk.check((vk.c.vkCreateDescriptorSetLayout(device.handle, &descriptor_set_layout_info, null, &set)));
 
     var alloc_info: vk.c.VkDescriptorSetAllocateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -51,7 +51,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     };
 
     var ds: vk.c.VkDescriptorSet = undefined;
-    try vk.check(vk.c.vkAllocateDescriptorSets(device.toC(), &alloc_info, &ds));
+    try vk.check(vk.c.vkAllocateDescriptorSets(device.handle, &alloc_info, &ds));
 
     var img_info: vk.c.VkDescriptorImageInfo = .{
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_GENERAL,
@@ -68,7 +68,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
         .pImageInfo = &img_info,
     };
 
-    vk.c.vkUpdateDescriptorSets(device.toC(), 1, &drawImageWrite, 0, null);
+    vk.c.vkUpdateDescriptorSets(device.handle, 1, &drawImageWrite, 0, null);
 
     const shader = try loadShaderModule(device, "zig-out/shaders/gradient.comp.spv");
     const gradient_color = try loadShaderModule(device, "zig-out/shaders/gradient_color.comp.spv");
@@ -83,11 +83,11 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
 }
 
 pub fn deinit(self: @This(), device: *vk.Device) void {
-    _ = vk.c.vkFreeDescriptorSets(device.toC(), self.descriptor_pool, 1, &self._drawImageDescriptors);
-    vk.c.vkDestroyShaderModule(device.toC(), self.shader, null);
-    vk.c.vkDestroyShaderModule(device.toC(), self.gradient_color, null);
-    vk.c.vkDestroyDescriptorPool(device.toC(), self.descriptor_pool, null);
-    vk.c.vkDestroyDescriptorSetLayout(device.toC(), self._drawImageDescriptorLayou, null);
+    _ = vk.c.vkFreeDescriptorSets(device.handle, self.descriptor_pool, 1, &self._drawImageDescriptors);
+    vk.c.vkDestroyShaderModule(device.handle, self.shader, null);
+    vk.c.vkDestroyShaderModule(device.handle, self.gradient_color, null);
+    vk.c.vkDestroyDescriptorPool(device.handle, self.descriptor_pool, null);
+    vk.c.vkDestroyDescriptorSetLayout(device.handle, self._drawImageDescriptorLayou, null);
 }
 
 fn loadShaderModule(device: *vk.Device, path: []const u8) !vk.c.VkShaderModule {
@@ -105,6 +105,6 @@ fn loadShaderModule(device: *vk.Device, path: []const u8) !vk.c.VkShaderModule {
     };
 
     var shader_module: vk.c.VkShaderModule = undefined;
-    try vk.check(vk.c.vkCreateShaderModule(device.toC(), &create_info, null, &shader_module));
+    try vk.check(vk.c.vkCreateShaderModule(device.handle, &create_info, null, &shader_module));
     return shader_module;
 }

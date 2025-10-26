@@ -2,13 +2,13 @@ const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("Vulkan/vulkan.zig");
 
-instance: *vk.Instance,
-debug_messenger: *vk.DebugMessenger,
-surface: *vk.Surface,
+instance: vk.Instance,
+debug_messenger: vk.DebugMessenger,
+surface: vk.Surface,
 physical_device: vk.PhysicalDevice,
-device: *vk.Device,
+device: vk.Device,
 swapchain: vk.Swapchain,
-command_pool: *vk.CommandPool,
+command_pool: vk.CommandPool,
 
 descriptor: vk.Descriptor,
 
@@ -34,12 +34,12 @@ pub const Config = struct { instance: struct {
 } };
 
 pub fn init(config: Config) !@This() {
-    const instance: *vk.Instance = try .init(config.instance.extensions, config.instance.layers);
-    const debug_messenger: *vk.DebugMessenger = try .init(instance, config.instance.debug_config);
-    const surface: *vk.Surface = if (config.surface.init != null and config.surface.data != null) @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) else try vk.Surface.init(instance);
+    const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
+    const debug_messenger: vk.DebugMessenger = try .init(instance, config.instance.debug_config);
+    const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = try config.surface.init.?(instance, config.surface.data.?) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
-    const device: *vk.Device = try .init(physical_device, config.device.extensions);
-    const command_pool: *vk.CommandPool = try .init(device, physical_device.queue_family_index);
+    const device: vk.Device = try .init(physical_device, config.device.extensions);
+    const command_pool: vk.CommandPool = try .init(device, physical_device.queue_family_index);
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
 
     // TODO
@@ -80,10 +80,10 @@ pub fn init(config: Config) !@This() {
 pub fn draw(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
     const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
-    try vk.check(vk.c.vkWaitForFences(self.device.toC(), 1, &current_frame.render_fence, 1, 1000000000));
-    try vk.check(vk.c.vkResetFences(self.device.toC(), 1, &current_frame.render_fence));
+    try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
+    try vk.check(vk.c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
     try vk.check(vk.c.vkAcquireNextImageKHR(
-        self.device.toC(),
+        self.device.handle,
         self.swapchain.swapchain,
         1000000000,
         current_frame.swapchain_semaphore,
@@ -166,7 +166,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         },
     };
 
-    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index).toC(), 1, &submit_info, current_frame.render_fence));
+    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index).handle, 1, &submit_info, current_frame.render_fence));
 
     var present_info: vk.c.VkPresentInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -177,13 +177,13 @@ pub fn draw(self: *@This(), time: f32) !void {
         .pImageIndices = &image_index,
     };
 
-    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index).toC(), &present_info));
+    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index).handle, &present_info));
 
     self.swapchain.current_frame_inflight += 1;
 }
 
 pub fn deinit(self: @This()) void {
-    _ = vk.c.vkDeviceWaitIdle(self.device.toC());
+    _ = vk.c.vkDeviceWaitIdle(self.device.handle);
     self.swapchain.deinit(self.device, self.command_pool);
     self.command_pool.deinit(self.device);
 

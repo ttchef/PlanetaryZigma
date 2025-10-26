@@ -163,15 +163,7 @@ pub const Config = union(enum) {
         },
 
         pub fn init() Graphics {
-            var self = Graphics{};
-            self.create_info.pVertexInputState = &self.vertex_input;
-            self.create_info.pInputAssemblyState = &self.input_assembly;
-            self.create_info.pRasterizationState = &self.rasterizer;
-            self.create_info.pMultisampleState = &self.multisample;
-            self.create_info.pColorBlendState = &self.color_blend;
-            self.create_info.pViewportState = &self.viewport;
-            self.create_info.pDepthStencilState = &self.depth_stencil;
-            self.create_info.pDynamicState = &self.dynamic_state;
+            var self: Graphics = .{};
 
             // Initialize missing fields in rasterizer
             self.rasterizer.sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;

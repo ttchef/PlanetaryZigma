@@ -1331,7 +1331,7 @@ pub const Func = enum {
             };
 
             pub fn load(instance: anytype) !Inner {
-                const ptr = c.vkGetInstanceProcAddr(instance.toC(), name) orelse @panic("failed to find proc " ++ @tagName(func));
+                const ptr = c.vkGetInstanceProcAddr(instance.handle, name) orelse @panic("failed to find proc " ++ @tagName(func));
                 return @ptrCast(ptr);
             }
         };
