@@ -1,6 +1,6 @@
 const std = @import("std");
 const nz = @import("numz");
-pub const vk = @import("Vulkan/vulkan.zig");
+pub const vk = @import("vulkan/vulkan.zig");
 
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
@@ -27,7 +27,7 @@ pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
 } = .{}, surface: struct {
     data: ?*anyopaque = null,
-    init: ?*const fn (*vk.Instance, *anyopaque) anyerror!*anyopaque = null,
+    init: ?*const fn (vk.Instance, *anyopaque) anyerror!*anyopaque = null,
 } = .{}, swapchain: struct {
     width: u32 = 0,
     heigth: u32 = 0,
@@ -36,7 +36,7 @@ pub const Config = struct { instance: struct {
 pub fn init(config: Config) !@This() {
     const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: vk.DebugMessenger = try .init(instance, config.instance.debug_config);
-    const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = try config.surface.init.?(instance, config.surface.data.?) } else try vk.Surface.init(instance);
+    const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const command_pool: vk.CommandPool = try .init(device, physical_device.queue_family_index);
@@ -59,7 +59,7 @@ pub fn init(config: Config) !@This() {
     pipelines[1] = try .init(device, &compute2, descriptor._drawImageDescriptorLayou, &.{descriptor.gradient_color});
     pipelines[1].data.compute.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
-    std.debug.print("Address {*}\n", .{instance});
+    std.debug.print("Address {*}\n", .{instance.handle});
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -166,7 +166,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         },
     };
 
-    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index).handle, 1, &submit_info, current_frame.render_fence));
+    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index), 1, &submit_info, current_frame.render_fence));
 
     var present_info: vk.c.VkPresentInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -177,7 +177,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .pImageIndices = &image_index,
     };
 
-    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index).handle, &present_info));
+    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index), &present_info));
 
     self.swapchain.current_frame_inflight += 1;
 }

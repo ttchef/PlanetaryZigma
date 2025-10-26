@@ -15,7 +15,7 @@ pub const Pipeline: type = @import("Pipeline.zig");
 pub const Instance = struct {
     handle: c.VkInstance,
 
-    pub fn init(extensions: ?[]const [*:0]const u8, layers: ?[]const [*:0]const u8) !*@This() {
+    pub fn init(extensions: ?[]const [*:0]const u8, layers: ?[]const [*:0]const u8) !@This() {
         var extension_count: u32 = undefined;
         try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, null));
         var extension_properties: [128]c.VkExtensionProperties = undefined;
@@ -58,7 +58,7 @@ pub const Instance = struct {
         return .{ .handle = instance };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: @This()) void {
         c.vkDestroyInstance(self.handle, null);
     }
 };
@@ -75,7 +75,7 @@ pub const DebugMessenger = struct {
         } = .{},
     };
 
-    pub fn init(instance: *Instance, config: Config) !*@This() {
+    pub fn init(instance: Instance, config: Config) !@This() {
         var message_severity: u32 = 0;
         if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
         if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
@@ -103,7 +103,7 @@ pub const DebugMessenger = struct {
         return .{ .handle = messenger };
     }
 
-    pub fn deinit(self: *@This(), instance: *Instance) void {
+    pub fn deinit(self: @This(), instance: Instance) void {
         const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
         destroyDebugUtilsMessenger(instance.handle, self.handle, null);
     }
@@ -124,14 +124,14 @@ pub const DebugMessenger = struct {
 pub const Surface = struct {
     handle: c.VkSurfaceKHR,
 
-    pub fn init(_: *Instance) !*@This() {
+    pub fn init(_: Instance) !@This() {
         // TODO: Make not hard coded and allow for other windowing libraries
 
         @panic("Not implemented use the surface sub config instead");
         // return @ptrCast(null);
     }
 
-    pub fn deinit(self: *@This(), instance: *Instance) void {
+    pub fn deinit(self: @This(), instance: Instance) void {
         c.vkDestroySurfaceKHR(instance.handle, self.handle, null);
     }
 };
@@ -140,7 +140,7 @@ pub const PhysicalDevice = struct {
     handle: c.VkPhysicalDevice,
     queue_family_index: u32,
 
-    pub fn find(instance: *Instance, surface: *Surface) !@This() {
+    pub fn find(instance: Instance, surface: Surface) !@This() {
         var device_count: u32 = 0;
         try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
@@ -178,7 +178,7 @@ pub const PhysicalDevice = struct {
 pub const Device = struct {
     handle: c.VkDevice,
 
-    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !*@This() {
+    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !@This() {
         var extension_count: u32 = undefined;
         try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
         var extension_properties: [516]c.VkExtensionProperties = undefined;
@@ -239,11 +239,11 @@ pub const Device = struct {
         return .{ .handle = device };
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: @This()) void {
         c.vkDestroyDevice(self.handle, null);
     }
 
-    pub inline fn getQueue(self: *@This(), index: u32) *c.VkQueue {
+    pub inline fn getQueue(self: @This(), index: u32) c.VkQueue {
         var queue: c.VkQueue = undefined;
         c.vkGetDeviceQueue(self.handle, index, 0, &queue);
         return queue;
@@ -253,7 +253,7 @@ pub const Device = struct {
 pub const CommandPool = struct {
     handle: c.VkCommandPool,
 
-    pub fn init(device: *Device, queue_family_index: u32) !*@This() {
+    pub fn init(device: Device, queue_family_index: u32) !@This() {
         const command_pool_info: c.VkCommandPoolCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = null,
@@ -266,7 +266,7 @@ pub const CommandPool = struct {
         return .{ .handle = command_pool };
     }
 
-    pub fn deinit(self: *@This(), device: *Device) void {
+    pub fn deinit(self: @This(), device: Device) void {
         c.vkDestroyCommandPool(device.handle, self.handle, null);
     }
 };

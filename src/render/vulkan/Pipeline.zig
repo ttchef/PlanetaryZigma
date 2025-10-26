@@ -199,7 +199,7 @@ pub const Config = union(enum) {
     };
 };
 
-pub fn init(device: *vk.Device, config: *Config, _drawImageDescriptorLayout: vk.c.VkDescriptorSetLayout, shaders: []const vk.c.VkShaderModule) !@This() {
+pub fn init(device: vk.Device, config: *Config, _drawImageDescriptorLayout: vk.c.VkDescriptorSetLayout, shaders: []const vk.c.VkShaderModule) !@This() {
     // Validate configuration before proceeding
     try validateConfig(config, shaders);
 
@@ -223,11 +223,11 @@ pub fn init(device: *vk.Device, config: *Config, _drawImageDescriptorLayout: vk.
                 .pPushConstantRanges = &push_constant,
             };
 
-            try vk.check(vk.c.vkCreatePipelineLayout(device.toC(), &computeLayout, null, &pipeline_layout));
+            try vk.check(vk.c.vkCreatePipelineLayout(device.handle, &computeLayout, null, &pipeline_layout));
             config.compute.create_info.stage = config.compute.shader_stage;
             config.compute.create_info.stage.module = shaders[0];
             config.compute.create_info.layout = pipeline_layout;
-            try vk.check(vk.c.vkCreateComputePipelines(device.toC(), null, 1, &config.compute.create_info, null, &pipeline));
+            try vk.check(vk.c.vkCreateComputePipelines(device.handle, null, 1, &config.compute.create_info, null, &pipeline));
         },
         .graphics => {
             // Additional graphics-specific validation
@@ -246,7 +246,7 @@ pub fn init(device: *vk.Device, config: *Config, _drawImageDescriptorLayout: vk.
                 .pPushConstantRanges = &push_constant,
             };
 
-            try vk.check(vk.c.vkCreatePipelineLayout(device.toC(), &graphicsLayout, null, &pipeline_layout));
+            try vk.check(vk.c.vkCreatePipelineLayout(device.handle, &graphicsLayout, null, &pipeline_layout));
 
             // Create shader stage create infos from shader modules
             var shader_stages: [4]vk.c.VkPipelineShaderStageCreateInfo = undefined;
@@ -269,7 +269,7 @@ pub fn init(device: *vk.Device, config: *Config, _drawImageDescriptorLayout: vk.
             // TODO: Set renderPass when available
             // config.graphics.create_info.renderPass = render_pass;
 
-            try vk.check(vk.c.vkCreateGraphicsPipelines(device.toC(), null, 1, &config.graphics.create_info, null, &pipeline));
+            try vk.check(vk.c.vkCreateGraphicsPipelines(device.handle, null, 1, &config.graphics.create_info, null, &pipeline));
         },
     }
 
@@ -301,17 +301,17 @@ pub fn init(device: *vk.Device, config: *Config, _drawImageDescriptorLayout: vk.
     }
 }
 
-pub fn deinit(self: @This(), device: *vk.Device) void {
-    vk.c.vkDestroyPipeline(device.toC(), self.handle, null);
-    vk.c.vkDestroyPipelineLayout(device.toC(), self.layout, null);
+pub fn deinit(self: @This(), device: vk.Device) void {
+    vk.c.vkDestroyPipeline(device.handle, self.handle, null);
+    vk.c.vkDestroyPipelineLayout(device.handle, self.layout, null);
 }
 
-pub fn createComputePipeline(device: *vk.Device, shader: vk.c.VkShaderModule, descriptor_layout: vk.c.VkDescriptorSetLayout) !@This() {
+pub fn createComputePipeline(device: vk.Device, shader: vk.c.VkShaderModule, descriptor_layout: vk.c.VkDescriptorSetLayout) !@This() {
     var config = Config.defaultCompute();
     return init(device, &config, descriptor_layout, &.{shader});
 }
 
-pub fn createGraphicsPipeline(device: *vk.Device, shaders: []const vk.c.VkShaderModule, descriptor_layout: vk.c.VkDescriptorSetLayout) !@This() {
+pub fn createGraphicsPipeline(device: vk.Device, shaders: []const vk.c.VkShaderModule, descriptor_layout: vk.c.VkDescriptorSetLayout) !@This() {
     var config = Config.defaultGraphics();
     return init(device, &config, descriptor_layout, shaders);
 }

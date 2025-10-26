@@ -9,7 +9,7 @@ shader: vk.c.VkShaderModule,
 gradient_color: vk.c.VkShaderModule,
 
 //TODO: DONT TAKE IN  draw_iamge: vk.c.VkImage HERE
-pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
+pub fn init(device: vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     const max_sets: i32 = 10;
     const descriptor_pool_size: []const vk.c.VkDescriptorPoolSize = &.{
         .{ .type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 1 * max_sets },
@@ -82,7 +82,7 @@ pub fn init(device: *vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     };
 }
 
-pub fn deinit(self: @This(), device: *vk.Device) void {
+pub fn deinit(self: @This(), device: vk.Device) void {
     _ = vk.c.vkFreeDescriptorSets(device.handle, self.descriptor_pool, 1, &self._drawImageDescriptors);
     vk.c.vkDestroyShaderModule(device.handle, self.shader, null);
     vk.c.vkDestroyShaderModule(device.handle, self.gradient_color, null);
@@ -90,7 +90,7 @@ pub fn deinit(self: @This(), device: *vk.Device) void {
     vk.c.vkDestroyDescriptorSetLayout(device.handle, self._drawImageDescriptorLayou, null);
 }
 
-fn loadShaderModule(device: *vk.Device, path: []const u8) !vk.c.VkShaderModule {
+fn loadShaderModule(device: vk.Device, path: []const u8) !vk.c.VkShaderModule {
     const file: std.fs.File = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
