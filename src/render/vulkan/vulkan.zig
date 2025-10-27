@@ -12,7 +12,6 @@ pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
 pub const Pipeline = @import("pipeline.zig").Pipeline;
-pub const ImageState = @import("utils.zig").ImageState;
 
 pub const Instance = struct {
     handle: c.VkInstance,

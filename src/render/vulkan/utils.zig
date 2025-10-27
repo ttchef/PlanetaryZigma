@@ -1338,13 +1338,48 @@ pub const Func = enum {
     }
 };
 
-pub const ImageState = struct {
-    layout: c.VkImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-    access: c.VkAccessFlags2 = c.VK_ACCESS_2_NONE,
-    stage: c.VkPipelineStageFlags2 = c.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-};
-
 pub fn imageMemBarrier(
+    cmd: c.VkCommandBuffer,
+    image: c.VkImage,
+    old_layout: c.VkImageLayout,
+    new_layout: c.VkImageLayout,
+    src_stage: c.VkPipelineStageFlags,
+    src_access: c.VkAccessFlags,
+    dst_stage: c.VkPipelineStageFlags,
+    dst_access: c.VkAccessFlags,
+) void {
+    var barrier = c.VkImageMemoryBarrier{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = null,
+        // .srcStageMask = src_stage,
+        .srcAccessMask = src_access,
+        // .dstStageMask = dst_stage,
+        .dstAccessMask = dst_access,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    c.vkCmdPipelineBarrier(cmd, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
+
+    // var dep_info: c.VkDependencyInfo = .{
+    //     .sType = c.VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+    //     .imageMemoryBarrierCount = 1,
+    //     .pImageMemoryBarriers = &barrier,
+    // };
+
+    // c.vkCmdPipelineBarrier2(cmd, &dep_info);
+}
+
+pub fn imageMemBarrier2(
     cmd_buf: c.VkCommandBuffer,
     image: c.VkImage,
     format: c.VkFormat,
@@ -1374,7 +1409,7 @@ pub fn imageMemBarrier(
     var destination_stage: c.VkPipelineStageFlags = c.VK_PIPELINE_STAGE_NONE;
 
     if (new_layout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL or
-        (format == c.VK_FORMAT_D16_UNORM) or
+        (format == c.VK_format_D16_UNORM) or
         (format == c.VK_FORMAT_X8_D24_UNORM_PACK32) or
         (format == c.VK_FORMAT_D32_SFLOAT) or
         (format == c.VK_FORMAT_S8_UINT) or

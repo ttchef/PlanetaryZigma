@@ -150,7 +150,16 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        vk.c.VK_IMAGE_LAYOUT_GENERAL,
+        vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        0,
+        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
+    );
 
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
     std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
@@ -169,13 +178,39 @@ pub fn draw(self: *@This(), time: f32) !void {
         1,
     );
 
-    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    draw_geometry(cmd_buffer, self.pipelines[2], self.draw_image);
-    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_GENERAL,
+        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    );
 
-    // try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    // try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    draw_geometry(cmd_buffer, self.pipelines[2], self.draw_image);
+
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_READ_BIT,
+    );
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.swapchain.vk_images[image_index],
+        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
+    );
 
     vk.copyImageToImage(
         cmd_buffer,
@@ -184,8 +219,16 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.draw_image.image_extent,
         self.swapchain.extent,
     );
-
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.swapchain.vk_images[image_index],
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0,
+    );
 
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
@@ -254,7 +297,7 @@ fn draw_geometry(cmd: vk.c.VkCommandBuffer, pipeline: vk.Pipeline, draw_image: v
         .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
         .resolveImageView = null,
         .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 1.0 } } },
     };
