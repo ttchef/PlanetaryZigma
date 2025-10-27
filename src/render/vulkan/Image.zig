@@ -6,6 +6,7 @@ image_view: vk.c.VkImageView = undefined,
 vma_allocation: vma.VmaAllocation = undefined,
 image_extent: vk.c.VkExtent3D = undefined,
 format: vk.c.VkFormat = undefined,
+image_state: vk.ImageState = .{},
 
 pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: vk.Device, format: vk.c.VkFormat, extent: vk.c.VkExtent3D) !@This() {
     _ = format;

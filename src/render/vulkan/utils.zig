@@ -1338,6 +1338,12 @@ pub const Func = enum {
     }
 };
 
+pub const ImageState = struct {
+    layout: c.VkImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+    access: c.VkAccessFlags2 = c.VK_ACCESS_2_NONE,
+    stage: c.VkPipelineStageFlags2 = c.VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+};
+
 pub fn imageMemBarrier(
     cmd_buf: c.VkCommandBuffer,
     image: c.VkImage,
@@ -1476,6 +1482,12 @@ pub fn imageMemBarrier(
 
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_GENERAL and new_layout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        source_stage = c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        destination_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (old_layout == c.VK_IMAGE_LAYOUT_GENERAL and new_layout == c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
         barrier.srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         barrier.dstAccessMask = c.VK_ACCESS_NONE;
@@ -1489,6 +1501,12 @@ pub fn imageMemBarrier(
         source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         destination_stage = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     } else if (old_layout == c.VK_IMAGE_LAYOUT_GENERAL and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
+
+        source_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destination_stage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (old_layout == c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL and new_layout == c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
         barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
 

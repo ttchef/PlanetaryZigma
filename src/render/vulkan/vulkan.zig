@@ -12,6 +12,7 @@ pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
 pub const Pipeline = @import("pipeline.zig").Pipeline;
+pub const ImageState = @import("utils.zig").ImageState;
 
 pub const Instance = struct {
     handle: c.VkInstance,
@@ -210,9 +211,15 @@ pub const Device = struct {
         var features: c.VkPhysicalDeviceFeatures = undefined;
         c.vkGetPhysicalDeviceFeatures(physical_device.handle, &features);
 
+        var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = null,
+            .dynamicRendering = c.VK_TRUE,
+        };
+
         var sync2_features: c.VkPhysicalDeviceSynchronization2Features = .{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-            .pNext = null,
+            .pNext = &dynamic_rendering_features,
             .synchronization2 = c.VK_TRUE,
         };
 
