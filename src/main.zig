@@ -59,6 +59,7 @@ pub fn main() !void {
         },
     }, .device = .{
         .extensions = &.{
+            "VK_KHR_dynamic_rendering",
             "VK_KHR_swapchain",
             "VK_EXT_descriptor_buffer",
         },

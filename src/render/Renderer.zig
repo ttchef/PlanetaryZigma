@@ -80,38 +80,34 @@ pub fn init(config: Config) !@This() {
     vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
 
     //TODO GET GRAPHICS PIPELINE WORKING
-    // const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.fragspv");
-    // const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gcolored_triangle.vert.spv");
+    const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
+    const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
 
-    // var color_blend: vk.c.VkPipelineColorBlendAttachmentState = .{
-    //     .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
-    // };
-    // var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
-    // var config_graphics: vk.Pipeline.Graphics.Config = .{
-    //     .viewport_state = .{
-    //         .scissorCount = 1,
-    //         .viewportCount = 1,
-    //     },
-    //     .color_blend_state = .{
-    //         .attachmentCount = 1,
-    //         .logicOp = vk.c.VK_LOGIC_OP_COPY,
-    //         .pAttachments = &color_blend,
-    //     },
-    //     .dynamic_state = .{
-    //         .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-    //         .dynamicStateCount = 2,
-    //         .pDynamicStates = &state[0],
-    //     },
-    //     .vertex_shaders = .{
-    //         .module = vert,
-    //     },
-    //     .fragment_shaders = .{
-    //         .module = frag,
-    //     },
-    //     .geometry_shader = null,
-    //     .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
-    // };
-    // pipelines[2] = try .initGraphics(device, &config_graphics);
+    var color_blend: vk.c.VkPipelineColorBlendAttachmentState = .{
+        .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
+    };
+    var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
+    var config_graphics: vk.Pipeline.Graphics.Config = .{
+        .vertex_shaders = .{
+            .module = vert,
+        },
+        .fragment_shaders = .{
+            .module = frag,
+        },
+        .geometry_shader = null,
+        .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
+    };
+    config_graphics.viewport_state.scissorCount = 1;
+    config_graphics.viewport_state.viewportCount = 1;
+    config_graphics.color_blend_state.attachmentCount = 1;
+    config_graphics.color_blend_state.logicOp = vk.c.VK_LOGIC_OP_COPY;
+    config_graphics.color_blend_state.pAttachments = &color_blend;
+    config_graphics.dynamic_state.dynamicStateCount = 2;
+    config_graphics.dynamic_state.pDynamicStates = &state[0];
+    config_graphics.render_info.colorAttachmentCount = 1;
+    config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
+    config_graphics.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
+    pipelines[2] = try .initGraphics(device, &config_graphics);
 
     std.debug.print("Address {*}\n", .{instance.handle});
     return .{
@@ -154,16 +150,17 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_GENERAL);
-    // var clear_value: vk.c.VkClearColorValue = .{ .float32 = .{ 0.0, 0.0, std.math.sin(@as(f32, @floatFromInt(self.swapchain.current_frame_inflight)) / 120.0), 1.0 } };
-    // var clear_range: vk.c.VkImageSubresourceRange = .{
-    //     .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-    //     .baseMipLevel = 0,
-    //     .levelCount = vk.c.VK_REMAINING_MIP_LEVELS,
-    //     .baseArrayLayer = 0,
-    //     .layerCount = vk.c.VK_REMAINING_ARRAY_LAYERS,
-    // };
-    // vk.c.vkCmdClearColorImage(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_LAYOUT_GENERAL, &clear_value, 1, &clear_range);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        vk.c.VK_IMAGE_LAYOUT_GENERAL,
+        vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        0,
+        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
+    );
+
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
     std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
 
@@ -181,8 +178,39 @@ pub fn draw(self: *@This(), time: f32) !void {
         1,
     );
 
-    try vk.imageMemBarrier(cmd_buffer, self.draw_image.image, self.draw_image.format, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_UNDEFINED, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_GENERAL,
+        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    );
+
+    draw_geometry(cmd_buffer, self.pipelines[2], self.draw_image);
+
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.draw_image.image,
+        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_READ_BIT,
+    );
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.swapchain.vk_images[image_index],
+        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
+    );
 
     vk.copyImageToImage(
         cmd_buffer,
@@ -191,8 +219,16 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.draw_image.image_extent,
         self.swapchain.extent,
     );
-
-    try vk.imageMemBarrier(cmd_buffer, self.swapchain.vk_images[image_index], self.swapchain.format, vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    vk.imageMemBarrier(
+        cmd_buffer,
+        self.swapchain.vk_images[image_index],
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
+        vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0,
+    );
 
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
@@ -250,4 +286,70 @@ pub fn deinit(self: @This()) void {
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
     self.instance.deinit();
+}
+
+fn draw_geometry(cmd: vk.c.VkCommandBuffer, pipeline: vk.Pipeline, draw_image: vk.Image) void {
+    var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = draw_image.image_view,
+        .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
+        .resolveImageView = null,
+        .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 1.0 } } },
+    };
+
+    var renderInfo: vk.c.VkRenderingInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = null,
+        .flags = 0,
+        .renderArea = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = .{
+                .height = draw_image.image_extent.height,
+                .width = draw_image.image_extent.width,
+            },
+        },
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment,
+        .pDepthAttachment = null,
+        .pStencilAttachment = null,
+    };
+
+    vk.c.vkCmdBeginRendering(cmd, &renderInfo);
+
+    vk.c.vkCmdBindPipeline(cmd, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get().handle);
+
+    var viewport: vk.c.VkViewport = .{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(draw_image.image_extent.width),
+        .height = @floatFromInt(draw_image.image_extent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+
+    vk.c.vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    var scissor: vk.c.VkRect2D = .{
+        .offset = .{
+            .x = 0,
+            .y = 0,
+        },
+        .extent = .{
+            .width = draw_image.image_extent.width,
+            .height = draw_image.image_extent.height,
+        },
+    };
+
+    vk.c.vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    vk.c.vkCmdDraw(cmd, 3, 1, 0, 0);
+
+    vk.c.vkCmdEndRendering(cmd);
 }

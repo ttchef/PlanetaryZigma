@@ -118,9 +118,12 @@ pub const Pipeline = union(enum) {
                 .attachmentCount = 0,
                 .pAttachments = null,
             },
-            dynamic_state: vk.c.VkPipelineDynamicStateCreateInfo = .{},
-            render_pass: vk.c.VkRenderPass = null,
-            subpass: u32 = 0,
+            dynamic_state: vk.c.VkPipelineDynamicStateCreateInfo = .{
+                .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            },
+            render_info: vk.c.VkPipelineRenderingCreateInfo = .{
+                .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            },
             base_pipeline_handle: vk.c.VkPipeline = null,
             base_pipeline_index: i32 = -1,
         };
@@ -128,7 +131,7 @@ pub const Pipeline = union(enum) {
         pub fn init(device: vk.Device, config: *Config) !@This() {
             var layout_create_info: vk.c.VkPipelineLayoutCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pSetLayouts = &config.descriptor_set_layouts,
+                .pSetLayouts = @ptrCast(config.descriptor_set_layouts),
                 .setLayoutCount = @intCast(config.descriptor_set_layouts.len),
                 // .pPushConstantRanges = &.{
                 //     .offset = 0,
@@ -142,33 +145,29 @@ pub const Pipeline = union(enum) {
             var layout: vk.c.VkPipelineLayout = undefined;
             try vk.check(vk.c.vkCreatePipelineLayout(device.handle, &layout_create_info, null, &layout));
 
-            const stage_count: usize = 2 + if (config.geometry_shader != null) 1 else 0;
+            var shader_stages: [2]vk.c.VkPipelineShaderStageCreateInfo = .{
+                .{
+                    .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+                    .module = config.vertex_shaders.module,
+                    .pName = config.vertex_shaders.entry_name orelse "main",
+                    .pSpecializationInfo = config.vertex_shaders.specialization,
+                },
+                .{
+                    .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .module = config.fragment_shaders.module,
+                    .pName = config.fragment_shaders.entry_name orelse "main",
+                    .pSpecializationInfo = config.fragment_shaders.specialization,
+                },
+            };
+
             var pipeline_create_info: vk.c.VkGraphicsPipelineCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                .stageCount = @intCast(stage_count),
-                .pStages = stage_infos: {
-                    var stage_infos: [3]vk.c.VkPipelineShaderStageCreateInfo = undefined;
-
-                    for (
-                        0..stage_count,
-                        [_]Shader{ config.vertex_shaders, config.fragment_shaders, config.geometry_shader orelse .{} },
-                        [_]vk.c.VkShaderStageFlagBits{ vk.c.VK_SHADER_STAGE_VERTEX_BIT, vk.c.VK_SHADER_STAGE_FRAGMENT_BIT, vk.c.VK_SHADER_STAGE_GEOMETRY_BIT },
-                        &stage_infos,
-                    ) |_, shader, stage_bit, *stage_info| {
-                        stage_info.* = .{
-                            .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                            .stage = stage_bit,
-                            .module = shader.module,
-                            .pName = shader.entry_name orelse "main",
-                            .pSpecializationInfo = shader.specialization,
-                        };
-                    }
-
-                    break :stage_infos &stage_infos;
-                },
-
-                .layout = config.layout,
-
+                .pNext = &config.render_info,
+                .stageCount = 2,
+                .pStages = &shader_stages,
+                .layout = layout,
                 .pVertexInputState = &config.vertex_input_state,
                 .pInputAssemblyState = &config.input_assembly_state,
                 .pTessellationState = &config.tessellation_state,
@@ -178,15 +177,16 @@ pub const Pipeline = union(enum) {
                 .pDepthStencilState = &config.depth_stencil_state,
                 .pColorBlendState = &config.color_blend_state,
                 .pDynamicState = &config.dynamic_state,
-                .renderPass = config.render_pass,
-                .subpass = config.subpass,
                 .basePipelineHandle = config.base_pipeline_handle,
                 .basePipelineIndex = config.base_pipeline_index,
             };
 
-            var pipeline: *vk.c.VkPipeline = undefined;
+            var pipeline: vk.c.VkPipeline = undefined;
             try vk.check(vk.c.vkCreateGraphicsPipelines(device.handle, null, 1, &pipeline_create_info, null, &pipeline));
-            return .{ .handle = pipeline };
+            return .{
+                .handle = pipeline,
+                .layout = layout,
+            };
         }
     };
 
