@@ -150,16 +150,8 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    vk.imageMemBarrier(
-        cmd_buffer,
-        self.draw_image.image,
-        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-        vk.c.VK_IMAGE_LAYOUT_GENERAL,
-        vk.c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        0,
-        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
-    );
+    var draw_image_barrier: vk.Barrier = .init(cmd_buffer, self.draw_image.image);
+    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vk.c.VK_ACCESS_SHADER_WRITE_BIT);
 
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
     std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
@@ -178,40 +170,13 @@ pub fn draw(self: *@This(), time: f32) !void {
         1,
     );
 
-    vk.imageMemBarrier(
-        cmd_buffer,
-        self.draw_image.image,
-        vk.c.VK_IMAGE_LAYOUT_GENERAL,
-        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        vk.c.VK_ACCESS_SHADER_WRITE_BIT,
-        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    );
+    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 
     draw_geometry(cmd_buffer, self.pipelines[2], self.draw_image);
+    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
 
-    vk.imageMemBarrier(
-        cmd_buffer,
-        self.draw_image.image,
-        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-        vk.c.VK_ACCESS_TRANSFER_READ_BIT,
-    );
-    vk.imageMemBarrier(
-        cmd_buffer,
-        self.swapchain.vk_images[image_index],
-        vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        vk.c.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-        0,
-        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
-    );
-
+    var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index]);
+    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
     vk.copyImageToImage(
         cmd_buffer,
         self.draw_image.image,
@@ -219,17 +184,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.draw_image.image_extent,
         self.swapchain.extent,
     );
-    vk.imageMemBarrier(
-        cmd_buffer,
-        self.swapchain.vk_images[image_index],
-        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-        vk.c.VK_ACCESS_TRANSFER_WRITE_BIT,
-        vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        0,
-    );
-
+    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
     var submit_info: vk.c.VkSubmitInfo2 = .{
