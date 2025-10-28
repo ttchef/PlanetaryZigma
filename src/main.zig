@@ -50,7 +50,7 @@ pub fn main() !void {
             },
             .layers = &.{
                 "VK_LAYER_KHRONOS_validation",
-                // "VK_LAYER_LUNARG_api_dump",
+                "VK_LAYER_LUNARG_api_dump",
             },
             .debug_config = .{
                 .severities = .{
