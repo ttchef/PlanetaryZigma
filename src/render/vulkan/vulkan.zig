@@ -12,6 +12,8 @@ pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const Descriptor = @import("Descriptor.zig");
 pub const Pipeline = @import("pipeline.zig").Pipeline;
+pub const Barrier = @import("Barrier.zig");
+pub const Buffer = @import("Buffer.zig");
 
 pub const Instance = struct {
     handle: c.VkInstance,
@@ -22,8 +24,9 @@ pub const Instance = struct {
         var extension_properties: [128]c.VkExtensionProperties = undefined;
         try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, &extension_properties));
         check_ext: for (extensions orelse &.{}) |extension| {
-            for (extension_properties[0..extension_count]) |cmp_ext|
+            for (extension_properties[0..extension_count]) |cmp_ext| {
                 if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
+            }
             std.log.err("Missing instance extention: {s}\n", .{extension});
             return error.MissingInstanceExtension;
         }
