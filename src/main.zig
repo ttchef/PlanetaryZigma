@@ -36,40 +36,47 @@ pub fn main() !void {
     });
     defer window.deinit();
 
-    var renderer: Renderer = try .init(.{ .instance = .{
-        .extensions = &.{
-            "VK_KHR_surface",
-            "VK_EXT_debug_utils",
-            switch (builtin.target.os.tag) {
-                .windows => "VK_KHR_win32_surface",
-                .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
-                .macos => "VK_MVK_macos_surface",
-                else => @compileError("Unsupported OS"),
+    var renderer: Renderer = try .init(.{
+        .instance = .{
+            .extensions = &.{
+                "VK_KHR_surface",
+                "VK_EXT_debug_utils",
+                switch (builtin.target.os.tag) {
+                    .windows => "VK_KHR_win32_surface",
+                    .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
+                    .macos => "VK_MVK_macos_surface",
+                    else => @compileError("Unsupported OS"),
+                },
             },
-            Renderer.vk.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-        },
-        .layers = &.{"VK_LAYER_KHRONOS_validation"},
-        .debug_config = .{
-            .severities = .{
-                .warning = true,
-                .verbose = true,
-                .@"error" = true,
-                .info = true,
+            .layers = &.{
+                "VK_LAYER_KHRONOS_validation",
+                "VK_LAYER_LUNARG_api_dump",
+            },
+            .debug_config = .{
+                .severities = .{
+                    .warning = true,
+                    .verbose = true,
+                    .@"error" = true,
+                    .info = true,
+                },
             },
         },
-    }, .device = .{
-        .extensions = &.{
-            "VK_KHR_dynamic_rendering",
-            "VK_KHR_swapchain",
-            "VK_EXT_descriptor_buffer",
+        .device = .{
+            .extensions = &.{
+                "VK_KHR_dynamic_rendering",
+                "VK_KHR_swapchain",
+                "VK_EXT_descriptor_buffer",
+            },
         },
-    }, .surface = .{
-        .data = window,
-        .init = initVulkanSurface,
-    }, .swapchain = .{
-        .width = @intCast(window.getSize().width),
-        .heigth = @intCast(window.getSize().height),
-    } });
+        .surface = .{
+            .data = window,
+            .init = initVulkanSurface,
+        },
+        .swapchain = .{
+            .width = @intCast(window.getSize().width),
+            .heigth = @intCast(window.getSize().height),
+        },
+    });
     defer renderer.deinit();
 
     std.Thread.sleep(3000);

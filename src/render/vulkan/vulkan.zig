@@ -22,8 +22,9 @@ pub const Instance = struct {
         var extension_properties: [128]c.VkExtensionProperties = undefined;
         try check(c.vkEnumerateInstanceExtensionProperties(null, &extension_count, &extension_properties));
         check_ext: for (extensions orelse &.{}) |extension| {
-            for (extension_properties[0..extension_count]) |cmp_ext|
+            for (extension_properties[0..extension_count]) |cmp_ext| {
                 if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
+            }
             std.log.err("Missing instance extention: {s}\n", .{extension});
             return error.MissingInstanceExtension;
         }
