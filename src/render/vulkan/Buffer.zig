@@ -4,7 +4,7 @@ buffer: vk.c.VkBuffer,
 vma_allocation: vma.VmaAllocation,
 info: vma.VmaAllocationInfo,
 
-pub fn init(vma_allocation: vma.VmaAllocation, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vma.VmaMemoryUsage) !void {
+pub fn init(vma_allocator: vma.VmaAllocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vma.VmaMemoryUsage) !void {
     var buffer_info: vk.v.VkBufferCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
@@ -20,7 +20,7 @@ pub fn init(vma_allocation: vma.VmaAllocation, size: usize, vk_usage: vk.c.VkBuf
     var info: vma.VmaAllocationInfo = undefined;
 
     try vk.check(vma.vmaCreateBuffer(
-        vma_allocation,
+        vma_allocator,
         &buffer_info,
         &vmaalloc_info,
         &new_buffer,
@@ -33,4 +33,8 @@ pub fn init(vma_allocation: vma.VmaAllocation, size: usize, vk_usage: vk.c.VkBuf
         .vma_allocation = allocation,
         .info = info,
     };
+}
+
+pub fn deinit(self: *@This(), vma_allocator: vma.VmaAllocator) void {
+    vma.vmaDestroyBuffer(vma_allocator, self.buffer, self.vma_allocation);
 }
