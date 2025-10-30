@@ -2,6 +2,30 @@ const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
 
+pub var rect_vertices = [_]vk.Mesh.Vertex{
+    .{
+        .position = .{ 0.5, -0.5, 0.0 },
+        .color = .{ 0.0, 0.0, 0.0, 1.0 },
+    },
+    .{
+        .position = .{ 0.5, 0.5, 0.0 },
+        .color = .{ 0.5, 0.5, 0.5, 1.0 },
+    },
+    .{
+        .position = .{ -0.5, -0.5, 0.0 },
+        .color = .{ 1.0, 0.0, 0.0, 1.0 },
+    },
+    .{
+        .position = .{ -0.5, 0.5, 0.0 },
+        .color = .{ 0.0, 1.0, 0.0, 1.0 },
+    },
+};
+
+pub var rect_indices = [_]u32{
+    0, 1, 2,
+    2, 1, 3,
+};
+
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
 surface: vk.Surface,
@@ -16,6 +40,7 @@ descriptor_graphics: vk.Descriptor,
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
+the_mesh: vk.Mesh,
 
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
@@ -40,18 +65,16 @@ pub fn init(config: Config) !@This() {
     const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
-    const command_pool: vk.CommandPool = try .init(device, physical_device.queue_family_index);
+    const command_pool: vk.CommandPool = try .init(device, physical_device.graphics_queue_family_index);
     const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
-
-    // TODO
-    //GRAPHICS pipeline
-
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
+
+    const the_mesh: vk.Mesh = .init(device, vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
 
     const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
     const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
@@ -94,8 +117,8 @@ pub fn init(config: Config) !@This() {
         .fragment_shaders = .{
             .module = frag,
         },
-        .geometry_shader = null,
         .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
+        .push_constants = &.{},
     };
     config_graphics.viewport_state.scissorCount = 1;
     config_graphics.viewport_state.viewportCount = 1;
@@ -108,6 +131,29 @@ pub fn init(config: Config) !@This() {
     config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
     config_graphics.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
     pipelines[2] = try .initGraphics(device, &config_graphics);
+    vk.c.vkDestroyShaderModule(device.handle, vert, null);
+    const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
+    var config_mesh: vk.Pipeline.Graphics.Config = .{
+        .fragment_shaders = .{
+            .module = frag,
+        },
+        .vertex_shaders = .{
+            .module = mesh_vert,
+        },
+        .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
+        .push_constants = &.{.{
+            .offset = 0,
+            .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
+            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+        }},
+    };
+    config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
+    config_mesh.render_info.colorAttachmentCount = 1;
+    config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
+    config_mesh.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
+    pipelines[3] = try .initGraphics(device, &config_mesh);
+
+    vk.c.vkDestroyShaderModule(device.handle, frag, null);
 
     std.debug.print("Address {*}\n", .{instance.handle});
     return .{
@@ -121,8 +167,9 @@ pub fn init(config: Config) !@This() {
         .descriptor = descriptor,
         .pipelines = pipelines,
         .current_pipeline = 0,
-        .max_pipelines = 2,
+        .max_pipelines = 3,
         .vulkan_mem_alloc = vulkan_mem_alloc,
+        .the_mesh = the_mesh,
         .draw_image = draw_image,
         .descriptor_graphics = descriptor_graphics,
     };
@@ -172,7 +219,93 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 
-    draw_geometry(cmd_buffer, self.pipelines[2], self.draw_image);
+    //START DRAWING VERTECIES
+    var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = self.draw_image.image_view,
+        .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
+        .resolveImageView = null,
+        .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 1.0 } } },
+    };
+
+    var renderInfo: vk.c.VkRenderingInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = null,
+        .flags = 0,
+        .renderArea = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = .{
+                .height = self.draw_image.image_extent.height,
+                .width = self.draw_image.image_extent.width,
+            },
+        },
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment,
+        .pDepthAttachment = null,
+        .pStencilAttachment = null,
+    };
+
+    vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
+
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
+
+    var viewport: vk.c.VkViewport = .{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(self.draw_image.image_extent.width),
+        .height = @floatFromInt(self.draw_image.image_extent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+
+    vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+    var scissor: vk.c.VkRect2D = .{
+        .offset = .{
+            .x = 0,
+            .y = 0,
+        },
+        .extent = .{
+            .width = self.draw_image.image_extent.width,
+            .height = self.draw_image.image_extent.height,
+        },
+    };
+
+    vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+
+    //Triangle
+    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+
+    //The mesh
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
+    var push: vk.Mesh.GPUDrawPushConstants = .{
+        .vertex_buffer = self.the_mesh.vertex_buffer_address,
+        .world_matrix = nz.Mat4x4(f32).identity,
+    };
+
+    vk.c.vkCmdPushConstants(
+        cmd_buffer,
+        self.pipelines[3].get().layout,
+        vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        @sizeOf(vk.Mesh.GPUDrawPushConstants),
+        &push,
+    );
+    vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.the_mesh.index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+    vk.c.vkCmdDrawIndexed(cmd_buffer, 6, 1, 0, 0, 0);
+
+    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+
+    vk.c.vkCmdEndRendering(cmd_buffer);
+    //DONE RENDERING VERTECIES
+
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
 
     var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index]);
@@ -210,7 +343,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         },
     };
 
-    try vk.check(vk.c.vkQueueSubmit2(self.device.getQueue(self.physical_device.queue_family_index), 1, &submit_info, current_frame.render_fence));
+    try vk.check(vk.c.vkQueueSubmit2(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
 
     var present_info: vk.c.VkPresentInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -221,7 +354,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .pImageIndices = &image_index,
     };
 
-    try vk.check(vk.c.vkQueuePresentKHR(self.device.getQueue(self.physical_device.queue_family_index), &present_info));
+    try vk.check(vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info));
 
     self.swapchain.current_frame_inflight += 1;
 }
@@ -241,70 +374,4 @@ pub fn deinit(self: @This()) void {
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
     self.instance.deinit();
-}
-
-fn draw_geometry(cmd: vk.c.VkCommandBuffer, pipeline: vk.Pipeline, draw_image: vk.Image) void {
-    var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = null,
-        .imageView = draw_image.image_view,
-        .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
-        .resolveImageView = null,
-        .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 1.0 } } },
-    };
-
-    var renderInfo: vk.c.VkRenderingInfo = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .pNext = null,
-        .flags = 0,
-        .renderArea = .{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = .{
-                .height = draw_image.image_extent.height,
-                .width = draw_image.image_extent.width,
-            },
-        },
-        .layerCount = 1,
-        .viewMask = 0,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment,
-        .pDepthAttachment = null,
-        .pStencilAttachment = null,
-    };
-
-    vk.c.vkCmdBeginRendering(cmd, &renderInfo);
-
-    vk.c.vkCmdBindPipeline(cmd, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.get().handle);
-
-    var viewport: vk.c.VkViewport = .{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(draw_image.image_extent.width),
-        .height = @floatFromInt(draw_image.image_extent.height),
-        .minDepth = 0,
-        .maxDepth = 1,
-    };
-
-    vk.c.vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-    var scissor: vk.c.VkRect2D = .{
-        .offset = .{
-            .x = 0,
-            .y = 0,
-        },
-        .extent = .{
-            .width = draw_image.image_extent.width,
-            .height = draw_image.image_extent.height,
-        },
-    };
-
-    vk.c.vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    vk.c.vkCmdDraw(cmd, 3, 1, 0, 0);
-
-    vk.c.vkCmdEndRendering(cmd);
 }

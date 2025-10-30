@@ -76,9 +76,9 @@ pub const Pipeline = union(enum) {
         pub const Config = struct {
             vertex_shaders: Shader,
             fragment_shaders: Shader,
-            geometry_shader: ?Shader,
 
             descriptor_set_layouts: []const vk.c.VkDescriptorSetLayout,
+            push_constants: []const vk.c.VkPushConstantRange,
 
             vertex_input_state: vk.c.VkPipelineVertexInputStateCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -133,13 +133,8 @@ pub const Pipeline = union(enum) {
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pSetLayouts = @ptrCast(config.descriptor_set_layouts),
                 .setLayoutCount = @intCast(config.descriptor_set_layouts.len),
-                // .pPushConstantRanges = &.{
-                //     .offset = 0,
-                //     .size = @sizeOf(PushConstant),
-                //     .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT |
-                //         if (config.geometry_shader != null) vk.c.VK_SHADER_STAGE_GEOMETRY_BIT else 0,
-                // },
-                .pushConstantRangeCount = 0,
+                .pPushConstantRanges = @ptrCast(config.push_constants),
+                .pushConstantRangeCount = @intCast(config.push_constants.len),
             };
 
             var layout: vk.c.VkPipelineLayout = undefined;
