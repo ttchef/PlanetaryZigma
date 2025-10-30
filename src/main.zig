@@ -66,6 +66,7 @@ pub fn main() !void {
                 "VK_KHR_dynamic_rendering",
                 "VK_KHR_swapchain",
                 "VK_EXT_descriptor_buffer",
+                // "GL_EXT_buffer_reference",
             },
         },
         .surface = .{
