@@ -51,17 +51,14 @@ pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []i32, ver
 
     var info: vma.VmaAllocationInfo = undefined;
     vma.vmaGetAllocationInfo(vma_allocator, staging.vma_allocation, &info);
-    const data: [*]u8 = @ptrCast(@alignCast(info.pMappedData));
+    const data: [*]u8 = @ptrCast(info.pMappedData);
 
     // copy vertex buffer
-    @memcpy(data[0..vertex_buffer_size], vertices);
-    // memcpy(data, vertices.data(), vertex_buffer_size);
+    @memcpy(data[0..vertex_buffer_size], std.mem.sliceAsBytes(vertices));
     // copy index buffer
-    @memcpy(data[vertex_buffer_size .. vertex_buffer_size + index_buffer_size], indices);
+    @memcpy(data[vertex_buffer_size .. vertex_buffer_size + index_buffer_size], std.mem.sliceAsBytes(indices));
 
-    // memcpy((char*)data + vertex_buffer_size, indices.data(), index_buffer_size);
-
-    const cmd = device.beginImmediateCommand();
+    const cmd = try device.beginImmediateCommand();
 
     var vert_copy: c.VkBufferCopy = .{
         .dstOffset = 0,
@@ -78,13 +75,18 @@ pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []i32, ver
     };
     c.vkCmdCopyBuffer(cmd, staging.buffer, index_buffer.buffer, 1, &index_copy);
 
-    device.endImmediateCommand();
+    try device.endImmediateCommand(cmd);
 
     staging.deinit(vma_allocator);
 
     return .{
         .index_buffer = index_buffer,
-        .vertex_buffer = vert_copy,
+        .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
     };
+}
+
+fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
+    self.index_buffer.deinit(vma_allocator);
+    self.vertex_buffer.deinit(vma_allocator);
 }

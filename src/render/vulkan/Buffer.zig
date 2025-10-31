@@ -36,5 +36,5 @@ pub fn init(vma_allocator: vma.VmaAllocator, size: usize, vk_usage: vk.c.VkBuffe
 }
 
 pub fn deinit(self: *@This(), vma_allocator: vma.VmaAllocator) void {
-    vma.vmaDestroyBuffer(vma_allocator, self.buffer, self.vma_allocation);
+    vma.vmaDestroyBuffer(vma_allocator, @ptrCast(self.buffer), self.vma_allocation);
 }

@@ -32,7 +32,6 @@ surface: vk.Surface,
 physical_device: vk.PhysicalDevice,
 device: vk.Device,
 swapchain: vk.Swapchain,
-command_pool: vk.CommandPool,
 
 descriptor: vk.Descriptor,
 descriptor_graphics: vk.Descriptor,
@@ -65,8 +64,7 @@ pub fn init(config: Config) !@This() {
     const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
-    const command_pool: vk.CommandPool = try .init(device, physical_device.graphics_queue_family_index);
-    const swapchain: vk.Swapchain = try .init(physical_device, device, command_pool, surface, config.swapchain.width, config.swapchain.heigth);
+    const swapchain: vk.Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
     const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
 
@@ -74,7 +72,7 @@ pub fn init(config: Config) !@This() {
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
 
-    const the_mesh: vk.Mesh = .init(device, vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
+    const the_mesh: vk.Mesh = try .init(device, vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
 
     const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
     const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
@@ -163,7 +161,6 @@ pub fn init(config: Config) !@This() {
         .physical_device = physical_device,
         .device = device,
         .swapchain = swapchain,
-        .command_pool = command_pool,
         .descriptor = descriptor,
         .pipelines = pipelines,
         .current_pipeline = 0,
@@ -281,7 +278,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
     //Triangle
-    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+    // vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
 
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
@@ -300,8 +297,6 @@ pub fn draw(self: *@This(), time: f32) !void {
     );
     vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.the_mesh.index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
     vk.c.vkCmdDrawIndexed(cmd_buffer, 6, 1, 0, 0, 0);
-
-    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
 
     vk.c.vkCmdEndRendering(cmd_buffer);
     //DONE RENDERING VERTECIES
@@ -361,8 +356,7 @@ pub fn draw(self: *@This(), time: f32) !void {
 
 pub fn deinit(self: @This()) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.handle);
-    self.swapchain.deinit(self.device, self.command_pool);
-    self.command_pool.deinit(self.device);
+    self.swapchain.deinit(self.device);
 
     self.descriptor.deinit(self.device);
     for (0..self.max_pipelines) |i|

@@ -13,7 +13,7 @@ extent: vk.c.VkExtent3D,
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
-pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, command_pool: vk.CommandPool, surface: vk.Surface, width: u32, height: u32) !@This() {
+pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, surface: vk.Surface, width: u32, height: u32) !@This() {
     var swapchain: vk.c.VkSwapchainKHR = undefined;
 
     var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
@@ -59,7 +59,7 @@ pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, command_pool:
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
 
     var frames: [max_frames_inflight]FrameData = undefined;
-    for (&frames) |*frame| frame.* = try .init(device, command_pool);
+    for (&frames) |*frame| frame.* = try .init(device);
 
     return .{
         .swapchain = swapchain,
@@ -75,9 +75,8 @@ pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, command_pool:
 pub fn deinit(
     self: @This(),
     device: vk.Device,
-    command_pool: vk.CommandPool,
 ) void {
-    for (self.frames) |frame| frame.deinit(device, command_pool);
+    for (self.frames) |frame| frame.deinit(device);
     vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 }
 
@@ -108,10 +107,10 @@ const FrameData = struct {
     swapchain_semaphore: vk.c.VkSemaphore,
     render_fence: vk.c.VkFence,
 
-    pub fn init(device: vk.Device, command_pool: vk.CommandPool) !@This() {
+    pub fn init(device: vk.Device) !@This() {
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = command_pool.handle,
+            .commandPool = device.command_pool.handle,
             .level = vk.c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1,
         };
@@ -145,10 +144,10 @@ const FrameData = struct {
         };
     }
 
-    pub fn deinit(self: @This(), device: vk.Device, command_pool: vk.CommandPool) void {
+    pub fn deinit(self: @This(), device: vk.Device) void {
         vk.c.vkDestroySemaphore(device.handle, self.render_done_semaphore, null);
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);
-        vk.c.vkFreeCommandBuffers(device.handle, command_pool.handle, 1, &self.command_buffer);
+        vk.c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
     }
 };
