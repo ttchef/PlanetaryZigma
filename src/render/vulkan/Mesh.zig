@@ -1,10 +1,9 @@
+const std = @import("std");
 const c = @import("vulkan");
 const vma = @import("vma");
 const nz = @import("numz");
+const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
-
-//TODO REMOVE? ONLY needed for Begin/End Commands
-const vk = @import("vulkan.zig");
 
 index_buffer: Buffer,
 vertex_buffer: Buffer,
@@ -23,19 +22,12 @@ pub const GPUDrawPushConstants = struct {
     vertex_buffer: c.VkDeviceAddress,
 };
 
-pub fn init(device: vk.Device, vma_allocator: vma.VmaAllocator, indices: []i32, vertices: []Vertex) @This() {
+pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []i32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(i32);
 
-    // var vertex_buffer = try Buffer.init(
-    //     vma_allocator,
-    //     vertex_buffer_size,
-    //     c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-    //     vma.VMA_MEMORY_USAGE_GPU_ONLY,
-    // );
-
     var vertex_buffer_address: c.VkDeviceAddress = undefined;
-    const vertex_buffer: Buffer = try Buffer.init(
+    const vertex_buffer: Buffer = try .init(
         vma_allocator,
         vertex_buffer_size,
         c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -44,9 +36,9 @@ pub fn init(device: vk.Device, vma_allocator: vma.VmaAllocator, indices: []i32, 
 
     var device_adress_info: c.VkBufferDeviceAddressInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = vertex_buffer.vertexBuffer.buffer,
+        .buffer = vertex_buffer.buffer,
     };
-    vertex_buffer_address = c.vkGetBufferDeviceAddress(device, &device_adress_info);
+    vertex_buffer_address = c.vkGetBufferDeviceAddress(device.handle, &device_adress_info);
 
     const index_buffer: Buffer = try .init(
         vma_allocator,
@@ -55,19 +47,18 @@ pub fn init(device: vk.Device, vma_allocator: vma.VmaAllocator, indices: []i32, 
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
     );
 
-    var staging: Buffer = .init(vertex_buffer_size + index_buffer_size, c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma.VMA_MEMORY_USAGE_CPU_ONLY);
+    var staging: Buffer = try .init(vma_allocator, vertex_buffer_size + index_buffer_size, c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma.VMA_MEMORY_USAGE_CPU_ONLY);
 
-    const data = staging.vma_allocation.GetMappedData();
+    var info: vma.VmaAllocationInfo = undefined;
+    vma.vmaGetAllocationInfo(vma_allocator, staging.vma_allocation, &info);
+    const data: [*]u8 = @ptrCast(info.pMappedData);
 
     // copy vertex buffer
-    @memcpy(data, vertices);
-    // memcpy(data, vertices.data(), vertex_buffer_size);
+    @memcpy(data[0..vertex_buffer_size], std.mem.sliceAsBytes(vertices));
     // copy index buffer
-    @memcpy(data[vertices.len], indices);
+    @memcpy(data[vertex_buffer_size .. vertex_buffer_size + index_buffer_size], std.mem.sliceAsBytes(indices));
 
-    // memcpy((char*)data + vertex_buffer_size, indices.data(), index_buffer_size);
-
-    const cmd = vk.beginImmediateCommand();
+    const cmd = try device.beginImmediateCommand();
 
     var vert_copy: c.VkBufferCopy = .{
         .dstOffset = 0,
@@ -84,13 +75,18 @@ pub fn init(device: vk.Device, vma_allocator: vma.VmaAllocator, indices: []i32, 
     };
     c.vkCmdCopyBuffer(cmd, staging.buffer, index_buffer.buffer, 1, &index_copy);
 
-    vk.endImmediateCommand();
+    try device.endImmediateCommand(cmd);
 
     staging.deinit(vma_allocator);
 
     return .{
         .index_buffer = index_buffer,
-        .vertex_buffer = vert_copy,
+        .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
     };
+}
+
+fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
+    self.index_buffer.deinit(vma_allocator);
+    self.vertex_buffer.deinit(vma_allocator);
 }
