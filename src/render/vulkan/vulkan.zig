@@ -7,6 +7,8 @@ pub const LoadShader = @import("utils.zig").loadShaderModule;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
 pub const copyImageToImage = @import("utils.zig").copyImageToImage;
 
+pub const Device = @import("device.zig").Logical;
+pub const PhysicalDevice = @import("device.zig").Physical;
 pub const Swapchain = @import("Swapchain.zig");
 pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
@@ -141,127 +143,6 @@ pub const Surface = struct {
     }
 };
 
-pub const PhysicalDevice = struct {
-    handle: c.VkPhysicalDevice,
-    graphics_queue_family_index: u32,
-
-    pub fn find(instance: Instance, surface: Surface) !@This() {
-        var device_count: u32 = 0;
-        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
-        if (device_count == 0) return error.NoPhysicalDevices;
-
-        var devices: [8]c.VkPhysicalDevice = undefined;
-        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, &devices));
-
-        for (devices[0..device_count]) |device| {
-            var properties: c.VkPhysicalDeviceProperties = undefined;
-            c.vkGetPhysicalDeviceProperties(device, &properties);
-
-            var family_count: u32 = 0;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, null);
-
-            var families: [16]c.VkQueueFamilyProperties = undefined;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, &families);
-
-            for (families[0..family_count], 0..) |family, i| {
-                const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
-
-                var present_supported: c.VkBool32 = undefined;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), surface.handle, &present_supported));
-
-                if (supports_graphics and present_supported != 0) {
-                    std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
-
-                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
-                }
-            }
-        }
-        return error.NoSuitablePhysicalDevice;
-    }
-};
-
-pub const Device = struct {
-    handle: c.VkDevice,
-    immidiate_fence: c.VkFence,
-    graphics_queue: c.VkQueue,
-
-    pub fn init(physical_device: PhysicalDevice, extensions: ?[]const [*:0]const u8) !@This() {
-        var extension_count: u32 = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
-        var extension_properties: [516]c.VkExtensionProperties = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, &extension_properties));
-        check_ext: for (extensions orelse &.{}) |extension| {
-            for (extension_properties[0..extension_count]) |cmp_ext|
-                if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
-            std.log.err("Missing Device extention: {s}\n", .{extension});
-            return error.MissingDeviceExtension;
-        }
-
-        var queue_priority: f32 = 1.0;
-        const queue_info: c.VkDeviceQueueCreateInfo = .{
-            .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .pNext = null,
-            .queueFamilyIndex = physical_device.graphics_queue_family_index,
-            .queueCount = 1,
-            .pQueuePriorities = &queue_priority,
-            .flags = 0,
-        };
-
-        var features: c.VkPhysicalDeviceFeatures = undefined;
-        c.vkGetPhysicalDeviceFeatures(physical_device.handle, &features);
-
-        var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .pNext = null,
-            .dynamicRendering = c.VK_TRUE,
-        };
-
-        var sync2_features: c.VkPhysicalDeviceSynchronization2Features = .{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-            .pNext = &dynamic_rendering_features,
-            .synchronization2 = c.VK_TRUE,
-        };
-
-        var buffer_device_address_features = c.VkPhysicalDeviceBufferDeviceAddressFeatures{
-            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-            .pNext = &sync2_features,
-            .bufferDeviceAddress = c.VK_TRUE,
-        };
-
-        const device_info = c.VkDeviceCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = &buffer_device_address_features,
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &queue_info,
-            .pEnabledFeatures = &features,
-            .enabledExtensionCount = if (extensions != null) @intCast(extensions.?.len) else 0,
-            .ppEnabledExtensionNames = if (extensions != null) extensions.?.ptr else null,
-        };
-
-        var device: c.VkDevice = undefined;
-        try check(c.vkCreateDevice(physical_device.handle, &device_info, null, &device));
-        var queue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(device, physical_device.graphics_queue_family_index, 0, &queue);
-
-        var fence_info: c.VkFenceCreateInfo = .{
-            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
-        };
-        var fence: c.VkFence = undefined;
-        try check(c.vkCreateFence(device, &fence_info, null, &fence));
-
-        return .{
-            .handle = device,
-            .immidiate_fence = fence,
-            .graphics_queue = queue,
-        };
-    }
-
-    pub fn deinit(self: @This()) void {
-        c.vkDestroyDevice(self.handle, null);
-    }
-};
-
 pub const CommandPool = struct {
     handle: c.VkCommandPool,
 
@@ -282,49 +163,3 @@ pub const CommandPool = struct {
         c.vkDestroyCommandPool(device.handle, self.handle, null);
     }
 };
-
-pub fn beginImmediateCommand(
-    device: Device,
-    command_pool: c.VkCommandPool,
-) !c.VkCommandBuffer {
-    var alloc_info: c.VkCommandBufferAllocateInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool = command_pool,
-        .commandBufferCount = 1,
-    };
-
-    var command_buffer: c.VkCommandBuffer = undefined;
-    try check(c.vkAllocateCommandBuffers(device, &alloc_info, &command_buffer));
-
-    check(c.vkResetFences(device.handle, 1, device.immidiate_fence));
-    check(c.vkResetCommandBuffer());
-
-    var begin_info: c.VkCommandBufferBeginInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-
-    try check(c.vkBeginCommandBuffer(command_buffer, &begin_info));
-    return command_buffer;
-}
-
-pub fn endImmediateCommand(
-    device: Device,
-    command_pool: c.VkCommandPool,
-    command_buffer: c.VkCommandBuffer,
-) !void {
-    try check(c.vkEndCommandBuffer(command_buffer));
-
-    var submit_info: c.VkSubmitInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &command_buffer,
-    };
-
-    try check(c.vkQueueSubmit(device.graphics_queue, 1, &submit_info, device.immidiate_fence));
-
-    try check(c.vkWaitForFences(device.handle, 1, device.immidiate_fence, true, 9999999999));
-
-    c.vkFreeCommandBuffers(device, command_pool, 1, &command_buffer);
-}
