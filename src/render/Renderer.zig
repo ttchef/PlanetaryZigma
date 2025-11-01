@@ -278,7 +278,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
     //Triangle
-    // vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
 
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);

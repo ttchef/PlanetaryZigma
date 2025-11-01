@@ -27,9 +27,18 @@ pub fn main() !void {
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
 
+    // {
+    //     var envs = std.process.EnvMap.init(allocator);
+    //     defer envs.deinit();
+    //     if (envs.get("ENABLE_VULKAN_RENDERDOC_CAPTURE") == null) glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
+    // } TODO: Use this above somehow instead of forceing X11
+    glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
+
     try glfw.init();
     defer glfw.deinit();
-    glfw.Window.Hint.set(.{ .client_api = .none });
+    glfw.Window.Hint.set(.{
+        .client_api = .none,
+    });
     const window: *glfw.Window = try .init(.{
         .title = "Hello, world!",
         .size = .{ .width = 900, .height = 800 },
@@ -38,19 +47,26 @@ pub fn main() !void {
 
     var renderer: Renderer = try .init(.{
         .instance = .{
-            .extensions = &.{
-                "VK_KHR_surface",
-                "VK_EXT_debug_utils",
-                switch (builtin.target.os.tag) {
-                    .windows => "VK_KHR_win32_surface",
-                    .linux, .freebsd, .openbsd, .dragonfly => "VK_KHR_wayland_surface",
-                    .macos => "VK_MVK_macos_surface",
-                    else => @compileError("Unsupported OS"),
-                },
+            .extensions = blk: {
+                var arr: [8][*:0]const u8 = undefined;
+                arr[0] = "VK_KHR_surface";
+                arr[1] = "VK_EXT_debug_utils";
+
+                var count: usize = 2;
+                var glfw_ext_count: u32 = 0;
+                const glfw_exts = glfw.c.glfwGetRequiredInstanceExtensions(&glfw_ext_count);
+
+                if (glfw_ext_count != 0) {
+                    for (glfw_exts[0..glfw_ext_count]) |ext| {
+                        arr[count] = @ptrCast(ext);
+                        count += 1;
+                    }
+                }
+                break :blk arr[0..count];
             },
             .layers = &.{
                 "VK_LAYER_KHRONOS_validation",
-                "VK_LAYER_LUNARG_api_dump",
+                // "VK_LAYER_LUNARG_api_dump",
             },
             .debug_config = .{
                 .severities = .{
