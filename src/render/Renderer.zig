@@ -292,7 +292,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
     var push: vk.Mesh.GPUDrawPushConstants = .{
         .vertex_buffer = self.the_mesh.vertex_buffer_address,
-        .world_matrix = nz.Mat4x4(f32).identity,
+        .world_matrix = nz.Mat4x4(f32).identity.d,
     };
 
     vk.c.vkCmdPushConstants(

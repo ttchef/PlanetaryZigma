@@ -17,8 +17,8 @@ pub const Vertex = packed struct {
     color: nz.Vec4(f32),
 };
 
-pub const GPUDrawPushConstants = struct {
-    world_matrix: nz.Mat4x4(f32),
+pub const GPUDrawPushConstants = extern struct {
+    world_matrix: [16]f32,
     vertex_buffer: c.VkDeviceAddress,
 };
 
