@@ -17,8 +17,8 @@ pub const Vertex = packed struct {
     color: nz.Vec4(f32),
 };
 
-pub const GPUDrawPushConstants = struct {
-    world_matrix: nz.Mat4x4(f32),
+pub const GPUDrawPushConstants = extern struct {
+    world_matrix: [16]f32,
     vertex_buffer: c.VkDeviceAddress,
 };
 
@@ -86,7 +86,7 @@ pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []i32, ver
     };
 }
 
-fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
+pub fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
     self.index_buffer.deinit(vma_allocator);
     self.vertex_buffer.deinit(vma_allocator);
 }

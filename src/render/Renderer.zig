@@ -66,16 +66,18 @@ pub fn init(config: Config) !@This() {
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const swapchain: vk.Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
-    const draw_image: vk.Image = try .init(vulkan_mem_alloc.vulkan_mem_alloc, device, swapchain.format, swapchain.extent);
+    const draw_image: vk.Image = try .init(vulkan_mem_alloc.handle, device, swapchain.format, swapchain.extent);
 
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
 
-    const the_mesh: vk.Mesh = try .init(device, vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
+    const the_mesh: vk.Mesh = try .init(device, vulkan_mem_alloc.handle, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
 
     const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
     const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
+    defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
 
     var pipelines: [16]vk.Pipeline = undefined;
     var config_comp1: vk.Pipeline.Compute.Config = .{
@@ -97,12 +99,11 @@ pub fn init(config: Config) !@This() {
     pipelines[1] = try .initCompute(device, &config_comp2);
     pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
-    vk.c.vkDestroyShaderModule(device.handle, shader, null);
-    vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
-
     //TODO GET GRAPHICS PIPELINE WORKING
     const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
     const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
+    defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
 
     var color_blend: vk.c.VkPipelineColorBlendAttachmentState = .{
         .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
@@ -129,8 +130,9 @@ pub fn init(config: Config) !@This() {
     config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
     config_graphics.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
     pipelines[2] = try .initGraphics(device, &config_graphics);
-    vk.c.vkDestroyShaderModule(device.handle, vert, null);
+
     const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
     var config_mesh: vk.Pipeline.Graphics.Config = .{
         .fragment_shaders = .{
             .module = frag,
@@ -145,15 +147,21 @@ pub fn init(config: Config) !@This() {
             .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
         }},
     };
-    config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
+    config_mesh.viewport_state.scissorCount = 1;
+    config_mesh.viewport_state.viewportCount = 1;
+    config_mesh.color_blend_state.attachmentCount = 1;
+    config_mesh.color_blend_state.logicOp = vk.c.VK_LOGIC_OP_COPY;
+    config_mesh.color_blend_state.pAttachments = &color_blend;
+    config_mesh.dynamic_state.dynamicStateCount = 2;
+    config_mesh.dynamic_state.pDynamicStates = &state[0];
     config_mesh.render_info.colorAttachmentCount = 1;
     config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
     config_mesh.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
+    config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
-    vk.c.vkDestroyShaderModule(device.handle, frag, null);
-
     std.debug.print("Address {*}\n", .{instance.handle});
+
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -164,7 +172,7 @@ pub fn init(config: Config) !@This() {
         .descriptor = descriptor,
         .pipelines = pipelines,
         .current_pipeline = 0,
-        .max_pipelines = 3,
+        .max_pipelines = 4,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .the_mesh = the_mesh,
         .draw_image = draw_image,
@@ -284,7 +292,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
     var push: vk.Mesh.GPUDrawPushConstants = .{
         .vertex_buffer = self.the_mesh.vertex_buffer_address,
-        .world_matrix = nz.Mat4x4(f32).identity,
+        .world_matrix = nz.Mat4x4(f32).identity.d,
     };
 
     vk.c.vkCmdPushConstants(
@@ -359,9 +367,11 @@ pub fn deinit(self: @This()) void {
     self.swapchain.deinit(self.device);
 
     self.descriptor.deinit(self.device);
+    self.descriptor_graphics.deinit(self.device);
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
+    self.the_mesh.deinit(self.vulkan_mem_alloc.handle);
     self.vulkan_mem_alloc.deinit();
 
     self.device.deinit();

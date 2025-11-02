@@ -82,7 +82,7 @@ pub fn main() !void {
                 "VK_KHR_dynamic_rendering",
                 "VK_KHR_swapchain",
                 "VK_EXT_descriptor_buffer",
-                // "GL_EXT_buffer_reference",
+                "VK_KHR_buffer_device_address",
             },
         },
         .surface = .{
@@ -99,6 +99,7 @@ pub fn main() !void {
     std.Thread.sleep(3000);
 
     var time: f32 = 0;
+
     while (!window.shouldClose()) {
         const delta_time = try getDeltaTime();
         time += delta_time;

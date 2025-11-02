@@ -73,5 +73,5 @@ pub fn init(vulkan_mem_alloc: vma.VmaAllocator, device: vk.Device, format: vk.c.
 
 pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
     vk.c.vkDestroyImageView(device.handle, self.image_view, null);
-    vma.vmaDestroyImage(vulkan_mem_alloc.vulkan_mem_alloc, @ptrCast(self.image), self.vma_allocation);
+    vma.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.image), self.vma_allocation);
 }
