@@ -11,8 +11,10 @@ pub fn init(
 ) !Self {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
+    var file_reader = file.reader(&.{});
+    const reader: *std.Io.Reader = &file_reader.interface;
+    const tok_buffer = try reader.readAlloc(allocator, (try file.stat()).size);
 
-    const tok_buffer = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
     var lines = std.mem.tokenizeAny(u8, tok_buffer, "\n");
 
     var positions: std.ArrayListUnmanaged(f32) = .empty;

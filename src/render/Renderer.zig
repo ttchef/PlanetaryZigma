@@ -5,19 +5,15 @@ pub const vk = @import("vulkan/vulkan.zig");
 pub var rect_vertices = [_]vk.Mesh.Vertex{
     .{
         .position = .{ 0.5, -0.5, 0.0 },
-        .color = .{ 0.0, 0.0, 0.0, 1.0 },
     },
     .{
         .position = .{ 0.5, 0.5, 0.0 },
-        .color = .{ 0.5, 0.5, 0.5, 1.0 },
     },
     .{
-        .position = .{ -0.5, -0.5, 0.0 },
-        .color = .{ 1.0, 0.0, 0.0, 1.0 },
+        .position = .{ -1, -0.5, 0.0 },
     },
     .{
         .position = .{ -0.5, 0.5, 0.0 },
-        .color = .{ 0.0, 1.0, 0.0, 1.0 },
     },
 };
 
@@ -40,6 +36,7 @@ pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
 the_mesh: vk.Mesh,
+meshes: std.ArrayList(vk.Mesh) = .empty,
 
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
@@ -178,6 +175,30 @@ pub fn init(config: Config) !@This() {
         .draw_image = draw_image,
         .descriptor_graphics = descriptor_graphics,
     };
+}
+
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+    _ = vk.c.vkDeviceWaitIdle(self.device.handle);
+    self.swapchain.deinit(self.device);
+
+    self.descriptor.deinit(self.device);
+    self.descriptor_graphics.deinit(self.device);
+    for (0..self.max_pipelines) |i|
+        self.pipelines[i].deinit(self.device);
+    self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
+
+    self.the_mesh.deinit(self.vulkan_mem_alloc.handle);
+    for (self.meshes.items) |mesh| {
+        mesh.deinit(self.vulkan_mem_alloc.handle);
+    }
+    self.meshes.deinit(allocator);
+
+    self.vulkan_mem_alloc.deinit();
+
+    self.device.deinit();
+    self.surface.deinit(self.instance);
+    self.debug_messenger.deinit(self.instance);
+    self.instance.deinit();
 }
 
 pub fn draw(self: *@This(), time: f32) !void {
@@ -362,20 +383,11 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn deinit(self: @This()) void {
-    _ = vk.c.vkDeviceWaitIdle(self.device.handle);
-    self.swapchain.deinit(self.device);
-
-    self.descriptor.deinit(self.device);
-    self.descriptor_graphics.deinit(self.device);
-    for (0..self.max_pipelines) |i|
-        self.pipelines[i].deinit(self.device);
-    self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
-    self.the_mesh.deinit(self.vulkan_mem_alloc.handle);
-    self.vulkan_mem_alloc.deinit();
-
-    self.device.deinit();
-    self.surface.deinit(self.instance);
-    self.debug_messenger.deinit(self.instance);
-    self.instance.deinit();
-}
+// pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, indices: []u32, vertices: []f32) !void {
+//     try self.meshes.append(allocator, try .init(
+//         self.device,
+//         self.vulkan_mem_alloc.handle,
+//         indices,
+//         vertices,
+//     ));
+// }
