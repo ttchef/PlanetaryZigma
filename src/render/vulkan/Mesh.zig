@@ -9,12 +9,10 @@ index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
 
-pub const Vertex = packed struct {
+pub const Vertex = extern struct {
     position: nz.Vec3(f32),
-    uv_x: f32 = 0,
+    uv: nz.Vec2(f32) = @splat(0),
     normal: nz.Vec3(f32) = @splat(0),
-    uv_y: f32 = 0,
-    color: nz.Vec4(f32),
 };
 
 pub const GPUDrawPushConstants = extern struct {
@@ -22,9 +20,9 @@ pub const GPUDrawPushConstants = extern struct {
     vertex_buffer: c.VkDeviceAddress,
 };
 
-pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []i32, vertices: []Vertex) !@This() {
+pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
-    const index_buffer_size: usize = indices.len * @sizeOf(i32);
+    const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
     var vertex_buffer_address: c.VkDeviceAddress = undefined;
     const vertex_buffer: Buffer = try .init(

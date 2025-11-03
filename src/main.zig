@@ -6,6 +6,7 @@ const physics = @import("physics.zig");
 const ecs = @import("ecs");
 const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
+const Obj = @import("assets/Obj.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
@@ -94,7 +95,9 @@ pub fn main() !void {
             .heigth = @intCast(window.getSize().height),
         },
     });
-    defer renderer.deinit();
+    defer renderer.deinit(allocator);
+    // const object = try Obj.init(allocator, "assets/objects/chung.obj");
+    // try renderer.uploadMeshToGPU(allocator, object.indices, object.vertices);
 
     std.Thread.sleep(3000);
 
