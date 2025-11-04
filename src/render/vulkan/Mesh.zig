@@ -8,11 +8,12 @@ const Buffer = @import("Buffer.zig");
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
+indecies_count: u32,
 
 pub const Vertex = extern struct {
-    position: nz.Vec3(f32),
-    uv: nz.Vec2(f32) = @splat(0),
-    normal: nz.Vec3(f32) = @splat(0),
+    position: nz.Vec4(f32),
+    // uv: nz.Vec2(f32) = @splat(0),
+    // normal: nz.Vec3(f32) = @splat(0),
 };
 
 pub const GPUDrawPushConstants = extern struct {
@@ -81,6 +82,7 @@ pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []u32, ver
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
+        .indecies_count = @intCast(indices.len),
     };
 }
 

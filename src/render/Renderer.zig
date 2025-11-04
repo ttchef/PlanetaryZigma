@@ -4,16 +4,16 @@ pub const vk = @import("vulkan/vulkan.zig");
 
 pub var rect_vertices = [_]vk.Mesh.Vertex{
     .{
-        .position = .{ 0.5, -0.5, 0.0 },
+        .position = .{ 0.5, -0.5, 0.0, 1.0 },
     },
     .{
-        .position = .{ 0.5, 0.5, 0.0 },
+        .position = .{ 0.5, 0.5, 0.0, 1.0 },
     },
     .{
-        .position = .{ -1, -0.5, 0.0 },
+        .position = .{ -1, -0.5, 0.0, 1.0 },
     },
     .{
-        .position = .{ -0.5, 0.5, 0.0 },
+        .position = .{ -0.5, 0.5, 0.0, 1.0 },
     },
 };
 
@@ -311,8 +311,9 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
+
     var push: vk.Mesh.GPUDrawPushConstants = .{
-        .vertex_buffer = self.the_mesh.vertex_buffer_address,
+        .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
         .world_matrix = nz.Mat4x4(f32).identity.d,
     };
 
@@ -324,8 +325,8 @@ pub fn draw(self: *@This(), time: f32) !void {
         @sizeOf(vk.Mesh.GPUDrawPushConstants),
         &push,
     );
-    vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.the_mesh.index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
-    vk.c.vkCmdDrawIndexed(cmd_buffer, 6, 1, 0, 0, 0);
+    vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+    vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
 
     vk.c.vkCmdEndRendering(cmd_buffer);
     //DONE RENDERING VERTECIES
@@ -383,11 +384,11 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-// pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, indices: []u32, vertices: []f32) !void {
-//     try self.meshes.append(allocator, try .init(
-//         self.device,
-//         self.vulkan_mem_alloc.handle,
-//         indices,
-//         vertices,
-//     ));
-// }
+pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, indices: []u32, vertices: []vk.Mesh.Vertex) !void {
+    try self.meshes.append(allocator, try .init(
+        self.device,
+        self.vulkan_mem_alloc.handle,
+        indices,
+        vertices,
+    ));
+}
