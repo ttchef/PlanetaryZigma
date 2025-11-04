@@ -96,8 +96,30 @@ pub fn main() !void {
         },
     });
     defer renderer.deinit(allocator);
-    // const object = try Obj.init(allocator, "assets/objects/chung.obj");
-    // try renderer.uploadMeshToGPU(allocator, object.indices, object.vertices);
+
+    var object = Obj.init(allocator);
+    defer object.deinit();
+    var file = try std.fs.cwd().openFile("assets/objects/cube.obj", .{});
+    defer file.close();
+    var file_reader = file.reader(&.{});
+    const reader: *std.Io.Reader = &file_reader.interface;
+    const tok_buffer = try reader.readAlloc(allocator, (try file.stat()).size);
+    defer allocator.free(tok_buffer);
+    try object.parseSlice(tok_buffer);
+    var vertices_list: std.ArrayList(Renderer.vk.Mesh.Vertex) = .empty;
+    var indecies_list: std.ArrayList(u32) = .empty;
+    defer vertices_list.deinit(allocator);
+    defer indecies_list.deinit(allocator);
+    for (object.faces.items) |face| {
+        for (face.vertex_indices.items) |index| {
+            const vertex: Renderer.vk.Mesh.Vertex = .{
+                .position = object.vertices.items[@intCast(index)],
+            };
+            try vertices_list.append(allocator, vertex);
+            try indecies_list.append(allocator, @intCast(indecies_list.items.len));
+        }
+    }
+    try renderer.uploadMeshToGPU(allocator, indecies_list.items, vertices_list.items);
 
     std.Thread.sleep(3000);
 
