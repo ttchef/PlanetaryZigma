@@ -46,7 +46,12 @@ pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []u32, ver
         vma.VMA_MEMORY_USAGE_GPU_ONLY,
     );
 
-    var staging: Buffer = try .init(vma_allocator, vertex_buffer_size + index_buffer_size, c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma.VMA_MEMORY_USAGE_CPU_ONLY);
+    var staging: Buffer = try .init(
+        vma_allocator,
+        vertex_buffer_size + index_buffer_size,
+        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        vma.VMA_MEMORY_USAGE_CPU_ONLY,
+    );
 
     var info: vma.VmaAllocationInfo = undefined;
     vma.vmaGetAllocationInfo(vma_allocator, staging.vma_allocation, &info);

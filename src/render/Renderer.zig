@@ -2,6 +2,7 @@ const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
+const tiny_obj = @import("tiny_obj_loader");
 
 pub var rect_vertices = [_]vk.Mesh.Vertex{
     .{
@@ -386,6 +387,8 @@ pub fn draw(self: *@This(), time: f32) !void {
 }
 
 pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []const u8) !void {
+    // tiny_obj.tinyobj_parse_obj();
+
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -409,6 +412,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
             };
             try vertices_list.append(allocator, vertex);
             try indecies_list.append(allocator, @intCast(index));
+            std.debug.print("index: {d}, index_len: {d}, vertex: {any}\n", .{ index, indecies_list.items.len, vertex });
         }
     }
 
