@@ -27,6 +27,13 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     vma.addIncludePath(vulkan_header_dep.path("include/"));
 
+    const tiny_obj_loader_dep = b.dependency("tiny_obj_loader", .{});
+    const tiny_obj_loader = b.addTranslateC(.{
+        .root_source_file = tiny_obj_loader_dep.path("tinyobj_loader_c.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -57,6 +64,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "vma", .module = vma },
+                .{ .name = "tiny_obj_loader", .module = tiny_obj_loader },
                 .{ .name = "stb", .module = stb.createModule() },
             },
         }),
@@ -103,8 +111,18 @@ pub fn build(b: *std.Build) void {
         ),
         .flags = &.{"-std=c++14"},
     });
+    // Add tiny obj loader implementation
+    exe.addCSourceFile(.{
+        .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
+            \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
+            \\#include "tinyobj_loader_c.h"
+        ),
+        .flags = &.{"-std=c99"},
+    });
+
     exe.addIncludePath(vma_dep.path("include/"));
     exe.addIncludePath(vulkan_header_dep.path("include/"));
+    exe.addIncludePath(tiny_obj_loader_dep.path("."));
 
     b.installArtifact(exe);
 

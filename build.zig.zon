@@ -32,6 +32,10 @@
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
+        .tiny_obj_loader = .{
+            .url = "git+https://github.com/syoyo/tinyobjloader-c.git",
+            .hash = "N-V-__8AAKWmBQDq9z-2g3I1U-0lcQNLp3GjkIX3CScXeOiN",
+        },
     },
     .paths = .{
         "build.zig",

@@ -6,7 +6,6 @@ const physics = @import("physics.zig");
 const ecs = @import("ecs");
 const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
-const Obj = @import("assets/Obj.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
@@ -97,38 +96,28 @@ pub fn main() !void {
     });
     defer renderer.deinit(allocator);
 
-    var object = Obj.init(allocator);
-    defer object.deinit();
-    var file = try std.fs.cwd().openFile("assets/objects/cube.obj", .{});
-    defer file.close();
-    var file_reader = file.reader(&.{});
-    const reader: *std.Io.Reader = &file_reader.interface;
-    const tok_buffer = try reader.readAlloc(allocator, (try file.stat()).size);
-    defer allocator.free(tok_buffer);
-    try object.parseSlice(tok_buffer);
-    var vertices_list: std.ArrayList(Renderer.vk.Mesh.Vertex) = .empty;
-    var indecies_list: std.ArrayList(u32) = .empty;
-    defer vertices_list.deinit(allocator);
-    defer indecies_list.deinit(allocator);
-    for (object.faces.items) |face| {
-        for (face.vertex_indices.items) |index| {
-            const vertex: Renderer.vk.Mesh.Vertex = .{
-                .position = object.vertices.items[@intCast(index)],
-            };
-            try vertices_list.append(allocator, vertex);
-            try indecies_list.append(allocator, @intCast(indecies_list.items.len));
-        }
-    }
-    try renderer.uploadMeshToGPU(allocator, indecies_list.items, vertices_list.items);
-
-    std.Thread.sleep(3000);
+    std.debug.print("About to upload mesh\n", .{});
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+    std.debug.print("Mesh upload completed, meshes.len: {d}\n", .{renderer.meshes.items.len});
 
     var time: f32 = 0;
+    var timer = try std.time.Timer.start();
+    // var accumulated_time: f32 = 0;
+    // const seconds_per_update = 0.016;
+
+    std.debug.print("About to call renderer.draw({d})\n", .{time});
+    try renderer.draw(time);
+    std.debug.print("Successfully returned from renderer.draw()\n", .{});
 
     while (!window.shouldClose()) {
-        const delta_time = try getDeltaTime();
+        const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
+        // accumulated_time += delta_time;
+
+        // if (accumulated_time >= seconds_per_update) {
         try renderer.draw(time);
+        //     accumulated_time -= seconds_per_update;
+        // }
         //     try proccessEvents(&spacetime, &world);
 
         //     Render.update(window, delta_time);
@@ -166,19 +155,19 @@ pub fn initVulkanSurface(instance: Renderer.vk.Instance, window: *anyopaque) !*a
     return surface orelse return error.VulkanCreateSurface;
 }
 
-pub fn getDeltaTime() !f32 {
-    const Static = struct {
-        var previous: ?std.time.Instant = null;
-    };
+// pub fn getDeltaTime() !f32 {
+//     const Static = struct {
+//         var previous: ?std.time.Instant = null;
+//     };
 
-    const now = try std.time.Instant.now();
-    const prev = Static.previous orelse {
-        Static.previous = now;
-        return 0.0;
-    };
+//     const now = try std.time.Instant.now();
+//     const prev = Static.previous orelse {
+//         Static.previous = now;
+//         return 0.0;
+//     };
 
-    const dt_ns = now.since(prev);
-    Static.previous = now;
+//     const dt_ns = now.since(prev);
+//     Static.previous = now;
 
-    return @as(f32, @floatFromInt(dt_ns)) / 1_000_000_000.0;
-}
+//     return @as(f32, @floatFromInt(dt_ns)) / 1_000_000_000.0;
+// }
