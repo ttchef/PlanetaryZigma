@@ -114,7 +114,7 @@ pub fn build(b: *std.Build) void {
     // Add tiny obj loader implementation
     exe.addCSourceFile(.{
         .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
-            \\#define TINYOBJLOADER_IMPLEMENTATION
+            \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
             \\#include "tinyobj_loader_c.h"
         ),
         .flags = &.{"-std=c99"},

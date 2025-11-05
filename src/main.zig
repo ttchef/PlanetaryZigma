@@ -96,14 +96,18 @@ pub fn main() !void {
     });
     defer renderer.deinit(allocator);
 
+    std.debug.print("About to upload mesh\n", .{});
     try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+    std.debug.print("Mesh upload completed, meshes.len: {d}\n", .{renderer.meshes.items.len});
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
     // var accumulated_time: f32 = 0;
     // const seconds_per_update = 0.016;
 
+    std.debug.print("About to call renderer.draw({d})\n", .{time});
     try renderer.draw(time);
+    std.debug.print("Successfully returned from renderer.draw()\n", .{});
 
     while (!window.shouldClose()) {
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);

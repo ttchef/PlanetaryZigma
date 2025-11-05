@@ -314,9 +314,19 @@ pub fn draw(self: *@This(), time: f32) !void {
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
 
+    //projection matrix + view + model
+    const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
+    var projection: nz.Mat4x4(f32) = .perspective(
+        70,
+        @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
+        10000,
+        0.1,
+    );
+    projection.d[6] *= -1;
+
     var push: vk.Mesh.GPUDrawPushConstants = .{
         .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
-        .world_matrix = nz.Mat4x4(f32).identity.d,
+        .world_matrix = projection.mul(view).d,
     };
 
     vk.c.vkCmdPushConstants(
@@ -386,40 +396,89 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
+//TODO: Fix vertcies and indecies + allocation failure.
+//TODO: move logic away
 pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []const u8) !void {
-    // tiny_obj.tinyobj_parse_obj();
+    std.debug.print("\nTRY TO ADD MESH {s}\n\n", .{path});
 
-    var file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    var attribs = tiny_obj.tinyobj_attrib_t{};
+    var shapes: [*c]tiny_obj.tinyobj_shape_t = null;
+    var num_shapes: usize = 0;
+    var materials: [*c]tiny_obj.tinyobj_material_t = null;
+    var num_materials: usize = 0;
 
-    var file_reader = file.reader(&.{});
-    const reader: *std.Io.Reader = &file_reader.interface;
-    const tok_buffer = try reader.readAlloc(allocator, (try file.stat()).size);
-    defer allocator.free(tok_buffer);
+    std.debug.print("DEBUG: About to call tinyobj_parse_obj\n", .{});
 
-    var object = Obj.init(allocator);
-    defer object.deinit();
-    try object.parseSlice(tok_buffer);
+    const result = tiny_obj.tinyobj_parse_obj(
+        &attribs,
+        &shapes,
+        &num_shapes,
+        &materials,
+        &num_materials,
+        path.ptr,
+        Obj.tinyObjFileReader,
+        null,
+        tiny_obj.TINYOBJ_FLAG_TRIANGULATE,
+    );
+
+    std.debug.print("DEBUG: tinyobj_parse_obj returned {d}\n", .{result});
+
+    if (result != tiny_obj.TINYOBJ_SUCCESS) {
+        std.debug.print("Failed to parse OBJ file: {s}, error code: {d}\n", .{ path, result });
+        return error.ObjParseFailed;
+    }
 
     var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
     var indecies_list: std.ArrayList(u32) = .empty;
     defer vertices_list.deinit(allocator);
     defer indecies_list.deinit(allocator);
-    for (object.faces.items) |face| {
-        for (face.vertex_indices.items) |index| {
-            const vertex: vk.Mesh.Vertex = .{
-                .position = object.vertices.items[@intCast(index)],
-            };
-            try vertices_list.append(allocator, vertex);
-            try indecies_list.append(allocator, @intCast(index));
-            std.debug.print("index: {d}, index_len: {d}, vertex: {any}\n", .{ index, indecies_list.items.len, vertex });
+
+    // Process all faces from the attributes
+    var face_offset: usize = 0;
+    var face_idx: usize = 0;
+    while (face_idx < @as(usize, @intCast(attribs.num_faces))) : (face_idx += 1) {
+        const face_vertex_count = attribs.face_num_verts[face_idx];
+
+        // For triangulated meshes, we get triangles (3 vertices per face)
+        if (face_vertex_count == 3) {
+            var i: usize = 0;
+            while (i < 3) : (i += 1) {
+                const index = attribs.faces[face_offset + i];
+
+                // Get vertex position
+                const pos_x = attribs.vertices[@as(usize, @intCast(3 * index.v_idx))];
+                const pos_y = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 1))];
+                const pos_z = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 2))];
+
+                const vertex: vk.Mesh.Vertex = .{
+                    .position = .{ pos_x, pos_y, pos_z, 1.0 },
+                };
+
+                try vertices_list.append(allocator, vertex);
+                try indecies_list.append(allocator, @intCast(indecies_list.items.len));
+
+                std.debug.print("index: {d}, vertex: {any}\n", .{ index.v_idx, vertex });
+            }
         }
+
+        face_offset += @as(usize, @intCast(face_vertex_count));
     }
 
-    try self.meshes.append(allocator, try .init(
-        self.device,
-        self.vulkan_mem_alloc.handle,
-        indecies_list.items,
-        vertices_list.items,
-    ));
+    // Free tiny_obj_loader memory
+    tiny_obj.tinyobj_attrib_free(&attribs);
+    tiny_obj.tinyobj_shapes_free(shapes, num_shapes);
+    tiny_obj.tinyobj_materials_free(materials, num_materials);
+
+    if (vertices_list.items.len > 0 and indecies_list.items.len > 0) {
+        std.debug.print("\nADDED MESH {s}\n\n", .{path});
+
+        try self.meshes.append(allocator, try .init(
+            self.device,
+            self.vulkan_mem_alloc.handle,
+            indecies_list.items,
+            vertices_list.items,
+        ));
+    } else {
+        std.debug.print("\nNo valid mesh data found in {s}\n\n", .{path});
+    }
 }
