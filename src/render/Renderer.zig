@@ -1,6 +1,7 @@
 const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
+const Obj = @import("asset/Obj.zig");
 
 pub var rect_vertices = [_]vk.Mesh.Vertex{
     .{
@@ -384,11 +385,37 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, indices: []u32, vertices: []vk.Mesh.Vertex) !void {
+pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []const u8) !void {
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    var file_reader = file.reader(&.{});
+    const reader: *std.Io.Reader = &file_reader.interface;
+    const tok_buffer = try reader.readAlloc(allocator, (try file.stat()).size);
+    defer allocator.free(tok_buffer);
+
+    var object = Obj.init(allocator);
+    defer object.deinit();
+    try object.parseSlice(tok_buffer);
+
+    var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
+    var indecies_list: std.ArrayList(u32) = .empty;
+    defer vertices_list.deinit(allocator);
+    defer indecies_list.deinit(allocator);
+    for (object.faces.items) |face| {
+        for (face.vertex_indices.items) |index| {
+            const vertex: vk.Mesh.Vertex = .{
+                .position = object.vertices.items[@intCast(index)],
+            };
+            try vertices_list.append(allocator, vertex);
+            try indecies_list.append(allocator, @intCast(index));
+        }
+    }
+
     try self.meshes.append(allocator, try .init(
         self.device,
         self.vulkan_mem_alloc.handle,
-        indices,
-        vertices,
+        indecies_list.items,
+        vertices_list.items,
     ));
 }
