@@ -126,6 +126,18 @@ pub const Pipeline = union(enum) {
             },
             base_pipeline_handle: vk.c.VkPipeline = null,
             base_pipeline_index: i32 = -1,
+
+            pub fn enableDepthTesting(self: *@This(), depth_write_enable: u32, op: vk.c.VkCompareOp) void {
+                self.depth_stencil_state.depthTestEnable = vk.c.VK_TRUE;
+                self.depth_stencil_state.depthWriteEnable = depth_write_enable;
+                self.depth_stencil_state.depthCompareOp = op;
+                self.depth_stencil_state.depthBoundsTestEnable = vk.c.VK_FALSE;
+                self.depth_stencil_state.stencilTestEnable = vk.c.VK_FALSE;
+                // self.depth_stencil_state.front = {};
+                // self.depth_stencil_state.back = {};
+                self.depth_stencil_state.minDepthBounds = 0;
+                self.depth_stencil_state.maxDepthBounds = 1;
+            }
         };
 
         pub fn init(device: vk.Device, config: *Config) !@This() {

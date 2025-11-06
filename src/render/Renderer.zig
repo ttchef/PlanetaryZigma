@@ -42,6 +42,7 @@ meshes: std.ArrayList(vk.Mesh) = .empty,
 
 vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
+depth_image: vk.Image,
 
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
@@ -65,7 +66,26 @@ pub fn init(config: Config) !@This() {
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const swapchain: vk.Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
-    const draw_image: vk.Image = try .init(vulkan_mem_alloc.handle, device, swapchain.format, swapchain.extent);
+
+    const draw_image: vk.Image = try .init(
+        vulkan_mem_alloc.handle,
+        device,
+        vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        swapchain.extent,
+        vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            vk.c.VK_IMAGE_USAGE_STORAGE_BIT |
+            vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+    );
+    const depth_image: vk.Image = try .init(
+        vulkan_mem_alloc.handle,
+        device,
+        vk.c.VK_FORMAT_D32_SFLOAT,
+        swapchain.extent,
+        vk.c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        vk.c.VK_IMAGE_ASPECT_DEPTH_BIT,
+    );
 
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
@@ -127,7 +147,8 @@ pub fn init(config: Config) !@This() {
     config_graphics.dynamic_state.pDynamicStates = &state[0];
     config_graphics.render_info.colorAttachmentCount = 1;
     config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
-    config_graphics.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
+    config_graphics.render_info.depthAttachmentFormat = depth_image.format;
+    config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipelines[2] = try .initGraphics(device, &config_graphics);
 
     const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
@@ -155,8 +176,9 @@ pub fn init(config: Config) !@This() {
     config_mesh.dynamic_state.pDynamicStates = &state[0];
     config_mesh.render_info.colorAttachmentCount = 1;
     config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
-    config_mesh.render_info.depthAttachmentFormat = vk.c.VK_FORMAT_UNDEFINED;
+    config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
+    config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     std.debug.print("Address {*}\n", .{instance.handle});
@@ -175,6 +197,7 @@ pub fn init(config: Config) !@This() {
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .the_mesh = the_mesh,
         .draw_image = draw_image,
+        .depth_image = depth_image,
         .descriptor_graphics = descriptor_graphics,
     };
 }
@@ -188,6 +211,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
+    self.depth_image.deinit(self.vulkan_mem_alloc, self.device);
 
     self.the_mesh.deinit(self.vulkan_mem_alloc.handle);
     for (self.meshes.items) |mesh| {
@@ -225,7 +249,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    var draw_image_barrier: vk.Barrier = .init(cmd_buffer, self.draw_image.image);
+    var draw_image_barrier: vk.Barrier = .init(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vk.c.VK_ACCESS_SHADER_WRITE_BIT);
 
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
@@ -245,8 +269,17 @@ pub fn draw(self: *@This(), time: f32) !void {
         1,
     );
 
-    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-
+    draw_image_barrier.transition(
+        vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    );
+    var depth_image_barrier: vk.Barrier = .init(cmd_buffer, self.depth_image.image, vk.c.VK_IMAGE_ASPECT_DEPTH_BIT);
+    depth_image_barrier.transition(
+        vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | vk.c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    );
     //START DRAWING VERTECIES
     var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -258,7 +291,23 @@ pub fn draw(self: *@This(), time: f32) !void {
         .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
         .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = .{ .color = .{ .float32 = .{ 0.0, 0.0, 0.0, 1.0 } } },
+        .clearValue = .{
+            .color = .{
+                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        },
+    };
+    var depth_attachment: vk.c.VkRenderingAttachmentInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = self.depth_image.image_view,
+        .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{
+            .depthStencil = .{
+                .depth = 0,
+            },
+        },
     };
 
     var renderInfo: vk.c.VkRenderingInfo = .{
@@ -276,7 +325,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .viewMask = 0,
         .colorAttachmentCount = 1,
         .pColorAttachments = &color_attachment,
-        .pDepthAttachment = null,
+        .pDepthAttachment = &depth_attachment,
         .pStencilAttachment = null,
     };
 
@@ -345,7 +394,7 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
 
-    var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index]);
+    var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
     vk.copyImageToImage(
         cmd_buffer,

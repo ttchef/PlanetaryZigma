@@ -2,14 +2,21 @@ const c = @import("vulkan");
 
 cmd: c.VkCommandBuffer,
 image: c.VkImage,
+aspect_mask: c.VkImageAspectFlags,
+
 layout: c.VkImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
 stage: c.VkPipelineStageFlags = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 access: c.VkAccessFlags = 0,
 
-pub fn init(cmd: c.VkCommandBuffer, image: c.VkImage) @This() {
+pub fn init(
+    cmd: c.VkCommandBuffer,
+    image: c.VkImage,
+    aspect_mask: c.VkImageAspectFlags,
+) @This() {
     return .{
         .cmd = cmd,
         .image = image,
+        .aspect_mask = aspect_mask,
     };
 }
 
@@ -26,7 +33,7 @@ pub fn transition(self: *@This(), layout: c.VkImageLayout, stage: c.VkPipelineSt
         .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
         .image = self.image,
         .subresourceRange = .{
-            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = self.aspect_mask,
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
