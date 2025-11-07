@@ -44,6 +44,8 @@ vulkan_mem_alloc: vk.Vma,
 draw_image: vk.Image,
 depth_image: vk.Image,
 
+resize_request: bool = false,
+
 pub const Config = struct { instance: struct {
     extensions: ?[]const [*:0]const u8 = null,
     layers: ?[]const [*:0]const u8 = null,
@@ -118,15 +120,11 @@ pub fn init(config: Config) !@This() {
     pipelines[1] = try .initCompute(device, &config_comp2);
     pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
-    //TODO GET GRAPHICS PIPELINE WORKING
     const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
     const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
     defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
     defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
 
-    var color_blend: vk.c.VkPipelineColorBlendAttachmentState = .{
-        .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
-    };
     var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
     var config_graphics: vk.Pipeline.Graphics.Config = .{
         .vertex_shaders = .{
@@ -140,9 +138,6 @@ pub fn init(config: Config) !@This() {
     };
     config_graphics.viewport_state.scissorCount = 1;
     config_graphics.viewport_state.viewportCount = 1;
-    config_graphics.color_blend_state.attachmentCount = 1;
-    config_graphics.color_blend_state.logicOp = vk.c.VK_LOGIC_OP_COPY;
-    config_graphics.color_blend_state.pAttachments = &color_blend;
     config_graphics.dynamic_state.dynamicStateCount = 2;
     config_graphics.dynamic_state.pDynamicStates = &state[0];
     config_graphics.render_info.colorAttachmentCount = 1;
@@ -169,9 +164,6 @@ pub fn init(config: Config) !@This() {
     };
     config_mesh.viewport_state.scissorCount = 1;
     config_mesh.viewport_state.viewportCount = 1;
-    config_mesh.color_blend_state.attachmentCount = 1;
-    config_mesh.color_blend_state.logicOp = vk.c.VK_LOGIC_OP_COPY;
-    config_mesh.color_blend_state.pAttachments = &color_blend;
     config_mesh.dynamic_state.dynamicStateCount = 2;
     config_mesh.dynamic_state.pDynamicStates = &state[0];
     config_mesh.render_info.colorAttachmentCount = 1;
@@ -179,6 +171,7 @@ pub fn init(config: Config) !@This() {
     config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
     config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     std.debug.print("Address {*}\n", .{instance.handle});
@@ -227,19 +220,33 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.instance.deinit();
 }
 
+pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
+    try self.swapchain.recreate(
+        self.physical_device,
+        self.device,
+        self.surface,
+        @intCast(width),
+        @intCast(height),
+    );
+}
+
 pub fn draw(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
     const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     try vk.check(vk.c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
-    try vk.check(vk.c.vkAcquireNextImageKHR(
+    const aquire_result = vk.c.vkAcquireNextImageKHR(
         self.device.handle,
         self.swapchain.swapchain,
         1000000000,
         current_frame.swapchain_semaphore,
         null,
         &image_index,
-    ));
+    );
+    if (aquire_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR) {
+        self.resize_request = true;
+        return;
+    }
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -440,7 +447,10 @@ pub fn draw(self: *@This(), time: f32) !void {
         .pImageIndices = &image_index,
     };
 
-    try vk.check(vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info));
+    const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
+    if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR) {
+        self.resize_request = true;
+    }
 
     self.swapchain.current_frame_inflight += 1;
 }

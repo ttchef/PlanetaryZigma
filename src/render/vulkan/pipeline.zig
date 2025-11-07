@@ -118,6 +118,10 @@ pub const Pipeline = union(enum) {
                 .attachmentCount = 0,
                 .pAttachments = null,
             },
+            color_blend_attachment: vk.c.VkPipelineColorBlendAttachmentState = .{
+                .colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT,
+                .blendEnable = vk.c.VK_FALSE,
+            },
             dynamic_state: vk.c.VkPipelineDynamicStateCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             },
@@ -133,10 +137,19 @@ pub const Pipeline = union(enum) {
                 self.depth_stencil_state.depthCompareOp = op;
                 self.depth_stencil_state.depthBoundsTestEnable = vk.c.VK_FALSE;
                 self.depth_stencil_state.stencilTestEnable = vk.c.VK_FALSE;
-                // self.depth_stencil_state.front = {};
-                // self.depth_stencil_state.back = {};
                 self.depth_stencil_state.minDepthBounds = 0;
                 self.depth_stencil_state.maxDepthBounds = 1;
+            }
+            pub fn setBlendingDestinationColorBlendFactor(self: *@This(), color_blend_factor: vk.c.VkBlendFactor) void {
+                self.color_blend_attachment.colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT;
+                self.color_blend_attachment.blendEnable = vk.c.VK_TRUE;
+                self.color_blend_attachment.srcColorBlendFactor = vk.c.VK_BLEND_FACTOR_SRC_ALPHA;
+                self.color_blend_attachment.dstColorBlendFactor = color_blend_factor;
+                //VK_BLEND_FACTOR_ONE = additive, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA = alpha
+                self.color_blend_attachment.colorBlendOp = vk.c.VK_BLEND_OP_ADD;
+                self.color_blend_attachment.srcAlphaBlendFactor = vk.c.VK_BLEND_FACTOR_ONE;
+                self.color_blend_attachment.dstAlphaBlendFactor = vk.c.VK_BLEND_FACTOR_ZERO;
+                self.color_blend_attachment.alphaBlendOp = vk.c.VK_BLEND_OP_ADD;
             }
         };
 
@@ -168,6 +181,9 @@ pub const Pipeline = union(enum) {
                     .pSpecializationInfo = config.fragment_shaders.specialization,
                 },
             };
+
+            config.color_blend_state.attachmentCount = 1;
+            config.color_blend_state.pAttachments = &config.color_blend_attachment;
 
             var pipeline_create_info: vk.c.VkGraphicsPipelineCreateInfo = .{
                 .sType = vk.c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,

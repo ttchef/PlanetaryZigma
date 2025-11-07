@@ -13,43 +13,14 @@ extent: vk.c.VkExtent3D,
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
-pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, surface: vk.Surface, width: u32, height: u32) !@This() {
-    var swapchain: vk.c.VkSwapchainKHR = undefined;
-
-    var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, surface.handle, &capabilities));
-
-    var format_count: u32 = 0;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, surface.handle, &format_count, null));
-
-    var formats: [16]vk.c.VkSurfaceFormatKHR = undefined;
-    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, surface.handle, &format_count, &formats[0]));
-
-    var chosen_format: vk.c.VkSurfaceFormatKHR = formats[0];
-    for (0..format_count) |i| {
-        if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_SRGB) {
-            chosen_format = formats[i];
-            break;
-        }
-    }
-
-    var swapchain_info: vk.c.VkSwapchainCreateInfoKHR = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = surface.handle,
-        .minImageCount = capabilities.minImageCount,
-        .imageFormat = chosen_format.format,
-        .imageColorSpace = chosen_format.colorSpace,
-        .imageExtent = .{ .width = width, .height = height },
-        .imageArrayLayers = 1,
-        .imageUsage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .imageSharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = capabilities.currentTransform,
-        .compositeAlpha = vk.c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR, //TODO: MAILBOX
-        .clipped = 1,
-    };
-
-    try check(vk.c.vkCreateSwapchainKHR(device.handle, &swapchain_info, null, &swapchain));
+pub fn init(
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
+    width: u32,
+    height: u32,
+) !@This() {
+    const swapchain, const chosen_format = try createSwapchain(physical_device, device, surface, width, height);
 
     var image_count: u32 = undefined;
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
@@ -80,25 +51,75 @@ pub fn deinit(
     vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 }
 
+fn createSwapchain(
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
+    width: u32,
+    height: u32,
+) !struct { vk.c.VkSwapchainKHR, vk.c.VkSurfaceFormatKHR } {
+    var swapchain: vk.c.VkSwapchainKHR = undefined;
+
+    var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, surface.handle, &capabilities));
+
+    var format_count: u32 = 0;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, surface.handle, &format_count, null));
+
+    var formats: [16]vk.c.VkSurfaceFormatKHR = undefined;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, surface.handle, &format_count, &formats[0]));
+
+    var chosen_format: vk.c.VkSurfaceFormatKHR = formats[0];
+    for (0..format_count) |i| {
+        if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_SRGB) {
+            chosen_format = formats[i];
+            break;
+        }
+    }
+    var swapchain_info: vk.c.VkSwapchainCreateInfoKHR = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = surface.handle,
+        .minImageCount = capabilities.minImageCount,
+        .imageFormat = chosen_format.format,
+        .imageColorSpace = chosen_format.colorSpace,
+        .imageExtent = .{ .width = width, .height = height },
+        .imageArrayLayers = 1,
+        .imageUsage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .imageSharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
+        .preTransform = capabilities.currentTransform,
+        .compositeAlpha = vk.c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR, //TODO: MAILBOX
+        .clipped = 1,
+    };
+
+    try check(vk.c.vkCreateSwapchainKHR(device.handle, &swapchain_info, null, &swapchain));
+    return .{
+        swapchain,
+        chosen_format,
+    };
+}
+
 pub fn recreate(
     self: *@This(),
-    surface: vk.c.VkSurfaceKHR,
-    physical_device: vk.VkPhysicalDevice,
-    command_pool: vk.VkCommandPool,
-    image_index: *u32,
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
     width: u32,
     height: u32,
 ) !void {
-    try check(vk.c.vkDeviceWaitIdle(self.device));
+    try check(vk.c.vkDeviceWaitIdle(device.handle));
+    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
+    const swapchain, const chosen_format = try createSwapchain(physical_device, device, surface, width, height);
+    _ = chosen_format;
+    self.swapchain = swapchain;
+    self.extent = .{ .width = width, .height = height, .depth = 1 };
+    var image_count: u32 = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
+    if (image_count > 16) @panic("More than 16 VkImages\n");
 
-    for (self.swapchain_images[0..@intCast(self.image_count)]) |image| image.deinit(self.device, command_pool);
-
-    self.deinit();
-    self.* = try init(physical_device, self.device, surface, width, height);
-
-    try self.createSwapchainImages(command_pool);
-
-    image_index.* = 0;
+    var vk_images: [16]vk.c.VkImage = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
+    self.vk_images = vk_images;
 }
 
 const FrameData = struct {
