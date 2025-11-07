@@ -13,7 +13,59 @@ extent: vk.c.VkExtent3D,
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
-pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, surface: vk.Surface, width: u32, height: u32) !@This() {
+pub fn init(
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
+    width: u32,
+    height: u32,
+) !@This() {
+    const swapchain, const chosen_format = try createSwapchain(physical_device, device, surface, width, height);
+
+    var image_count: u32 = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
+    if (image_count > 16) @panic("More than 16 VkImages\n");
+
+    var vk_images: [16]vk.c.VkImage = undefined;
+    try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
+
+    var frames: [max_frames_inflight]FrameData = undefined;
+    for (&frames) |*frame| frame.* = try .init(device);
+
+    var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, surface.handle, &capabilities));
+
+    const actual_extent = vk.c.VkExtent2D{
+        .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
+        .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
+    };
+
+    return .{
+        .swapchain = swapchain,
+        .vk_images = vk_images,
+        .image_count = image_count,
+        .format = chosen_format.format,
+        .extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 },
+        .current_frame_inflight = 0,
+        .frames = frames,
+    };
+}
+
+pub fn deinit(
+    self: @This(),
+    device: vk.Device,
+) void {
+    for (self.frames) |frame| frame.deinit(device);
+    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
+}
+
+fn createSwapchain(
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
+    width: u32,
+    height: u32,
+) !struct { vk.c.VkSwapchainKHR, vk.c.VkSurfaceFormatKHR } {
     var swapchain: vk.c.VkSwapchainKHR = undefined;
 
     var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
@@ -33,13 +85,18 @@ pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, surface: vk.S
         }
     }
 
+    const actual_extent = vk.c.VkExtent2D{
+        .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
+        .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
+    };
+
     var swapchain_info: vk.c.VkSwapchainCreateInfoKHR = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface.handle,
         .minImageCount = capabilities.minImageCount,
         .imageFormat = chosen_format.format,
         .imageColorSpace = chosen_format.colorSpace,
-        .imageExtent = .{ .width = width, .height = height },
+        .imageExtent = actual_extent,
         .imageArrayLayers = 1,
         .imageUsage = vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
@@ -50,55 +107,43 @@ pub fn init(physical_device: vk.PhysicalDevice, device: vk.Device, surface: vk.S
     };
 
     try check(vk.c.vkCreateSwapchainKHR(device.handle, &swapchain_info, null, &swapchain));
+    return .{
+        swapchain,
+        chosen_format,
+    };
+}
 
+pub fn recreate(
+    self: *@This(),
+    physical_device: vk.PhysicalDevice,
+    device: vk.Device,
+    surface: vk.Surface,
+    width: u32,
+    height: u32,
+) !void {
+    try check(vk.c.vkDeviceWaitIdle(device.handle));
+    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
+    const swapchain, const chosen_format = try createSwapchain(physical_device, device, surface, width, height);
+    _ = chosen_format;
+    self.swapchain = swapchain;
+
+    // Get the actual extent used by the swapchain
+    var capabilities: vk.c.VkSurfaceCapabilitiesKHR = undefined;
+    try check(vk.c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, surface.handle, &capabilities));
+
+    const actual_extent = vk.c.VkExtent2D{
+        .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
+        .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
+    };
+
+    self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
     var image_count: u32 = undefined;
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
     if (image_count > 16) @panic("More than 16 VkImages\n");
 
     var vk_images: [16]vk.c.VkImage = undefined;
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
-
-    var frames: [max_frames_inflight]FrameData = undefined;
-    for (&frames) |*frame| frame.* = try .init(device);
-
-    return .{
-        .swapchain = swapchain,
-        .vk_images = vk_images,
-        .image_count = image_count,
-        .format = chosen_format.format,
-        .extent = .{ .width = width, .height = height, .depth = 1 },
-        .current_frame_inflight = 0,
-        .frames = frames,
-    };
-}
-
-pub fn deinit(
-    self: @This(),
-    device: vk.Device,
-) void {
-    for (self.frames) |frame| frame.deinit(device);
-    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
-}
-
-pub fn recreate(
-    self: *@This(),
-    surface: vk.c.VkSurfaceKHR,
-    physical_device: vk.VkPhysicalDevice,
-    command_pool: vk.VkCommandPool,
-    image_index: *u32,
-    width: u32,
-    height: u32,
-) !void {
-    try check(vk.c.vkDeviceWaitIdle(self.device));
-
-    for (self.swapchain_images[0..@intCast(self.image_count)]) |image| image.deinit(self.device, command_pool);
-
-    self.deinit();
-    self.* = try init(physical_device, self.device, surface, width, height);
-
-    try self.createSwapchainImages(command_pool);
-
-    image_index.* = 0;
+    self.vk_images = vk_images;
 }
 
 const FrameData = struct {

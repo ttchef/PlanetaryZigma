@@ -39,6 +39,7 @@ pub fn main() !void {
     glfw.Window.Hint.set(.{
         .client_api = .none,
     });
+    glfw.Window.Hint.set(.{ .resizable = true });
     const window: *glfw.Window = try .init(.{
         .title = "Hello, world!",
         .size = .{ .width = 900, .height = 800 },
@@ -116,6 +117,10 @@ pub fn main() !void {
 
         // if (accumulated_time >= seconds_per_update) {
         try renderer.draw(time);
+        if (renderer.resize_request == true) {
+            const size = glfw.Window.getSize(window);
+            try renderer.reCreateSwapchain(size.width, size.height);
+        }
         //     accumulated_time -= seconds_per_update;
         // }
         //     try proccessEvents(&spacetime, &world);
