@@ -98,7 +98,7 @@ pub fn main() !void {
     defer renderer.deinit(allocator);
 
     std.debug.print("About to upload mesh\n", .{});
-    try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
     std.debug.print("Mesh upload completed, meshes.len: {d}\n", .{renderer.meshes.items.len});
 
     var time: f32 = 0;

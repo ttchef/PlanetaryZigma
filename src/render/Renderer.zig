@@ -171,7 +171,7 @@ pub fn init(config: Config) !@This() {
     config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
     config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
+    // config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     std.debug.print("Address {*}\n", .{instance.handle});
@@ -383,7 +383,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         10000,
         0.1,
     );
-    projection.d[6] *= -1;
+    projection.d[5] *= -1;
 
     var push: vk.Mesh.GPUDrawPushConstants = .{
         .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
@@ -460,7 +460,6 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-//TODO: Fix vertcies and indecies + allocation failure.
 //TODO: move logic away
 pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []const u8) !void {
     std.debug.print("\nTRY TO ADD MESH {s}\n\n", .{path});
@@ -497,19 +496,15 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
     defer vertices_list.deinit(allocator);
     defer indecies_list.deinit(allocator);
 
-    // Process all faces from the attributes
     var face_offset: usize = 0;
     var face_idx: usize = 0;
     while (face_idx < @as(usize, @intCast(attribs.num_faces))) : (face_idx += 1) {
-        const face_vertex_count = attribs.face_num_verts[face_idx];
-
-        // For triangulated meshes, we get triangles (3 vertices per face)
+        const face_vertex_count: i32 = attribs.face_num_verts[face_idx];
         if (face_vertex_count == 3) {
             var i: usize = 0;
             while (i < 3) : (i += 1) {
                 const index = attribs.faces[face_offset + i];
 
-                // Get vertex position
                 const pos_x = attribs.vertices[@as(usize, @intCast(3 * index.v_idx))];
                 const pos_y = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 1))];
                 const pos_z = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 2))];
@@ -520,18 +515,10 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
 
                 try vertices_list.append(allocator, vertex);
                 try indecies_list.append(allocator, @intCast(indecies_list.items.len));
-
-                std.debug.print("index: {d}, vertex: {any}\n", .{ index.v_idx, vertex });
             }
+            face_offset += @as(usize, @intCast(face_vertex_count));
         }
-
-        face_offset += @as(usize, @intCast(face_vertex_count));
     }
-
-    // Free tiny_obj_loader memory
-    tiny_obj.tinyobj_attrib_free(&attribs);
-    tiny_obj.tinyobj_shapes_free(shapes, num_shapes);
-    tiny_obj.tinyobj_materials_free(materials, num_materials);
 
     if (vertices_list.items.len > 0 and indecies_list.items.len > 0) {
         std.debug.print("\nADDED MESH {s}\n\n", .{path});
@@ -545,4 +532,9 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
     } else {
         std.debug.print("\nNo valid mesh data found in {s}\n\n", .{path});
     }
+
+    // Free tiny_obj_loader memory
+    tiny_obj.tinyobj_attrib_free(&attribs);
+    tiny_obj.tinyobj_shapes_free(shapes, num_shapes);
+    tiny_obj.tinyobj_materials_free(materials, num_materials);
 }
