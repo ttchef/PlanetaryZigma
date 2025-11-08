@@ -120,6 +120,7 @@ pub fn main() !void {
         if (renderer.resize_request == true) {
             const size = glfw.Window.getSize(window);
             try renderer.reCreateSwapchain(size.width, size.height);
+            renderer.resize_request = false;
         }
         //     accumulated_time -= seconds_per_update;
         // }

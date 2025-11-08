@@ -228,8 +228,11 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
         @intCast(width),
         @intCast(height),
     );
-    self.draw_image.image_extent.height = @min(self.swapchain.extent.height, self.draw_image.image_extent.height) * 1;
-    self.draw_image.image_extent.width = @min(self.swapchain.extent.width, self.draw_image.image_extent.width) * 1;
+    const scale: f32 = 1;
+    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.image_extent.height))) * scale;
+    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.image_extent.width))) * scale;
+    self.draw_image.image_extent.height = @intFromFloat(scaled_height);
+    self.draw_image.image_extent.width = @intFromFloat(scaled_width);
 }
 
 pub fn draw(self: *@This(), time: f32) !void {
