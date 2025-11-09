@@ -487,8 +487,8 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
     std.debug.print("DEBUG: tinyobj_parse_obj returned {d}\n", .{result});
 
     if (result != tiny_obj.TINYOBJ_SUCCESS) {
-        std.debug.print("Failed to parse OBJ file: {s}, error code: {d}\n", .{ path, result });
-        return error.ObjParseFailed;
+        std.log.err("Failed to parse OBJ file: {s}, error code: {d}", .{ path, result });
+        return error.ObjParsed;
     }
 
     var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
