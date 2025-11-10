@@ -5,16 +5,6 @@ _drawImageDescriptors: vk.c.VkDescriptorSet,
 descriptor_pool: vk.c.VkDescriptorPool,
 _drawImageDescriptorLayou: vk.c.VkDescriptorSetLayout,
 
-ratios: std.ArrayList(PoolSizeRatio) = .empty,
-full_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
-ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
-sets_per_pool: u32 = 0,
-
-const PoolSizeRatio = struct {
-    desciptor_type: vk.c.VkDescriptorType,
-    ratio: f32,
-};
-
 //TODO: DONT TAKE IN  draw_iamge: vk.c.VkImage HERE
 pub fn init(device: vk.Device, draw_iamge: vk.c.VkImageView) !@This() {
     const max_sets: i32 = 10;
