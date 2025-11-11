@@ -24,6 +24,7 @@ pub var rect_indices = [_]u32{
     2, 1, 3,
 };
 
+allocator: std.mem.Allocator,
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
 surface: vk.Surface,
@@ -60,7 +61,7 @@ pub const Config = struct { instance: struct {
     heigth: u32 = 0,
 } };
 
-pub fn init(config: Config) !@This() {
+pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: vk.DebugMessenger = try .init(instance, config.instance.debug_config);
     const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
@@ -177,6 +178,7 @@ pub fn init(config: Config) !@This() {
     std.debug.print("Address {*}\n", .{instance.handle});
 
     return .{
+        .allocator = allocator,
         .instance = instance,
         .debug_messenger = debug_messenger,
         .surface = surface,
@@ -252,6 +254,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.resize_request = true;
         return;
     }
+    current_frame.descriptor.clearPools(self.allocator, self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -345,6 +348,18 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
+    //TODO: ADD WRITER
+    // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
+    // writer.Image(
+    //     self.allocator,
+    //     0,
+    //     self.draw_image.image_view,
+    //     vk.c.VK_NULL_HANDLE,
+    //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
+    //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    // );
+    // writer.updateSet(self.device, )
+
     var viewport: vk.c.VkViewport = .{
         .x = 0,
         .y = 0,
@@ -374,6 +389,18 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
+
+    //TODO: ADD WRITER
+    // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
+    // writer.Image(
+    //     self.allocator,
+    //     0,
+    //     self.draw_image.image_view,
+    //     vk.c.VK_NULL_HANDLE,
+    //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
+    //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    // );
+    // writer.updateSet(self.device, )
 
     //projection matrix + view + model
     const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });

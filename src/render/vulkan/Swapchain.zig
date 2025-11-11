@@ -154,12 +154,13 @@ fn getSurfaceExtent(
 }
 
 const FrameData = struct {
-    command_buffer: vk.c.VkCommandBuffer,
-    render_done_semaphore: vk.c.VkSemaphore,
     swapchain_semaphore: vk.c.VkSemaphore,
+    render_done_semaphore: vk.c.VkSemaphore,
     render_fence: vk.c.VkFence,
+    command_buffer: vk.c.VkCommandBuffer,
+    descriptor: vk.DescriptorAllocatorGrowable,
 
-    pub fn init(device: vk.Device) !@This() {
+    pub fn init(allocator: std.mem.Allocator, device: vk.Device) !@This() {
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = device.command_pool.handle,
@@ -188,18 +189,32 @@ const FrameData = struct {
         var render_fence: vk.c.VkFence = undefined;
         try check(vk.c.vkCreateFence(device.handle, &fence_info, null, &render_fence));
 
+        const frame_sizes: []vk.DescriptorAllocatorGrowable.PoolSizeRatio = .{
+            .{ vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
+            .{ vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
+            .{ vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
+            .{ vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+        };
+
         return .{
             .command_buffer = command_buffer,
             .render_done_semaphore = render_done_semaphore,
             .swapchain_semaphore = swapchain_semaphore,
             .render_fence = render_fence,
+            .descriptor = .init(
+                allocator,
+                device,
+                1000,
+                frame_sizes,
+            ),
         };
     }
 
-    pub fn deinit(self: @This(), device: vk.Device) void {
+    pub fn deinit(allocator: std.mem.Allocator, self: @This(), device: vk.Device) void {
         vk.c.vkDestroySemaphore(device.handle, self.render_done_semaphore, null);
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);
         vk.c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
+        self.descriptor.deinit(allocator, device);
     }
 };

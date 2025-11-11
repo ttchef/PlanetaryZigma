@@ -6,7 +6,7 @@ full_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
 ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
 sets_per_pool: u32 = 0,
 
-const PoolSizeRatio = struct {
+pub const PoolSizeRatio = struct {
     desciptor_type: vk.c.VkDescriptorType,
     ratio: f32,
 };
@@ -42,7 +42,7 @@ pub fn clearPools(self: @This(), allocator: std.mem.Allocator, device: vk.Device
     }
     self.full_pools.clearAndFree(allocator);
 }
-pub fn destroyPools(self: @This(), allocator: std.mem.Allocator, device: vk.Device) void {
+pub fn deinit(self: @This(), allocator: std.mem.Allocator, device: vk.Device) void {
     for (self.ready_pools) |ready_pool| {
         try vk.check(vk.c.vkDestroyDescriptorPool(device, ready_pool, 0));
     }
@@ -116,31 +116,31 @@ fn createPool(allocator: std.mem.Allocator, device: vk.Device, set_count: u32, p
     return new_pool;
 }
 
-const DescriptorWriter = struct {
+pub const Writer = struct {
     image_infos: std.ArrayList(vk.c.VkDescriptorImageInfo) = .empty,
     buffer_infos: std.ArrayList(vk.c.VkDescriptorBufferInfo) = .empty,
     writes: std.ArrayList(vk.c.VkWriteDescriptorSet) = .empty,
 
-    // void writeImage(binding: u32, image: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType)
-    // {
-    //     VkDescriptorImageInfo& info = imageInfos.emplace_back(VkDescriptorImageInfo{
-    //         .sampler = sampler,
-    //         .imageView = image,
-    //         .imageLayout = layout
-    //     });
+    pub fn Image(self: @This(), allocator: std.mem.Allocator, binding: u32, image: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType) void {
+        const info: vk.c.VkDescriptorImageInfo = .{
+            .sampler = sampler,
+            .imageView = image,
+            .imageLayout = layout,
+        };
 
-    //     VkWriteDescriptorSet write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        const write: vk.c.VkWriteDescriptorSet = .{
+            .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstBinding = binding,
+            .dstSet = vk.c.VK_NULL_HANDLE,
+            .descriptorCount = 1,
+            .descriptorType = descriptor_set_type,
+            .pImageInfo = &info,
+        };
 
-    //     write.dstBinding = binding;
-    //     write.dstSet = VK_NULL_HANDLE; //left empty for now until we need to write it
-    //     write.descriptorCount = 1;
-    //     write.descriptorType = type;
-    //     write.pImageInfo = &info;
+        self.writes.append(allocator, write);
+    }
 
-    //     writes.push_back(write);
-    // }
-
-    fn writeBuffer(self: @This(), allocator: std.mem.Allocator, binding: u32, buffer: vk.c.VkBuffer, size: usize, offset: usize, descriptor_set_type: vk.c.VkDescriptorType) void {
+    pub fn Buffer(self: @This(), allocator: std.mem.Allocator, binding: u32, buffer: vk.c.VkBuffer, size: usize, offset: usize, descriptor_set_type: vk.c.VkDescriptorType) void {
         const info: vk.c.VkDescriptorBufferInfo = .{
             .buffer = buffer,
             .offset = offset,
@@ -160,6 +160,23 @@ const DescriptorWriter = struct {
 
         self.writes.append(allocator, write);
     }
-    // void clear();
-    // void update_set(VkDevice device, VkDescriptorSet set);
+
+    pub fn Clear(self: @This(), allocator: std.mem.Allocator) void {
+        self.buffer_infos.clearAndFree(allocator);
+        self.writes.clearAndFree(allocator);
+        self.buffer_infos.clearAndFree(allocator);
+    }
+
+    pub fn updateSet(self: @This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {
+        for (self.writes.items) |writer| {
+            writer.dstSet = set;
+        }
+        vk.c.vkUpdateDescriptorSets(
+            device.handle,
+            self.writes.items.len,
+            self.writes.items.ptr,
+            0,
+            null,
+        );
+    }
 };
