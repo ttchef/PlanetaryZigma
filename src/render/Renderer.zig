@@ -4,24 +4,13 @@ pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 
-pub var rect_vertices = [_]vk.Mesh.Vertex{
-    .{
-        .position = .{ 0.5, -0.5, 0.0, 1.0 },
-    },
-    .{
-        .position = .{ 0.5, 0.5, 0.0, 1.0 },
-    },
-    .{
-        .position = .{ -1, -0.5, 0.0, 1.0 },
-    },
-    .{
-        .position = .{ -0.5, 0.5, 0.0, 1.0 },
-    },
-};
-
-pub var rect_indices = [_]u32{
-    0, 1, 2,
-    2, 1, 3,
+const GPUSceneData = struct {
+    view: nz.Mat4x4(f32),
+    proj: nz.Mat4x4(f32),
+    viewproj: nz.Mat4x4(f32),
+    ambient_color: nz.Vec3(f32),
+    sunlight_direction: nz.Vec3(f32),
+    sunlight_color: nz.Vec3(f32),
 };
 
 allocator: std.mem.Allocator,
@@ -34,11 +23,11 @@ swapchain: vk.Swapchain,
 
 descriptor: vk.Descriptor,
 descriptor_graphics: vk.Descriptor,
+_gpuSceneDataDescriptorLayout: vk.Descriptor,
+scene_data: GPUSceneData,
 
 pipelines: [16]vk.Pipeline,
-max_pipelines: usize = 0,
 current_pipeline: usize = 0,
-the_mesh: vk.Mesh,
 meshes: std.ArrayList(vk.Mesh) = .empty,
 
 vulkan_mem_alloc: vk.Vma,
@@ -93,8 +82,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     // //TODO: DONT PASS IMAGE TO DESCRIPTOR
     const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
     const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
-
-    const the_mesh: vk.Mesh = try .init(device, vulkan_mem_alloc.handle, @ptrCast(&rect_indices), @ptrCast(&rect_vertices));
+    const descriptor_gpu_scene_data: vk.Descriptor = try .init()
 
     const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
     const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
@@ -190,7 +178,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .current_pipeline = 0,
         .max_pipelines = 4,
         .vulkan_mem_alloc = vulkan_mem_alloc,
-        .the_mesh = the_mesh,
         .draw_image = draw_image,
         .depth_image = depth_image,
         .descriptor_graphics = descriptor_graphics,
