@@ -158,7 +158,7 @@ const FrameData = struct {
     render_done_semaphore: vk.c.VkSemaphore,
     render_fence: vk.c.VkFence,
     command_buffer: vk.c.VkCommandBuffer,
-    descriptor: vk.DescriptorAllocatorGrowable,
+    descriptor: vk.descriptor.Growable,
 
     pub fn init(allocator: std.mem.Allocator, device: vk.Device) !@This() {
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{

@@ -1,6 +1,7 @@
 const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
+const vma = @import("vma");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 
@@ -21,9 +22,9 @@ physical_device: vk.PhysicalDevice,
 device: vk.Device,
 swapchain: vk.Swapchain,
 
-descriptor: vk.Descriptor,
-descriptor_graphics: vk.Descriptor,
-_gpuSceneDataDescriptorLayout: vk.Descriptor,
+descriptor: vk.descriptor.Layout,
+descriptor_graphics: vk.descriptor.Layout,
+_gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
 scene_data: GPUSceneData,
 
 pipelines: [16]vk.Pipeline,
@@ -79,91 +80,101 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_DEPTH_BIT,
     );
 
-    // //TODO: DONT PASS IMAGE TO DESCRIPTOR
-    const descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
-    const descriptor_graphics: vk.Descriptor = try .init(device, draw_image.image_view);
-    const descriptor_gpu_scene_data: vk.Descriptor = try .init()
+    // //TODO: GET RID OF
+    // const compute_descriptor_config: vk.descriptor.Layout.Config = .{};
+    // compute_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    // const compute_descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
+    // const graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
+    // graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    // const graphics_descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
+    const descriptor_gpu_scene_data_config: vk.descriptor.Layout.Config = .{};
+    descriptor_gpu_scene_data_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    const descriptor_gpu_scene_data: vk.descriptor.Layout = try .init(
+        device,
+        descriptor_gpu_scene_data_config,
+        vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
 
-    const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
-    const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
-    defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
+    // const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
+    // const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
+    // defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
+    // defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
 
-    var pipelines: [16]vk.Pipeline = undefined;
-    var config_comp1: vk.Pipeline.Compute.Config = .{
-        .descriptor_set_layouts = &.{descriptor._drawImageDescriptorLayou},
-        .shader = .{
-            .module = shader,
-        },
-    };
-    pipelines[0] = try .initCompute(device, &config_comp1);
-    pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
-    pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
+    // var pipelines: [16]vk.Pipeline = undefined;
+    // var config_comp1: vk.Pipeline.Compute.Config = .{
+    //     .descriptor_set_layouts = &.{compute_descriptor._drawImageDescriptorLayou},
+    //     .shader = .{
+    //         .module = shader,
+    //     },
+    // };
+    // pipelines[0] = try .initCompute(device, &config_comp1);
+    // pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
+    // pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
 
-    var config_comp2: vk.Pipeline.Compute.Config = .{
-        .descriptor_set_layouts = &.{descriptor._drawImageDescriptorLayou},
-        .shader = .{
-            .module = gradient_color,
-        },
-    };
-    pipelines[1] = try .initCompute(device, &config_comp2);
-    pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
+    // var config_comp2: vk.Pipeline.Compute.Config = .{
+    //     .descriptor_set_layouts = &.{compute_descriptor._drawImageDescriptorLayou},
+    //     .shader = .{
+    //         .module = gradient_color,
+    //     },
+    // };
+    // pipelines[1] = try .initCompute(device, &config_comp2);
+    // pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
-    const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
-    const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
-    defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
+    // const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
+    // const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
+    // defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
+    // defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
 
-    var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
-    var config_graphics: vk.Pipeline.Graphics.Config = .{
-        .vertex_shaders = .{
-            .module = vert,
-        },
-        .fragment_shaders = .{
-            .module = frag,
-        },
-        .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
-        .push_constants = &.{},
-    };
-    config_graphics.viewport_state.scissorCount = 1;
-    config_graphics.viewport_state.viewportCount = 1;
-    config_graphics.dynamic_state.dynamicStateCount = 2;
-    config_graphics.dynamic_state.pDynamicStates = &state[0];
-    config_graphics.render_info.colorAttachmentCount = 1;
-    config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
-    config_graphics.render_info.depthAttachmentFormat = depth_image.format;
-    config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    pipelines[2] = try .initGraphics(device, &config_graphics);
+    // var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
+    // var config_graphics: vk.Pipeline.Graphics.Config = .{
+    //     .vertex_shaders = .{
+    //         .module = vert,
+    //     },
+    //     .fragment_shaders = .{
+    //         .module = frag,
+    //     },
+    //     .descriptor_set_layouts = &.{graphics_descriptor._drawImageDescriptorLayou},
+    //     .push_constants = &.{},
+    // };
+    // config_graphics.viewport_state.scissorCount = 1;
+    // config_graphics.viewport_state.viewportCount = 1;
+    // config_graphics.dynamic_state.dynamicStateCount = 2;
+    // config_graphics.dynamic_state.pDynamicStates = &state[0];
+    // config_graphics.render_info.colorAttachmentCount = 1;
+    // config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
+    // config_graphics.render_info.depthAttachmentFormat = depth_image.format;
+    // config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    // pipelines[2] = try .initGraphics(device, &config_graphics);
 
-    const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
-    var config_mesh: vk.Pipeline.Graphics.Config = .{
-        .fragment_shaders = .{
-            .module = frag,
-        },
-        .vertex_shaders = .{
-            .module = mesh_vert,
-        },
-        .descriptor_set_layouts = &.{descriptor_graphics._drawImageDescriptorLayou},
-        .push_constants = &.{.{
-            .offset = 0,
-            .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-        }},
-    };
-    config_mesh.viewport_state.scissorCount = 1;
-    config_mesh.viewport_state.viewportCount = 1;
-    config_mesh.dynamic_state.dynamicStateCount = 2;
-    config_mesh.dynamic_state.pDynamicStates = &state[0];
-    config_mesh.render_info.colorAttachmentCount = 1;
-    config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
-    config_mesh.render_info.depthAttachmentFormat = depth_image.format;
-    config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
-    config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    // config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
-    pipelines[3] = try .initGraphics(device, &config_mesh);
+    // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
+    // defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
+    // var config_mesh: vk.Pipeline.Graphics.Config = .{
+    //     .fragment_shaders = .{
+    //         .module = frag,
+    //     },
+    //     .vertex_shaders = .{
+    //         .module = mesh_vert,
+    //     },
+    //     .descriptor_set_layouts = &.{graphics_descriptor._drawImageDescriptorLayou},
+    //     .push_constants = &.{.{
+    //         .offset = 0,
+    //         .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
+    //         .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+    //     }},
+    // };
+    // config_mesh.viewport_state.scissorCount = 1;
+    // config_mesh.viewport_state.viewportCount = 1;
+    // config_mesh.dynamic_state.dynamicStateCount = 2;
+    // config_mesh.dynamic_state.pDynamicStates = &state[0];
+    // config_mesh.render_info.colorAttachmentCount = 1;
+    // config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
+    // config_mesh.render_info.depthAttachmentFormat = depth_image.format;
+    // config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
+    // config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    // // config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
+    // pipelines[3] = try .initGraphics(device, &config_mesh);
 
-    std.debug.print("Address {*}\n", .{instance.handle});
+    // std.debug.print("Address {*}\n", .{instance.handle});
 
     return .{
         .allocator = allocator,
@@ -173,14 +184,15 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .physical_device = physical_device,
         .device = device,
         .swapchain = swapchain,
-        .descriptor = descriptor,
-        .pipelines = pipelines,
+        // .descriptor = compute_descriptor,
+        // .pipelines = pipelines,
         .current_pipeline = 0,
         .max_pipelines = 4,
         .vulkan_mem_alloc = vulkan_mem_alloc,
         .draw_image = draw_image,
         .depth_image = depth_image,
-        .descriptor_graphics = descriptor_graphics,
+        // .descriptor_graphics = graphics_descriptor,
+        ._gpuSceneDataDescriptorLayout = descriptor_gpu_scene_data,
     };
 }
 
@@ -334,6 +346,20 @@ pub fn draw(self: *@This(), time: f32) !void {
     vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
+
+    const gpuSceneDataBuffer: vk.Buffer = .init(self.vulkan_mem_alloc, @sizeOf(GPUSceneData), vk.v.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    defer gpuSceneDataBuffer.deinit(self.vulkan_mem_alloc);
+
+    //TODO: try removing the vma get info
+    vma.vmaGetAllocationInfo(self.vulkan_mem_alloc, gpuSceneDataBuffer.vma_allocation, gpuSceneDataBuffer.info);
+    const sceneUniformData: ?*GPUSceneData = gpuSceneDataBuffer.info.pMappedData;
+    @memcpy(sceneUniformData, self.scene_data);
+
+    const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
+
+    const writer: vk.descriptor.Writer = .{};
+    writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    writer.updateSet(self.device, globalDescriptor);
 
     //TODO: ADD WRITER
     // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
