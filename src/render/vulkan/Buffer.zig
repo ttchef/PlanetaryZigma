@@ -1,7 +1,6 @@
 const vk = @import("vulkan.zig");
-const vma = @import("vma");
 buffer: vk.c.VkBuffer,
-vma_allocation: vma.VmaAllocation,
+vma_allocation: vk.Vma.Allocation,
 info: vma.VmaAllocationInfo,
 
 pub fn init(vma_allocator: vma.VmaAllocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vma.VmaMemoryUsage) !@This() {

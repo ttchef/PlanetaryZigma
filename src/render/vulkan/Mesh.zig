@@ -1,9 +1,9 @@
 const std = @import("std");
 const c = @import("vulkan");
-const vma = @import("vma");
 const nz = @import("numz");
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
+const Vma = @import("Vma.zig");
 
 index_buffer: Buffer,
 vertex_buffer: Buffer,
@@ -21,7 +21,7 @@ pub const GPUDrawPushConstants = extern struct {
     vertex_buffer: c.VkDeviceAddress,
 };
 
-pub fn init(device: Device, vma_allocator: vma.VmaAllocator, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(device: Device, vma_allocator: Vma.Allocation, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 

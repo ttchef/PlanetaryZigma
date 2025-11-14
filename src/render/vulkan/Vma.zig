@@ -1,5 +1,10 @@
-const vma = @import("vma");
 const vk = @import("vulkan.zig");
+const vma = @import("vma");
+pub const c = vma;
+
+pub const Allocator = vma.vmaAllocator;
+pub const Allocation = vma.vmaallocation;
+pub const AllocationInfo = vma.VmaAllocationInfo;
 
 handle: vma.VmaAllocator = undefined,
 
@@ -21,4 +26,16 @@ pub fn init(instance: vk.Instance, physical_device: vk.PhysicalDevice, device: v
 
 pub fn deinit(self: @This()) void {
     vma.vmaDestroyAllocator(self.handle);
+}
+
+pub fn copyToAllocation(
+    self: @This(),
+    comptime T: type,
+    data: T,
+    allocation: Allocation,
+    allocation_info: AllocationInfo,
+) void {
+    vma.vmaGetAllocationInfo(self.handle, allocation, allocation_info);
+    const mapped_data: ?*T = allocation_info.pMappedData;
+    @memcpy(mapped_data, data);
 }
