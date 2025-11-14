@@ -1,19 +1,19 @@
 const vk = @import("vulkan.zig");
-const vma = @import("vma");
 
 image: vk.c.VkImage = undefined,
 image_view: vk.c.VkImageView = undefined,
-vma_allocation: vma.VmaAllocation = undefined,
+vma_allocation: vk.Vma.Allocation = undefined,
 image_extent: vk.c.VkExtent3D = undefined,
 format: vk.c.VkFormat = undefined,
 
 pub fn init(
-    vulkan_mem_alloc: vma.VmaAllocator,
+    vma: vk.Vma.Allocator,
     device: vk.Device,
     format: vk.c.VkFormat,
     extent: vk.c.VkExtent3D,
     image_usages_flags: vk.c.VkImageUsageFlags,
     image_view_mask: vk.c.VkImageAspectFlags,
+    mip_mapped: bool,
 ) !@This() {
     var img_info: vk.c.VkImageCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -27,6 +27,7 @@ pub fn init(
         .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL,
         .usage = image_usages_flags,
     };
+    if (mip_mapped) img_info.mipLevels = @floor(@log2(@max(extent.width, extent.height))) + 1;
 
     var vma_alloc_info: vma.VmaAllocationCreateInfo = .{
         .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
@@ -36,7 +37,7 @@ pub fn init(
     var image: vk.c.VkImage = undefined;
     var vma_image_allocation: vma.VmaAllocation = undefined;
     _ = vma.vmaCreateImage(
-        vulkan_mem_alloc,
+        vma,
         @ptrCast(&img_info),
         &vma_alloc_info,
         &image,
@@ -46,7 +47,6 @@ pub fn init(
 
     var image_view_info: vk.c.VkImageViewCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = null,
         .viewType = vk.c.VK_IMAGE_VIEW_TYPE_2D,
         .image = image,
         .format = format,
@@ -71,7 +71,48 @@ pub fn init(
     };
 }
 
+pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator, data: *void) !void {
+    const data_size: u32 = self.image_extent.depth * self.image_extent.width * self.image_extent.height * 4;
+    const upload_buffer: vk.Buffer = .init(vma, data_size, vk.c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    defer upload_buffer.deinit(vma);
+
+    @memcpy(upload_buffer.info.pMappedData, data);
+
+    const cmd = try device.beginImmediateCommand();
+
+    const image_barrier: vk.Barrier = .init(cmd, self.image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
+    image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    var copy_region: vk.c.VkBufferImageCopy = .{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = .{
+            .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageExtent = self.image_extent,
+    };
+
+    vk.c.vkCmdCopyBufferToImage(
+        cmd,
+        upload_buffer.buffer,
+        self.image,
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &copy_region,
+    );
+
+    image_barrier.transition(
+        vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    );
+
+    device.endImmediateCommand(cmd);
+}
+
 pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
     vk.c.vkDestroyImageView(device.handle, self.image_view, null);
-    vma.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.image), self.vma_allocation);
+    vk.Vma.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.image), self.vma_allocation);
 }

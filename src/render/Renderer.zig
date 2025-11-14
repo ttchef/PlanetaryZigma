@@ -1,10 +1,10 @@
 const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
-const vma = @import("vma");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 
+//TODO: WILL REMOVE (but exist temporarly for the learnding):
 const GPUSceneData = struct {
     view: nz.Mat4x4(f32),
     proj: nz.Mat4x4(f32),
@@ -14,6 +14,23 @@ const GPUSceneData = struct {
     sunlight_color: nz.Vec3(f32),
 };
 
+//TODO: WILL REMOVE (but exist temporarly for the learnding):
+pipelines: [16]vk.Pipeline,
+current_pipeline: usize = 0,
+meshes: std.ArrayList(vk.Mesh) = .empty,
+descriptor: vk.descriptor.Layout,
+descriptor_graphics: vk.descriptor.Layout,
+_gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
+scene_data: GPUSceneData,
+draw_image: vk.Image,
+depth_image: vk.Image,
+_whiteImage: vk.Image,
+_blackImage: vk.Image,
+_greyImage: vk.Image,
+_errorCheckerboardImage: vk.Image,
+_defaultSamplerLinear: vk.c.VkSampler,
+_defaultSamplerNearest: vk.c.VkSampler,
+
 allocator: std.mem.Allocator,
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
@@ -21,20 +38,7 @@ surface: vk.Surface,
 physical_device: vk.PhysicalDevice,
 device: vk.Device,
 swapchain: vk.Swapchain,
-
-descriptor: vk.descriptor.Layout,
-descriptor_graphics: vk.descriptor.Layout,
-_gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
-scene_data: GPUSceneData,
-
-pipelines: [16]vk.Pipeline,
-current_pipeline: usize = 0,
-meshes: std.ArrayList(vk.Mesh) = .empty,
-
-vulkan_mem_alloc: vk.Vma,
-draw_image: vk.Image,
-depth_image: vk.Image,
-
+vma: vk.Vma,
 resize_request: bool = false,
 
 pub const Config = struct { instance: struct {
@@ -188,7 +192,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         // .pipelines = pipelines,
         .current_pipeline = 0,
         .max_pipelines = 4,
-        .vulkan_mem_alloc = vulkan_mem_alloc,
+        .vma = vulkan_mem_alloc,
         .draw_image = draw_image,
         .depth_image = depth_image,
         // .descriptor_graphics = graphics_descriptor,
@@ -204,16 +208,16 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.descriptor_graphics.deinit(self.device);
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
-    self.draw_image.deinit(self.vulkan_mem_alloc, self.device);
-    self.depth_image.deinit(self.vulkan_mem_alloc, self.device);
+    self.draw_image.deinit(self.vma, self.device);
+    self.depth_image.deinit(self.vma, self.device);
 
-    self.the_mesh.deinit(self.vulkan_mem_alloc.handle);
+    self.the_mesh.deinit(self.vma.handle);
     for (self.meshes.items) |mesh| {
-        mesh.deinit(self.vulkan_mem_alloc.handle);
+        mesh.deinit(self.vma.handle);
     }
     self.meshes.deinit(allocator);
 
-    self.vulkan_mem_alloc.deinit();
+    self.vma.deinit();
 
     self.device.deinit();
     self.surface.deinit(self.instance);
@@ -347,13 +351,11 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    const gpuSceneDataBuffer: vk.Buffer = .init(self.vulkan_mem_alloc, @sizeOf(GPUSceneData), vk.v.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    defer gpuSceneDataBuffer.deinit(self.vulkan_mem_alloc);
+    const gpuSceneDataBuffer: vk.Buffer = .init(self.vma, @sizeOf(GPUSceneData), vk.v.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    defer gpuSceneDataBuffer.deinit(self.vma);
 
     //TODO: try removing the vma get info
-    vma.vmaGetAllocationInfo(self.vulkan_mem_alloc, gpuSceneDataBuffer.vma_allocation, gpuSceneDataBuffer.info);
-    const sceneUniformData: ?*GPUSceneData = gpuSceneDataBuffer.info.pMappedData;
-    @memcpy(sceneUniformData, self.scene_data);
+    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, gpuSceneDataBuffer.info);
 
     const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
 
@@ -565,7 +567,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
 
         try self.meshes.append(allocator, try .init(
             self.device,
-            self.vulkan_mem_alloc.handle,
+            self.vma.handle,
             indecies_list.items,
             vertices_list.items,
         ));
