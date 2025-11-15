@@ -30,7 +30,7 @@ pub fn init(device: Device, vma_allocator: Vma.Allocation, indices: []u32, verti
         vma_allocator,
         vertex_buffer_size,
         c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
     );
 
     var device_adress_info: c.VkBufferDeviceAddressInfo = .{
@@ -43,18 +43,18 @@ pub fn init(device: Device, vma_allocator: Vma.Allocation, indices: []u32, verti
         vma_allocator,
         index_buffer_size,
         c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
     );
 
     var staging: Buffer = try .init(
         vma_allocator,
         vertex_buffer_size + index_buffer_size,
         c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        vma.VMA_MEMORY_USAGE_CPU_ONLY,
+        Vma.c.VMA_MEMORY_USAGE_CPU_ONLY,
     );
 
-    var info: vma.VmaAllocationInfo = undefined;
-    vma.vmaGetAllocationInfo(vma_allocator, staging.vma_allocation, &info);
+    var info: Vma.AllocationInfo = undefined;
+    Vma.c.vmaGetAllocationInfo(vma_allocator, staging.vma_allocation, &info);
     const data: [*]u8 = @ptrCast(info.pMappedData);
 
     // copy vertex buffer
@@ -91,7 +91,7 @@ pub fn init(device: Device, vma_allocator: Vma.Allocation, indices: []u32, verti
     };
 }
 
-pub fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
+pub fn deinit(self: @This(), vma_allocator: Vma.VmaAllocator) void {
     self.index_buffer.deinit(vma_allocator);
     self.vertex_buffer.deinit(vma_allocator);
 }
