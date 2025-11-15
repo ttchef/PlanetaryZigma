@@ -13,8 +13,8 @@
             .hash = "zig_opengl-0.0.0-WXQ8j4w8CADfsWyKsMbGvPa0xOuxhQ61Kil2FKzmQOW1",
         },
         .numz = .{
-            .url = "git+https://github.com/HaraldWik/numz#f5356c61b09babda9d3e71975e35caee78c1e351",
-            .hash = "numz-0.0.2-V-sGm1GVAAAUDV9QaOB2kWcDWBADDF14zx6fLCCF3JOg",
+            .url = "git+https://github.com/HaraldWik/numz#6cf46b401f692735a8f0273431819f5e679fe186",
+            .hash = "numz-0.0.2-V-sGm4iaAABN9AX6hQVPQo_fXmMxYqUa5MVniEPTRgDS",
         },
         .ecs = .{
             .url = "git+https://github.com/HaraldWik/zig-ecs#be10f1a8157d74883f9843cefb980adbd1de56e5",

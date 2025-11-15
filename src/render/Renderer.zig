@@ -20,10 +20,9 @@ current_pipeline: usize = 0,
 meshes: std.ArrayList(vk.Mesh) = .empty,
 descriptor: vk.descriptor.Layout,
 descriptor_graphics: vk.descriptor.Layout,
+_singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
 scene_data: GPUSceneData,
-draw_image: vk.Image,
-depth_image: vk.Image,
 _whiteImage: vk.Image,
 _blackImage: vk.Image,
 _greyImage: vk.Image,
@@ -39,6 +38,8 @@ physical_device: vk.PhysicalDevice,
 device: vk.Device,
 swapchain: vk.Swapchain,
 vma: vk.Vma,
+draw_image: vk.Image,
+depth_image: vk.Image,
 resize_request: bool = false,
 
 pub const Config = struct { instance: struct {
@@ -62,10 +63,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const swapchain: vk.Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
-    const vulkan_mem_alloc: vk.Vma = try .init(instance, physical_device, device);
+    const vma: vk.Vma = try .init(instance, physical_device, device);
 
     const draw_image: vk.Image = try .init(
-        vulkan_mem_alloc.handle,
+        vma.handle,
         device,
         vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
         swapchain.extent,
@@ -74,15 +75,87 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             vk.c.VK_IMAGE_USAGE_STORAGE_BIT |
             vk.c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
     );
     const depth_image: vk.Image = try .init(
-        vulkan_mem_alloc.handle,
+        vma.handle,
         device,
         vk.c.VK_FORMAT_D32_SFLOAT,
         swapchain.extent,
         vk.c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         vk.c.VK_IMAGE_ASPECT_DEPTH_BIT,
+        false,
     );
+
+    //3 default textures, white, grey, black. 1 pixel each
+    const white: nz.color.Rgba(f32) = .white;
+    const _whiteImage: vk.Image = .init(
+        vma.handle,
+        device,
+        vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+        .{ 1, 1, 1 },
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    _whiteImage.uploadDataToImage(device, vma.handle, white);
+
+    const grey: nz.color.Rgba(f32) = .grey;
+    const _greyImage: vk.Image = .init(
+        vma.handle,
+        device,
+        vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+        .{ 1, 1, 1 },
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    _greyImage.uploadDataToImage(device, vma.handle, grey);
+
+    const black: nz.color.Rgba(f32) = .black;
+    const _blackImage: vk.Image = .init(
+        vma.handle,
+        device,
+        vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+        .{ 1, 1, 1 },
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    _blackImage.uploadDataToImage(device, vma.handle, black);
+
+    //checkerboard image
+    const magenta: nz.color.Rgba(f32) = .new(1, 0, 1, 1);
+    var pixels: [16 * 16]f32 = undefined;
+    for (0..16) |x| {
+        for (0..16) |y| {
+            pixels[y * 16 + x] = if (std.math.pow(f32, (x % 2), (y % 2)) == 1) magenta else black;
+        }
+    }
+
+    const _errorCheckerboardImage: vk.Image = .init(
+        vma.handle,
+        device,
+        vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+        .{ 1, 1, 1 },
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    _errorCheckerboardImage.uploadDataToImage(device, vma.handle, pixels);
+
+    const sampl: vk.c.VkSamplerCreateInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = vk.c.VK_FILTER_NEAREST,
+        .minFilter = vk.c.VK_FILTER_NEAREST,
+    };
+
+    var _defaultSamplerLinear: vk.c.VkSampler = undefined;
+    var _defaultSamplerNearest: vk.c.VkSampler = undefined;
+    vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerNearest);
+    sampl.magFilter = vk.c.VK_FILTER_LINEAR;
+    sampl.minFilter = vk.c.VK_FILTER_LINEAR;
+    vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerLinear);
 
     // //TODO: GET RID OF
     // const compute_descriptor_config: vk.descriptor.Layout.Config = .{};
@@ -97,6 +170,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         device,
         descriptor_gpu_scene_data_config,
         vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
+
+    const _singleImageDescriptorLayout_config: vk.descriptor.Layout.Config = .{};
+    _singleImageDescriptorLayout_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    const _singleImageDescriptorLayout: vk.descriptor.Layout = try .init(
+        device,
+        _singleImageDescriptorLayout_config,
+        vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
 
     // const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
@@ -192,11 +273,12 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         // .pipelines = pipelines,
         .current_pipeline = 0,
         .max_pipelines = 4,
-        .vma = vulkan_mem_alloc,
+        .vma = vma,
         .draw_image = draw_image,
         .depth_image = depth_image,
         // .descriptor_graphics = graphics_descriptor,
         ._gpuSceneDataDescriptorLayout = descriptor_gpu_scene_data,
+        ._singleImageDescriptorLayout = _singleImageDescriptorLayout,
     };
 }
 
@@ -210,6 +292,10 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vma, self.device);
     self.depth_image.deinit(self.vma, self.device);
+    self._blackImage.deinit(self.vma, self.device);
+    self._greyImage.deinit(self.vma, self.device);
+    self._errorCheckerboardImage.deinit(self.vma, self.device);
+    self._whiteImage.deinit(self.vma, self.device);
 
     self.the_mesh.deinit(self.vma.handle);
     for (self.meshes.items) |mesh| {
