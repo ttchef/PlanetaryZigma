@@ -16,10 +16,11 @@ const GPUSceneData = struct {
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 pipelines: [16]vk.Pipeline,
+max_pipelines: usize = 0,
 current_pipeline: usize = 0,
 meshes: std.ArrayList(vk.Mesh) = .empty,
-descriptor: vk.descriptor.Layout,
-descriptor_graphics: vk.descriptor.Layout,
+compute_descriptor_layout: vk.descriptor.Layout,
+graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
 scene_data: GPUSceneData,
@@ -62,7 +63,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
-    const swapchain: vk.Swapchain = try .init(physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+    const swapchain: vk.Swapchain = try .init(allocator, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const vma: vk.Vma = try .init(instance, physical_device, device);
 
     const draw_image: vk.Image = try .init(
@@ -88,63 +89,63 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
 
     //3 default textures, white, grey, black. 1 pixel each
-    const white: nz.color.Rgba(f32) = .white;
-    const _whiteImage: vk.Image = .init(
+    var white: u32 = nz.color.Rgba(f32).white.toU32();
+    const _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ 1, 1, 1 },
+        .{ .width = 1, .height = 1, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    _whiteImage.uploadDataToImage(device, vma.handle, white);
+    try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
-    const grey: nz.color.Rgba(f32) = .grey;
-    const _greyImage: vk.Image = .init(
+    var grey: u32 = nz.color.Rgba(f32).grey.toU32();
+    const _greyImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ 1, 1, 1 },
+        .{ .width = 1, .height = 1, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    _greyImage.uploadDataToImage(device, vma.handle, grey);
+    try _greyImage.uploadDataToImage(device, vma.handle, &grey);
 
-    const black: nz.color.Rgba(f32) = .black;
-    const _blackImage: vk.Image = .init(
+    var black: u32 = nz.color.Rgba(f32).black.toU32();
+    const _blackImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ 1, 1, 1 },
+        .{ .width = 1, .height = 1, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    _blackImage.uploadDataToImage(device, vma.handle, black);
+    try _blackImage.uploadDataToImage(device, vma.handle, &black);
 
     //checkerboard image
-    const magenta: nz.color.Rgba(f32) = .new(1, 0, 1, 1);
-    var pixels: [16 * 16]f32 = undefined;
+    const magenta: u32 = nz.color.Rgba(f32).new(1, 0, 1, 1).toU32();
+    var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            pixels[y * 16 + x] = if (std.math.pow(f32, (x % 2), (y % 2)) == 1) magenta else black;
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
         }
     }
 
-    const _errorCheckerboardImage: vk.Image = .init(
+    const _errorCheckerboardImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ 1, 1, 1 },
+        .{ .width = 1, .height = 1, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    _errorCheckerboardImage.uploadDataToImage(device, vma.handle, pixels);
+    try _errorCheckerboardImage.uploadDataToImage(device, vma.handle, &pixels);
 
-    const sampl: vk.c.VkSamplerCreateInfo = .{
+    var sampl: vk.c.VkSamplerCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = vk.c.VK_FILTER_NEAREST,
         .minFilter = vk.c.VK_FILTER_NEAREST,
@@ -152,84 +153,108 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     var _defaultSamplerLinear: vk.c.VkSampler = undefined;
     var _defaultSamplerNearest: vk.c.VkSampler = undefined;
-    vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerNearest);
+    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerNearest);
     sampl.magFilter = vk.c.VK_FILTER_LINEAR;
     sampl.minFilter = vk.c.VK_FILTER_LINEAR;
-    vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerLinear);
+    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerLinear);
 
     // //TODO: GET RID OF
-    // const compute_descriptor_config: vk.descriptor.Layout.Config = .{};
-    // compute_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    // const compute_descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
-    // const graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
-    // graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    // const graphics_descriptor: vk.Descriptor = try .init(device, draw_image.image_view);
-    const descriptor_gpu_scene_data_config: vk.descriptor.Layout.Config = .{};
+    var compute_descriptor_config: vk.descriptor.Layout.Config = .{};
+    compute_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    const compute_descriptor_layout: vk.descriptor.Layout = try .init(device, &compute_descriptor_config, vk.c.VK_SHADER_STAGE_COMPUTE_BIT);
+
+    var graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
+    graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    const graphics_descriptor_layout: vk.descriptor.Layout = try .init(device, &graphics_descriptor_config, vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    var descriptor_gpu_scene_data_config: vk.descriptor.Layout.Config = .{};
     descriptor_gpu_scene_data_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     const descriptor_gpu_scene_data: vk.descriptor.Layout = try .init(
         device,
-        descriptor_gpu_scene_data_config,
+        &descriptor_gpu_scene_data_config,
         vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
 
-    const _singleImageDescriptorLayout_config: vk.descriptor.Layout.Config = .{};
+    var _singleImageDescriptorLayout_config: vk.descriptor.Layout.Config = .{};
     _singleImageDescriptorLayout_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     const _singleImageDescriptorLayout: vk.descriptor.Layout = try .init(
         device,
-        _singleImageDescriptorLayout_config,
+        &_singleImageDescriptorLayout_config,
         vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
 
-    // const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
-    // const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
-    // defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
-    // defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
+    const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
+    const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
+    defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
 
-    // var pipelines: [16]vk.Pipeline = undefined;
-    // var config_comp1: vk.Pipeline.Compute.Config = .{
-    //     .descriptor_set_layouts = &.{compute_descriptor._drawImageDescriptorLayou},
-    //     .shader = .{
-    //         .module = shader,
-    //     },
-    // };
-    // pipelines[0] = try .initCompute(device, &config_comp1);
-    // pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
-    // pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
+    var pipelines: [16]vk.Pipeline = undefined;
+    var config_comp1: vk.Pipeline.Compute.Config = .{
+        .descriptor_set_layouts = &.{compute_descriptor_layout.handle},
+        .shader = .{
+            .module = shader,
+        },
+    };
+    pipelines[0] = try .initCompute(device, &config_comp1);
+    pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
+    pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
 
-    // var config_comp2: vk.Pipeline.Compute.Config = .{
-    //     .descriptor_set_layouts = &.{compute_descriptor._drawImageDescriptorLayou},
-    //     .shader = .{
-    //         .module = gradient_color,
-    //     },
-    // };
-    // pipelines[1] = try .initCompute(device, &config_comp2);
-    // pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
+    var config_comp2: vk.Pipeline.Compute.Config = .{
+        .descriptor_set_layouts = &.{compute_descriptor_layout.handle},
+        .shader = .{
+            .module = gradient_color,
+        },
+    };
+    pipelines[1] = try .initCompute(device, &config_comp2);
+    pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
 
-    // const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
-    // const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
-    // defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
-    // defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
+    const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
+    const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
+    defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
 
-    // var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
-    // var config_graphics: vk.Pipeline.Graphics.Config = .{
-    //     .vertex_shaders = .{
-    //         .module = vert,
-    //     },
-    //     .fragment_shaders = .{
-    //         .module = frag,
-    //     },
-    //     .descriptor_set_layouts = &.{graphics_descriptor._drawImageDescriptorLayou},
-    //     .push_constants = &.{},
-    // };
-    // config_graphics.viewport_state.scissorCount = 1;
-    // config_graphics.viewport_state.viewportCount = 1;
-    // config_graphics.dynamic_state.dynamicStateCount = 2;
-    // config_graphics.dynamic_state.pDynamicStates = &state[0];
-    // config_graphics.render_info.colorAttachmentCount = 1;
-    // config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
-    // config_graphics.render_info.depthAttachmentFormat = depth_image.format;
-    // config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    // pipelines[2] = try .initGraphics(device, &config_graphics);
+    var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
+    var config_graphics: vk.Pipeline.Graphics.Config = .{
+        .vertex_shaders = .{
+            .module = vert,
+        },
+        .fragment_shaders = .{
+            .module = frag,
+        },
+        .descriptor_set_layouts = &.{graphics_descriptor_layout.handle},
+        .push_constants = &.{},
+    };
+    config_graphics.viewport_state.scissorCount = 1;
+    config_graphics.viewport_state.viewportCount = 1;
+    config_graphics.dynamic_state.dynamicStateCount = 2;
+    config_graphics.dynamic_state.pDynamicStates = &state[0];
+    config_graphics.render_info.colorAttachmentCount = 1;
+    config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
+    config_graphics.render_info.depthAttachmentFormat = depth_image.format;
+    config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    pipelines[2] = try .initGraphics(device, &config_graphics);
+
+    const frag_shader_triangle: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/tex_image.frag.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, frag_shader_triangle, null);
+
+    const vert_shader_triangle: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, vert_shader_triangle, null);
+
+    var config_mesh: vk.Pipeline.Graphics.Config = .{
+        .fragment_shaders = .{
+            .module = frag_shader_triangle,
+        },
+        .vertex_shaders = .{
+            .module = vert_shader_triangle,
+        },
+        .descriptor_set_layouts = &.{_singleImageDescriptorLayout.handle},
+        .push_constants = &.{.{
+            .offset = 0,
+            .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
+            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+        }},
+    };
+    pipelines[3] = try .initGraphics(device, &config_mesh);
 
     // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
     // defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
@@ -269,16 +294,23 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .physical_device = physical_device,
         .device = device,
         .swapchain = swapchain,
-        // .descriptor = compute_descriptor,
-        // .pipelines = pipelines,
+        .pipelines = pipelines,
         .current_pipeline = 0,
         .max_pipelines = 4,
         .vma = vma,
         .draw_image = draw_image,
         .depth_image = depth_image,
-        // .descriptor_graphics = graphics_descriptor,
         ._gpuSceneDataDescriptorLayout = descriptor_gpu_scene_data,
         ._singleImageDescriptorLayout = _singleImageDescriptorLayout,
+        .compute_descriptor_layout = compute_descriptor_layout,
+        .graphics_descriptor_layout = graphics_descriptor_layout,
+        .scene_data = std.mem.zeroes(GPUSceneData),
+        ._whiteImage = _whiteImage,
+        ._blackImage = _blackImage,
+        ._greyImage = _greyImage,
+        ._errorCheckerboardImage = _errorCheckerboardImage,
+        ._defaultSamplerLinear = _defaultSamplerLinear,
+        ._defaultSamplerNearest = _defaultSamplerNearest,
     };
 }
 
@@ -445,9 +477,11 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
 
-    const writer: vk.descriptor.Writer = .{};
-    writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    writer.updateSet(self.device, globalDescriptor);
+    {
+        const writer: vk.descriptor.Writer = .{};
+        writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.updateSet(self.device, globalDescriptor);
+    }
 
     //TODO: ADD WRITER
     // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
@@ -491,17 +525,22 @@ pub fn draw(self: *@This(), time: f32) !void {
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
 
-    //TODO: ADD WRITER
-    // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
-    // writer.Image(
-    //     self.allocator,
-    //     0,
-    //     self.draw_image.image_view,
-    //     vk.c.VK_NULL_HANDLE,
-    //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
-    //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-    // );
-    // writer.updateSet(self.device, )
+    const image_set: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout, null);
+    {
+        const writer: vk.DescriptorAllocatorGrowable.Writer = .{};
+        writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        writer.updateSet(self.device, image_set);
+    }
+    vk.c.vkCmdBindDescriptorSets(
+        cmd_buffer,
+        .vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        self.pipelines[3].get().handle,
+        0,
+        1,
+        &image_set,
+        0,
+        null,
+    );
 
     //projection matrix + view + model
     const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });

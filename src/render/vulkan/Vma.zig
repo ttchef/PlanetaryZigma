@@ -2,9 +2,9 @@ const vk = @import("vulkan.zig");
 const vma = @import("vma");
 pub const c = vma;
 
-pub const Allocator = vma.vmaAllocator;
-pub const Allocation = vma.vmaallocation;
-pub const AllocationInfo = vma.VmaAllocationInfo;
+pub const Allocator = c.VmaAllocator;
+pub const Allocation = c.VmaAllocation;
+pub const AllocationInfo = c.VmaAllocationInfo;
 
 handle: vma.VmaAllocator = undefined,
 

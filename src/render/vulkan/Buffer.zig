@@ -1,24 +1,24 @@
 const vk = @import("vulkan.zig");
 buffer: vk.c.VkBuffer,
 vma_allocation: vk.Vma.Allocation,
-info: vma.VmaAllocationInfo,
+info: vk.Vma.AllocationInfo,
 
-pub fn init(vma_allocator: vma.VmaAllocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vma.VmaMemoryUsage) !@This() {
-    var buffer_info: vma.VkBufferCreateInfo = .{
+pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vk.Vma.c.VmaMemoryUsage) !@This() {
+    var buffer_info: vk.Vma.c.VkBufferCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
         .usage = vk_usage,
     };
-    var vmaalloc_info: vma.VmaAllocationCreateInfo = .{
+    var vmaalloc_info: vk.Vma.c.VmaAllocationCreateInfo = .{
         .usage = vma_usage,
-        .flags = vma.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
     };
 
     var new_buffer: vk.c.VkBuffer = undefined;
-    var allocation: vma.VmaAllocation = undefined;
-    var info: vma.VmaAllocationInfo = undefined;
+    var allocation: vk.Vma.Allocation = undefined;
+    var info: vk.Vma.AllocationInfo = undefined;
 
-    try vk.check(vma.vmaCreateBuffer(
+    try vk.check(vk.Vma.c.vmaCreateBuffer(
         vma_allocator,
         &buffer_info,
         &vmaalloc_info,
@@ -34,6 +34,6 @@ pub fn init(vma_allocator: vma.VmaAllocator, size: usize, vk_usage: vk.c.VkBuffe
     };
 }
 
-pub fn deinit(self: @This(), vma_allocator: vma.VmaAllocator) void {
-    vma.vmaDestroyBuffer(vma_allocator, @ptrCast(self.buffer), self.vma_allocation);
+pub fn deinit(self: @This(), vma_allocator: vk.Vma.Allocator) void {
+    vk.Vma.c.vmaDestroyBuffer(vma_allocator, @ptrCast(self.buffer), self.vma_allocation);
 }

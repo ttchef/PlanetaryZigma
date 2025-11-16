@@ -46,7 +46,7 @@ pub fn main() !void {
     });
     defer window.deinit();
 
-    var renderer: Renderer = try .init(.{
+    var renderer: Renderer = try .init(allocator, .{
         .instance = .{
             .extensions = blk: {
                 var arr: [8][*:0]const u8 = undefined;

@@ -21,7 +21,7 @@ pub const GPUDrawPushConstants = extern struct {
     vertex_buffer: c.VkDeviceAddress,
 };
 
-pub fn init(device: Device, vma_allocator: Vma.Allocation, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
