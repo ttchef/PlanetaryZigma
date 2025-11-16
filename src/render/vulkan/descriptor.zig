@@ -9,47 +9,47 @@ pub const Growable = struct {
 
     pub const PoolSizeRatio = struct {
         desciptor_type: vk.c.VkDescriptorType,
-        ratio: f32,
+        ratio: u32,
     };
 
     pub fn init(allocator: std.mem.Allocator, device: vk.Device, max_sets: u32, pool_ratios: []PoolSizeRatio) !@This() {
-        const ratios: std.ArrayList(PoolSizeRatio) = .empty;
+        var ratios: std.ArrayList(PoolSizeRatio) = .empty;
 
-        for (pool_ratios) |ratio| {
-            ratios.append(allocator, ratio);
+        for (pool_ratios) |*ratio| {
+            try ratios.append(allocator, ratio.*);
         }
 
-        const new_pool = createPool(device, max_sets, pool_ratios);
+        const new_pool = try createPool(allocator, device, max_sets, pool_ratios);
 
-        const sets_per_pool: u32 = max_sets * 1.5;
+        const sets_per_pool: u32 = @intFromFloat(@as(f32, @floatFromInt(max_sets)) * 1.5);
 
-        const ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty;
-        ready_pools.append(allocator, new_pool);
+        var ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty;
+        try ready_pools.append(allocator, new_pool);
         return .{
             .full_pools = .empty,
             .sets_per_pool = sets_per_pool,
             .ready_pools = ready_pools,
-            .ratios = ratios.toOwnedSlice(allocator),
+            .ratios = ratios,
         };
     }
 
-    pub fn clearPools(self: @This(), allocator: std.mem.Allocator, device: vk.Device) void {
-        for (self.ready_pools) |ready_pool| {
-            try vk.check(vk.c.vkResetDescriptorPool(device, ready_pool, 0));
+    pub fn clearPools(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) !void {
+        for (self.ready_pools.items) |ready_pool| {
+            try vk.check(vk.c.vkResetDescriptorPool(device.handle, ready_pool, 0));
         }
-        for (self.full_pools) |full_pool| {
-            try vk.check(vk.c.vkResetDescriptorPool(device, full_pool, 0));
-            self.full_pools.append(allocator, full_pool);
+        for (self.full_pools.items) |full_pool| {
+            try vk.check(vk.c.vkResetDescriptorPool(device.handle, full_pool, 0));
+            try self.full_pools.append(allocator, full_pool);
         }
         self.full_pools.clearAndFree(allocator);
     }
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator, device: vk.Device) void {
-        for (self.ready_pools) |ready_pool| {
-            try vk.check(vk.c.vkDestroyDescriptorPool(device, ready_pool, 0));
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) void {
+        for (self.ready_pools.items) |ready_pool| {
+            try vk.check(vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0));
         }
         self.ready_pools.clearAndFree(allocator);
-        for (self.full_pools) |full_pool| {
-            try vk.check(vk.c.vkDestroyDescriptorPool(device, full_pool, 0));
+        for (self.full_pools.items) |full_pool| {
+            try vk.check(vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0));
         }
         self.full_pools.clearAndFree(allocator);
     }
@@ -94,26 +94,26 @@ pub const Growable = struct {
         return new_pool;
     }
 
-    fn createPool(allocator: std.mem.Allocator, device: vk.Device, set_count: u32, pool_ratios: []PoolSizeRatio) vk.c.VkDescriptorPool {
-        const pool_sizes: std.ArrayList(vk.c.VkDescriptorPoolSize) = .initCapacity(allocator, pool_ratios.len);
+    fn createPool(allocator: std.mem.Allocator, device: vk.Device, set_count: u32, pool_ratios: []PoolSizeRatio) !vk.c.VkDescriptorPool {
+        var pool_sizes: std.ArrayList(vk.c.VkDescriptorPoolSize) = try .initCapacity(allocator, pool_ratios.len);
         for (pool_ratios) |ratio| {
             const pool_size: vk.c.VkDescriptorPoolSize = .{
                 .type = ratio.desciptor_type,
                 .descriptorCount = ratio.ratio,
             };
-            pool_sizes.pushBack(pool_size);
+            try pool_sizes.append(allocator, pool_size);
         }
 
         var pool_info: vk.c.VkDescriptorPoolCreateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .flags = 0,
             .maxSets = set_count,
-            .poolSizeCount = pool_sizes.len,
-            .pPool_sizes = pool_sizes.buffer,
+            .poolSizeCount = @intCast(pool_sizes.items.len),
+            .pPoolSizes = pool_sizes.items.ptr,
         };
 
         var new_pool: vk.c.VkDescriptorPool = undefined;
-        try vk.check(vk.c.vkCreateDescriptorPool(device, &pool_info, null, &new_pool));
+        try vk.check(vk.c.vkCreateDescriptorPool(device.handle, &pool_info, null, &new_pool));
         return new_pool;
     }
 };
@@ -192,17 +192,17 @@ pub const Layout = struct {
     handle: vk.c.VkDescriptorSetLayout,
 
     pub const Config = struct {
-        bindings: [16]vk.c.VkDescriptorSetLayoutBinding,
+        bindings: [16]vk.c.VkDescriptorSetLayoutBinding = undefined,
         binding_count: usize = 0,
 
-        pub fn addBinding(self: @This(), binding: u32, descriptor_type: vk.c.VkDescriptorType) void {
+        pub fn addBinding(self: *@This(), binding: u32, descriptor_type: vk.c.VkDescriptorType) void {
             const newbind: vk.c.VkDescriptorSetLayoutBinding = .{
                 .binding = binding,
                 .descriptorCount = 1,
                 .descriptorType = descriptor_type,
             };
 
-            self.binding[self.binding_count] = newbind;
+            self.bindings[self.binding_count] = newbind;
             self.binding_count += 1;
         }
 
@@ -211,27 +211,19 @@ pub const Layout = struct {
         }
     };
 
-    pub fn init(
-        device: vk.Device,
-        config: Config,
-        shader_stages: vk.c.VkShaderStageFlags,
-        // pNext: ?*void,
-        // flags: vk.c.VkDescriptorSetLayoutCreateFlags,
-    ) !@This() {
-        for (config.bindings[0..config.binding_count]) |binding| {
+    pub fn init(device: vk.Device, config: *Config, shader_stages: vk.c.VkShaderStageFlags) !@This() {
+        for (config.bindings[0..config.binding_count]) |*binding| {
             binding.stageFlags |= shader_stages;
         }
 
         var info: vk.c.VkDescriptorSetLayoutCreateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            // .pNext = pNext,
             .pBindings = &config.bindings[0],
-            .bindingCount = config.binding_count,
-            // .flags = flags,
+            .bindingCount = @intCast(config.binding_count),
         };
 
         var set: vk.c.VkDescriptorSetLayout = undefined;
-        vk.check(vk.c.vkCreateDescriptorSetLayout(device, &info, null, &set));
+        try vk.check(vk.c.vkCreateDescriptorSetLayout(device.handle, &info, null, &set));
         return .{ .handle = set };
     }
 

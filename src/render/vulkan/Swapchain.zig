@@ -14,6 +14,7 @@ current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
 pub fn init(
+    allocator: std.mem.Allocator,
     physical_device: vk.PhysicalDevice,
     device: vk.Device,
     surface: vk.Surface,
@@ -31,7 +32,7 @@ pub fn init(
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
 
     var frames: [max_frames_inflight]FrameData = undefined;
-    for (&frames) |*frame| frame.* = try .init(device);
+    for (&frames) |*frame| frame.* = try .init(allocator, device);
 
     const actual_extent: vk.c.VkExtent2D = try getSurfaceExtent(physical_device, surface, width, height);
 
@@ -47,10 +48,10 @@ pub fn init(
 }
 
 pub fn deinit(
-    self: @This(),
+    self: *@This(),
     device: vk.Device,
 ) void {
-    for (self.frames) |frame| frame.deinit(device);
+    for (self.frames) |frame| frame.frame.deinit(allocator, device);
     vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 }
 
@@ -189,11 +190,11 @@ const FrameData = struct {
         var render_fence: vk.c.VkFence = undefined;
         try check(vk.c.vkCreateFence(device.handle, &fence_info, null, &render_fence));
 
-        const frame_sizes: []vk.DescriptorAllocatorGrowable.PoolSizeRatio = .{
-            .{ vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
-            .{ vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
-            .{ vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
-            .{ vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+        var frame_sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
+            .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 3 },
+            .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .ratio = 3 },
+            .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
+            .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 },
         };
 
         return .{
@@ -201,16 +202,16 @@ const FrameData = struct {
             .render_done_semaphore = render_done_semaphore,
             .swapchain_semaphore = swapchain_semaphore,
             .render_fence = render_fence,
-            .descriptor = .init(
+            .descriptor = try .init(
                 allocator,
                 device,
                 1000,
-                frame_sizes,
+                &frame_sizes,
             ),
         };
     }
 
-    pub fn deinit(allocator: std.mem.Allocator, self: @This(), device: vk.Device) void {
+    pub fn deinit(allocator: std.mem.Allocator, self: *@This(), device: vk.Device) void {
         vk.c.vkDestroySemaphore(device.handle, self.render_done_semaphore, null);
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);

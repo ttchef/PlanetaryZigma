@@ -1,3 +1,4 @@
+const std = @import("std");
 const vk = @import("vulkan.zig");
 
 image: vk.c.VkImage = undefined,
@@ -27,16 +28,18 @@ pub fn init(
         .tiling = vk.c.VK_IMAGE_TILING_OPTIMAL,
         .usage = image_usages_flags,
     };
-    if (mip_mapped) img_info.mipLevels = @floor(@log2(@max(extent.width, extent.height))) + 1;
 
-    var vma_alloc_info: vma.VmaAllocationCreateInfo = .{
-        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
+    const max: f32 = @floatFromInt(@max(extent.width, extent.height));
+    if (mip_mapped) img_info.mipLevels = @intFromFloat(@floor(@log2(max)) + 1);
+
+    var vma_alloc_info: vk.Vma.c.VmaAllocationCreateInfo = .{
+        .usage = vk.Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
         .requiredFlags = vk.c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
 
     var image: vk.c.VkImage = undefined;
-    var vma_image_allocation: vma.VmaAllocation = undefined;
-    _ = vma.vmaCreateImage(
+    var vma_image_allocation: vk.Vma.Allocation = undefined;
+    _ = vk.Vma.c.vmaCreateImage(
         vma,
         @ptrCast(&img_info),
         &vma_alloc_info,
@@ -71,17 +74,24 @@ pub fn init(
     };
 }
 
-pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator, data: *void) !void {
+pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator, data: anytype) !void {
     const data_size: u32 = self.image_extent.depth * self.image_extent.width * self.image_extent.height * 4;
-    const upload_buffer: vk.Buffer = .init(vma, data_size, vk.c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    const upload_buffer: vk.Buffer = try .init(vma, data_size, vk.c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     defer upload_buffer.deinit(vma);
 
-    @memcpy(upload_buffer.info.pMappedData, data);
+    @memcpy(
+        @as([*]u8, @ptrCast(upload_buffer.info.pMappedData))[0..@intCast(data_size)],
+        std.mem.asBytes(data)[0..@intCast(data_size)],
+    );
 
     const cmd = try device.beginImmediateCommand();
 
-    const image_barrier: vk.Barrier = .init(cmd, self.image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
-    image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    var image_barrier: vk.Barrier = .init(cmd, self.image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
+    image_barrier.transition(
+        vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        vk.c.VK_ACCESS_HOST_READ_BIT | vk.c.VK_ACCESS_MEMORY_WRITE_BIT,
+    );
 
     var copy_region: vk.c.VkBufferImageCopy = .{
         .bufferOffset = 0,
@@ -107,9 +117,11 @@ pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator
 
     image_barrier.transition(
         vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        0,
+        0,
     );
 
-    device.endImmediateCommand(cmd);
+    try device.endImmediateCommand(cmd);
 }
 
 pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
