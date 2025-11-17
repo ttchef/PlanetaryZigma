@@ -45,17 +45,17 @@ pub const Growable = struct {
     }
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) void {
         for (self.ready_pools.items) |ready_pool| {
-            try vk.check(vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0));
+            vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0);
         }
         self.ready_pools.clearAndFree(allocator);
         for (self.full_pools.items) |full_pool| {
-            try vk.check(vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0));
+            vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0);
         }
         self.full_pools.clearAndFree(allocator);
     }
 
-    pub fn allocate(self: @This(), allocator: std.mem.Allocator, device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: *?void) vk.c.VkDescriptorSet {
-        const pool_to_use = getPool(device);
+    pub fn allocate(self: *@This(), allocator: std.mem.Allocator, device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
+        var pool_to_use = try self.getPool(allocator, device);
 
         var allocInfo: vk.c.VkDescriptorSetAllocateInfo = .{
             .pNext = pNext,
@@ -66,26 +66,27 @@ pub const Growable = struct {
         };
 
         var descriptor_set: vk.c.VkDescriptorSet = undefined;
-        const result: vk.c.VkResult = try vk.check(vk.c.vkAllocateDescriptorSets(device, &allocInfo, &descriptor_set));
+        const result: vk.c.VkResult = vk.c.vkAllocateDescriptorSets(device.handle, &allocInfo, &descriptor_set);
 
         if (result == vk.c.VK_ERROR_OUT_OF_POOL_MEMORY or result == vk.c.VK_ERROR_FRAGMENTED_POOL) {
-            self.full_pools.append(allocator, pool_to_use);
-            pool_to_use = getPool(device);
+            try self.full_pools.append(allocator, pool_to_use);
+            pool_to_use = try self.getPool(allocator, device);
             allocInfo.descriptorPool = pool_to_use;
-            vk.check(vk.c.vkAllocateDescriptorSets(device, &allocInfo, &descriptor_set));
+            try vk.check(vk.c.vkAllocateDescriptorSets(device.handle, &allocInfo, &descriptor_set));
         }
-        self.ready_pools.append(allocator, pool_to_use);
+        try self.ready_pools.append(allocator, pool_to_use);
         return descriptor_set;
     }
 
-    fn getPool(self: @This(), device: vk.Device) vk.c.VkDescriptorPool {
+    fn getPool(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) !vk.c.VkDescriptorPool {
         var new_pool: vk.c.VkDescriptorPool = undefined;
-        if (self.ready_pools.len != 0) {
-            new_pool = self.ready_pools.popBack();
+        if (self.ready_pools.items.len != 0) {
+            new_pool = self.ready_pools.pop().?;
         } else {
-            new_pool = createPool(device, self.sets_per_pool, self.ratios);
+            new_pool = try createPool(allocator, device, self.sets_per_pool, self.ratios.items);
 
-            self.sets_per_pool = self.sets_per_pool * 1.5;
+            self.sets_per_pool = @intFromFloat(@as(f32, @floatFromInt(self.sets_per_pool)) * 1.5);
+
             if (self.sets_per_pool > 4092) {
                 self.sets_per_pool = 4092;
             }
@@ -126,19 +127,19 @@ pub const Writer = struct {
     writes: [16]vk.c.VkWriteDescriptorSet = undefined,
     writes_count: usize = 0,
 
-    pub fn appendImage(self: @This(), binding: u32, image: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType) void {
+    pub fn appendImage(self: *@This(), binding: u32, image: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType) void {
         const info: vk.c.VkDescriptorImageInfo = .{
             .sampler = sampler,
             .imageView = image,
             .imageLayout = layout,
         };
-        self.image[self.image_count] = info;
+        self.image_infos[self.image_count] = info;
         self.image_count += 1;
 
         const write: vk.c.VkWriteDescriptorSet = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstBinding = binding,
-            .dstSet = vk.c.VK_NULL_HANDLE,
+            .dstSet = null,
             .descriptorCount = 1,
             .descriptorType = descriptor_set_type,
             .pImageInfo = &info,
@@ -148,7 +149,7 @@ pub const Writer = struct {
         self.writes_count += 1;
     }
 
-    pub fn appendBuffer(self: @This(), binding: u32, buffer: vk.c.VkBuffer, size: usize, offset: usize, descriptor_set_type: vk.c.VkDescriptorType) void {
+    pub fn appendBuffer(self: *@This(), binding: u32, buffer: vk.c.VkBuffer, size: usize, offset: usize, descriptor_set_type: vk.c.VkDescriptorType) void {
         const info: vk.c.VkDescriptorBufferInfo = .{
             .buffer = buffer,
             .offset = offset,
@@ -160,13 +161,13 @@ pub const Writer = struct {
         const write: vk.c.VkWriteDescriptorSet = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstBinding = binding,
-            .dstSet = vk.c.VK_NULL_HANDLE,
+            .dstSet = null,
             .descriptorCount = 1,
             .descriptorType = descriptor_set_type,
             .pBufferInfo = &info,
         };
 
-        self.writes_infos[self.writes_count] = write;
+        self.writes[self.writes_count] = write;
         self.writes_count += 1;
     }
 
@@ -174,8 +175,8 @@ pub const Writer = struct {
         self = std.mem.zeroes(@This());
     }
 
-    pub fn updateSet(self: @This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {
-        for (self.writes[0..self.writes_count]) |writer| {
+    pub fn updateSet(self: *@This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {
+        for (self.writes[0..self.writes_count]) |*writer| {
             writer.dstSet = set;
         }
         vk.c.vkUpdateDescriptorSets(
