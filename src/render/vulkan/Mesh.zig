@@ -91,7 +91,7 @@ pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertic
     };
 }
 
-pub fn deinit(self: @This(), vma_allocator: Vma.VmaAllocator) void {
+pub fn deinit(self: @This(), vma_allocator: Vma.Allocator) void {
     self.index_buffer.deinit(vma_allocator);
     self.vertex_buffer.deinit(vma_allocator);
 }

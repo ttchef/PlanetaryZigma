@@ -1,3 +1,4 @@
+const std = @import("std");
 const vk = @import("vulkan.zig");
 const vma = @import("vma");
 pub const c = vma;
@@ -33,9 +34,11 @@ pub fn copyToAllocation(
     comptime T: type,
     data: T,
     allocation: Allocation,
-    allocation_info: AllocationInfo,
+    allocation_info: *AllocationInfo,
 ) void {
     vma.vmaGetAllocationInfo(self.handle, allocation, allocation_info);
-    const mapped_data: ?*T = allocation_info.pMappedData;
-    @memcpy(mapped_data, data);
+    @memcpy(
+        @as([*]u8, @ptrCast(allocation_info.pMappedData))[0..@intCast(allocation_info.size)],
+        @as([*]const u8, @ptrCast(&data))[0..@intCast(allocation_info.size)],
+    );
 }

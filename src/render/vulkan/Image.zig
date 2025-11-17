@@ -126,5 +126,5 @@ pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator
 
 pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
     vk.c.vkDestroyImageView(device.handle, self.image_view, null);
-    vk.Vma.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.image), self.vma_allocation);
+    vk.Vma.c.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.image), self.vma_allocation);
 }

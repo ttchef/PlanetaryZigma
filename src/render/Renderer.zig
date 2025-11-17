@@ -23,6 +23,7 @@ compute_descriptor_layout: vk.descriptor.Layout,
 graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
+globalDescriptorAllocator: vk.descriptor.Growable,
 scene_data: GPUSceneData,
 _whiteImage: vk.Image,
 _blackImage: vk.Image,
@@ -162,6 +163,18 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     var compute_descriptor_config: vk.descriptor.Layout.Config = .{};
     compute_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     const compute_descriptor_layout: vk.descriptor.Layout = try .init(device, &compute_descriptor_config, vk.c.VK_SHADER_STAGE_COMPUTE_BIT);
+
+    var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
+        .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
+        .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 1 },
+    };
+    var globalDescriptorAllocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
+    const _drawImageDescriptors = try globalDescriptorAllocator.allocate(allocator, device, compute_descriptor_layout.handle, null);
+    {
+        var writer: vk.descriptor.Writer = .{};
+        writer.appendImage(0, draw_image.image_view, null, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        writer.updateSet(device, _drawImageDescriptors);
+    }
 
     var graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
     graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -311,15 +324,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         ._errorCheckerboardImage = _errorCheckerboardImage,
         ._defaultSamplerLinear = _defaultSamplerLinear,
         ._defaultSamplerNearest = _defaultSamplerNearest,
+        .globalDescriptorAllocator = globalDescriptorAllocator,
     };
 }
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.handle);
-    self.swapchain.deinit(self.device);
+    self.swapchain.deinit(allocator, self.device);
 
-    self.descriptor.deinit(self.device);
-    self.descriptor_graphics.deinit(self.device);
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vma, self.device);
@@ -328,8 +340,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self._greyImage.deinit(self.vma, self.device);
     self._errorCheckerboardImage.deinit(self.vma, self.device);
     self._whiteImage.deinit(self.vma, self.device);
+    self.globalDescriptorAllocator.deinit(allocator, self.device);
 
-    self.the_mesh.deinit(self.vma.handle);
     for (self.meshes.items) |mesh| {
         mesh.deinit(self.vma.handle);
     }
@@ -360,7 +372,7 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
 
 pub fn draw(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
-    const current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
+    var current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     try vk.check(vk.c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
     const aquire_result = vk.c.vkAcquireNextImageKHR(
@@ -375,7 +387,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.resize_request = true;
         return;
     }
-    current_frame.descriptor.clearPools(self.allocator, self.device);
+    try current_frame.descriptor.clearPools(self.allocator, self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -394,7 +406,23 @@ pub fn draw(self: *@This(), time: f32) !void {
     const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().handle);
-    vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().layout, 0, 1, &self.descriptor._drawImageDescriptors, 0, null);
+    // vk.c.vkCmdBindDescriptorSets(
+    //     cmd_buffer,
+    //     vk.c.VK_PIPELINE_BIND_POINT_COMPUTE,
+    //     pipeline.get().layout,
+    //     0,
+    //     1,
+    //     0,
+    //     0,
+    //     null,
+    // );
+
+    // const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
+    // {
+    //     const writer: vk.descriptor.Writer = .{};
+    //     writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    //     writer.updateSet(self.device, globalDescriptor);
+    // }
 
     vk.c.vkCmdPushConstants(cmd_buffer, pipeline.get().layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.Compute.PushConstant), &pipeline.compute.data);
 
@@ -469,16 +497,15 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    const gpuSceneDataBuffer: vk.Buffer = .init(self.vma, @sizeOf(GPUSceneData), vk.v.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    defer gpuSceneDataBuffer.deinit(self.vma);
+    var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    defer gpuSceneDataBuffer.deinit(self.vma.handle);
 
     //TODO: try removing the vma get info
-    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, gpuSceneDataBuffer.info);
+    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
 
-    const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
-
+    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
     {
-        const writer: vk.descriptor.Writer = .{};
+        var writer: vk.descriptor.Writer = .{};
         writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         writer.updateSet(self.device, globalDescriptor);
     }
@@ -525,16 +552,16 @@ pub fn draw(self: *@This(), time: f32) !void {
     //The mesh
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
 
-    const image_set: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout, null);
+    const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout.handle, null);
     {
-        const writer: vk.DescriptorAllocatorGrowable.Writer = .{};
+        var writer: vk.descriptor.Writer = .{};
         writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         writer.updateSet(self.device, image_set);
     }
     vk.c.vkCmdBindDescriptorSets(
         cmd_buffer,
-        .vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        self.pipelines[3].get().handle,
+        vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        self.pipelines[3].get().layout,
         0,
         1,
         &image_set,
