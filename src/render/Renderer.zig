@@ -24,6 +24,7 @@ graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
 globalDescriptorAllocator: vk.descriptor.Growable,
+_drawImageDescriptor: vk.c.VkDescriptorSet,
 scene_data: GPUSceneData,
 _whiteImage: vk.Image,
 _blackImage: vk.Image,
@@ -96,10 +97,11 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
         .{ .width = 1, .height = 1, .depth = 1 },
-        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
+
     try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
     var grey: u32 = nz.color.Rgba(f32).grey.toU32();
@@ -108,7 +110,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
         .{ .width = 1, .height = 1, .depth = 1 },
-        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
@@ -120,7 +122,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
         .{ .width = 1, .height = 1, .depth = 1 },
-        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
@@ -140,7 +142,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
         .{ .width = 1, .height = 1, .depth = 1 },
-        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
@@ -168,13 +170,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 1 },
     };
+
     var globalDescriptorAllocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
-    const _drawImageDescriptors = try globalDescriptorAllocator.allocate(allocator, device, compute_descriptor_layout.handle, null);
-    {
-        var writer: vk.descriptor.Writer = .{};
-        writer.appendImage(0, draw_image.image_view, null, vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-        writer.updateSet(device, _drawImageDescriptors);
-    }
+
+    var _drawImageDescriptorLayoutconfig: vk.descriptor.Layout.Config = .{};
+    _drawImageDescriptorLayoutconfig.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    const _drawImageDescriptorLayoutlayout: vk.descriptor.Layout = try .init(device, &_drawImageDescriptorLayoutconfig, vk.c.VK_SHADER_STAGE_COMPUTE_BIT);
+
+    const _drawImageDescriptor = try globalDescriptorAllocator.allocate(allocator, device, _drawImageDescriptorLayoutlayout.handle, null);
 
     var graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
     graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -325,6 +328,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         ._defaultSamplerLinear = _defaultSamplerLinear,
         ._defaultSamplerNearest = _defaultSamplerNearest,
         .globalDescriptorAllocator = globalDescriptorAllocator,
+        ._drawImageDescriptor = _drawImageDescriptor,
     };
 }
 
@@ -387,7 +391,8 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.resize_request = true;
         return;
     }
-    try current_frame.descriptor.clearPools(self.allocator, self.device);
+
+    // try current_frame.descriptor.clearPools(self.allocator, self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -406,21 +411,22 @@ pub fn draw(self: *@This(), time: f32) !void {
     const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().handle);
-    // vk.c.vkCmdBindDescriptorSets(
-    //     cmd_buffer,
-    //     vk.c.VK_PIPELINE_BIND_POINT_COMPUTE,
-    //     pipeline.get().layout,
-    //     0,
-    //     1,
-    //     0,
-    //     0,
-    //     null,
-    // );
+
+    vk.c.vkCmdBindDescriptorSets(
+        cmd_buffer,
+        vk.c.VK_PIPELINE_BIND_POINT_COMPUTE,
+        pipeline.get().layout,
+        0,
+        1,
+        &self._drawImageDescriptor,
+        0,
+        null,
+    );
 
     // const globalDescriptor: vk.c.VkDescriptorSet = current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout, null);
     // {
     //     const writer: vk.descriptor.Writer = .{};
-    //     writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    //     writer.appendBuffer(0, self.gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     //     writer.updateSet(self.device, globalDescriptor);
     // }
 

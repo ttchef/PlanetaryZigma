@@ -90,7 +90,7 @@ pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator
     image_barrier.transition(
         vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-        vk.c.VK_ACCESS_HOST_READ_BIT | vk.c.VK_ACCESS_MEMORY_WRITE_BIT,
+        vk.c.VK_ACCESS_MEMORY_WRITE_BIT,
     );
 
     var copy_region: vk.c.VkBufferImageCopy = .{
