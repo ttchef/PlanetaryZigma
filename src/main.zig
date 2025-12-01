@@ -15,8 +15,8 @@ pub fn main() !void {
     // const allocator = fba.allocator();
     var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = true, .safety = true }) = .init;
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
 
+    const allocator = gpa.allocator();
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
@@ -25,7 +25,6 @@ pub fn main() !void {
 
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
-
     // {
     //     var envs = std.process.EnvMap.init(allocator);
     //     defer envs.deinit();
