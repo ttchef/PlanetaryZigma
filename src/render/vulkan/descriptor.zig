@@ -49,10 +49,13 @@ pub const Growable = struct {
             vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0);
         }
         self.ready_pools.clearAndFree(allocator);
+        self.ready_pools.deinit(allocator);
         for (self.full_pools.items) |full_pool| {
             vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0);
         }
         self.full_pools.clearAndFree(allocator);
+        self.full_pools.deinit(allocator);
+        self.ratios.deinit(allocator);
     }
 
     pub fn allocate(self: *@This(), allocator: std.mem.Allocator, device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
@@ -98,6 +101,7 @@ pub const Growable = struct {
 
     fn createPool(allocator: std.mem.Allocator, device: vk.Device, set_count: u32, pool_ratios: []PoolSizeRatio) !vk.c.VkDescriptorPool {
         var pool_sizes: std.ArrayList(vk.c.VkDescriptorPoolSize) = try .initCapacity(allocator, pool_ratios.len);
+        defer pool_sizes.deinit(allocator);
         for (pool_ratios) |ratio| {
             const pool_size: vk.c.VkDescriptorPoolSize = .{
                 .type = ratio.desciptor_type,

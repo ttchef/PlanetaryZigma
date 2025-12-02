@@ -104,12 +104,7 @@ pub fn main() !void {
     // var accumulated_time: f32 = 0;
     // const seconds_per_update = 0.016;
 
-    std.debug.print("About to call renderer.draw({d})\n", .{time});
-    try renderer.draw(time);
-    std.debug.print("Successfully returned from renderer.draw()\n", .{});
-
     while (!window.shouldClose()) {
-        if (true) break;
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
         // accumulated_time += delta_time;
