@@ -6,6 +6,7 @@ const max_frames_inflight: usize = 3;
 
 swapchain: vk.c.VkSwapchainKHR,
 vk_images: [16]vk.c.VkImage,
+render_semaphores: [16]vk.c.VkSemaphore,
 image_count: u32,
 format: vk.c.VkFormat,
 extent: vk.c.VkExtent3D,
@@ -31,6 +32,16 @@ pub fn init(
     var vk_images: [16]vk.c.VkImage = undefined;
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
 
+    var semaphoreCreateInfo: vk.c.VkSemaphoreCreateInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    var render_semaphores: [16]vk.c.VkSemaphore = undefined;
+    for (0..image_count) |i| {
+        var new_render_semaphore: vk.c.VkSemaphore = undefined;
+        try check(vk.c.vkCreateSemaphore(device.handle, &semaphoreCreateInfo, null, &new_render_semaphore));
+        render_semaphores[i] = new_render_semaphore;
+    }
+
     var frames: [max_frames_inflight]FrameData = undefined;
     for (&frames) |*frame| frame.* = try .init(allocator, device);
 
@@ -39,6 +50,7 @@ pub fn init(
     return .{
         .swapchain = swapchain,
         .vk_images = vk_images,
+        .render_semaphores = render_semaphores,
         .image_count = image_count,
         .format = surface_format.format,
         .extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 },
@@ -53,6 +65,9 @@ pub fn deinit(
     device: vk.Device,
 ) void {
     for (&self.frames) |*frame| frame.deinit(allocator, device);
+    for (0..self.image_count) |i| {
+        vk.c.vkDestroySemaphore(device.handle, self.render_semaphores[i], null);
+    }
     vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 }
 
@@ -157,7 +172,6 @@ fn getSurfaceExtent(
 
 const FrameData = struct {
     swapchain_semaphore: vk.c.VkSemaphore,
-    render_done_semaphore: vk.c.VkSemaphore,
     render_fence: vk.c.VkFence,
     command_buffer: vk.c.VkCommandBuffer,
     descriptor: vk.descriptor.Growable,
@@ -176,10 +190,6 @@ const FrameData = struct {
         var semaphoreCreateInfo: vk.c.VkSemaphoreCreateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
-
-        var render_done_semaphore: vk.c.VkSemaphore = undefined;
-        try check(vk.c.vkCreateSemaphore(device.handle, &semaphoreCreateInfo, null, &render_done_semaphore));
-
         var swapchain_semaphore: vk.c.VkSemaphore = undefined;
         try check(vk.c.vkCreateSemaphore(device.handle, &semaphoreCreateInfo, null, &swapchain_semaphore));
 
@@ -200,7 +210,6 @@ const FrameData = struct {
 
         return .{
             .command_buffer = command_buffer,
-            .render_done_semaphore = render_done_semaphore,
             .swapchain_semaphore = swapchain_semaphore,
             .render_fence = render_fence,
             .descriptor = try .init(
@@ -213,7 +222,6 @@ const FrameData = struct {
     }
 
     pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) void {
-        vk.c.vkDestroySemaphore(device.handle, self.render_done_semaphore, null);
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);
         vk.c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);

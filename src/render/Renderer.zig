@@ -116,7 +116,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
     try _greyImage.uploadDataToImage(device, vma.handle, &grey);
 
-    var black: u32 = nz.color.Rgba(f32).black.toU32();
+    var black: u32 = nz.color.Rgba(u8).black.toU32();
     const _blackImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -129,11 +129,16 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _blackImage.uploadDataToImage(device, vma.handle, &black);
 
     //checkerboard image
-    const magenta: u32 = nz.color.Rgba(f32).new(1, 0, 1, 1).toU32();
+    const magenta: u32 = nz.color.Rgba(u8).new(1, 0, 1, 1).toU32();
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
+            if (@mod(x, 2) == 0) {
+                pixels[y * 16 + x] = magenta;
+            } else {
+                pixels[y * 16 + x] = black;
+            }
+            // pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
         }
     }
 
@@ -141,7 +146,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ .width = 1, .height = 1, .depth = 1 },
+        .{ .width = 16, .height = 16, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
@@ -418,6 +423,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.resize_request = true;
         return;
     }
+    const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
 
     // try current_frame.descriptor.clearPools(self.allocator, self.device);
 
@@ -471,58 +477,58 @@ pub fn draw(self: *@This(), time: f32) !void {
         vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
     );
     //START DRAWING VERTECIES
-    // var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
-    //     .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-    //     .pNext = null,
-    //     .imageView = self.draw_image.image_view,
-    //     .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    //     .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
-    //     .resolveImageView = null,
-    //     .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-    //     .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
-    //     .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
-    //     .clearValue = .{
-    //         .color = .{
-    //             .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
-    //         },
-    //     },
-    // };
-    // var depth_attachment: vk.c.VkRenderingAttachmentInfo = .{
-    //     .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-    //     .imageView = self.depth_image.image_view,
-    //     .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-    //     .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-    //     .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
-    //     .clearValue = .{
-    //         .depthStencil = .{
-    //             .depth = 0,
-    //         },
-    //     },
-    // };
-    //
-    // var renderInfo: vk.c.VkRenderingInfo = .{
-    //     .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
-    //     .pNext = null,
-    //     .flags = 0,
-    //     .renderArea = .{
-    //         .offset = .{ .x = 0, .y = 0 },
-    //         .extent = .{
-    //             .height = self.draw_image.image_extent.height,
-    //             .width = self.draw_image.image_extent.width,
-    //         },
-    //     },
-    //     .layerCount = 1,
-    //     .viewMask = 0,
-    //     .colorAttachmentCount = 1,
-    //     .pColorAttachments = &color_attachment,
-    //     .pDepthAttachment = &depth_attachment,
-    //     .pStencilAttachment = null,
-    // };
-    //
-    // vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
-    //
-    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
-    //
+    var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = self.draw_image.image_view,
+        .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
+        .resolveImageView = null,
+        .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{
+            .color = .{
+                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        },
+    };
+    var depth_attachment: vk.c.VkRenderingAttachmentInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = self.depth_image.image_view,
+        .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{
+            .depthStencil = .{
+                .depth = 0,
+            },
+        },
+    };
+
+    var renderInfo: vk.c.VkRenderingInfo = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = null,
+        .flags = 0,
+        .renderArea = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = .{
+                .height = self.draw_image.image_extent.height,
+                .width = self.draw_image.image_extent.width,
+            },
+        },
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment,
+        .pDepthAttachment = &depth_attachment,
+        .pStencilAttachment = null,
+    };
+
+    vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
+
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
+
     // var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     // defer gpuSceneDataBuffer.deinit(self.vma.handle);
     //
@@ -547,81 +553,89 @@ pub fn draw(self: *@This(), time: f32) !void {
     // //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     // // );
     // // writer.updateSet(self.device, )
-    //
-    // var viewport: vk.c.VkViewport = .{
-    //     .x = 0,
-    //     .y = 0,
-    //     .width = @floatFromInt(self.draw_image.image_extent.width),
-    //     .height = @floatFromInt(self.draw_image.image_extent.height),
-    //     .minDepth = 0,
-    //     .maxDepth = 1,
-    // };
-    //
-    // vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
-    //
-    // var scissor: vk.c.VkRect2D = .{
-    //     .offset = .{
-    //         .x = 0,
-    //         .y = 0,
-    //     },
-    //     .extent = .{
-    //         .width = self.draw_image.image_extent.width,
-    //         .height = self.draw_image.image_extent.height,
-    //     },
-    // };
-    //
-    // vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
-    //
+
+    var viewport: vk.c.VkViewport = .{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(self.draw_image.image_extent.width),
+        .height = @floatFromInt(self.draw_image.image_extent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+
+    vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+    var scissor: vk.c.VkRect2D = .{
+        .offset = .{
+            .x = 0,
+            .y = 0,
+        },
+        .extent = .{
+            .width = self.draw_image.image_extent.width,
+            .height = self.draw_image.image_extent.height,
+        },
+    };
+
+    vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+
     // //Triangle
-    // vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+
+    //The mesh
+    //TODO: ====================================
+    //TODO: ====================================
+    //TODO: ====================================
     //
-    // //The mesh
-    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
-    //
-    // const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout.handle, null);
-    // {
-    //     var writer: vk.descriptor.Writer = .{};
-    //     writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    //     writer.updateSet(self.device, image_set);
-    // }
-    // vk.c.vkCmdBindDescriptorSets(
-    //     cmd_buffer,
-    //     vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-    //     self.pipelines[3].get().layout,
-    //     0,
-    //     1,
-    //     &image_set,
-    //     0,
-    //     null,
-    // );
-    //
-    // //projection matrix + view + model
-    // const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
-    // var projection: nz.Mat4x4(f32) = .perspective(
-    //     70,
-    //     @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
-    //     10000,
-    //     0.1,
-    // );
-    // projection.d[5] *= -1;
-    //
-    // var push: vk.Mesh.GPUDrawPushConstants = .{
-    //     .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
-    //     .world_matrix = projection.mul(view).d,
-    // };
-    //
-    // vk.c.vkCmdPushConstants(
-    //     cmd_buffer,
-    //     self.pipelines[3].get().layout,
-    //     vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-    //     0,
-    //     @sizeOf(vk.Mesh.GPUDrawPushConstants),
-    //     &push,
-    // );
-    // vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
-    // vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
-    //
-    // vk.c.vkCmdEndRendering(cmd_buffer);
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
+
+    const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout.handle, null);
+    {
+        var writer: vk.descriptor.Writer = .{};
+        writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        writer.updateSet(self.device, image_set);
+    }
+
+    vk.c.vkCmdBindDescriptorSets(
+        cmd_buffer,
+        vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        self.pipelines[3].get().layout,
+        0,
+        1,
+        &image_set,
+        0,
+        null,
+    );
+
+    //projection matrix + view + model
+    const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
+    var projection: nz.Mat4x4(f32) = .perspective(
+        70,
+        @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
+        10000,
+        0.1,
+    );
+    projection.d[5] *= -1;
+
+    var push: vk.Mesh.GPUDrawPushConstants = .{
+        .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
+        .world_matrix = projection.mul(view).d,
+    };
+
+    vk.c.vkCmdPushConstants(
+        cmd_buffer,
+        self.pipelines[3].get().layout,
+        vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        @sizeOf(vk.Mesh.GPUDrawPushConstants),
+        &push,
+    );
+    vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+    vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
+    //TODO:===============================
+    //TODO: ====================================
+    //TODO: ====================================
+
+    vk.c.vkCmdEndRendering(cmd_buffer);
     //DONE RENDERING VERTECIES
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
@@ -645,14 +659,14 @@ pub fn draw(self: *@This(), time: f32) !void {
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = current_frame.swapchain_semaphore,
             .stageMask = vk.c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
-            .value = 1,
+            .value = 0,
         },
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos = &.{
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = current_frame.render_done_semaphore,
+            .semaphore = render_semaphore,
             .stageMask = vk.c.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-            .value = 1,
+            .value = 0,
         },
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos = &.{
@@ -667,7 +681,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .pSwapchains = &self.swapchain.swapchain,
         .swapchainCount = 1,
-        .pWaitSemaphores = &current_frame.render_done_semaphore,
+        .pWaitSemaphores = &render_semaphore,
         .waitSemaphoreCount = 1,
         .pImageIndices = &image_index,
     };
