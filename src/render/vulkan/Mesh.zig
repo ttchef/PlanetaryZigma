@@ -12,7 +12,7 @@ indecies_count: u32,
 
 pub const Vertex = extern struct {
     position: nz.Vec4(f32),
-    // uv: nz.Vec2(f32) = @splat(0),
+    uv: nz.Vec2(f32) = @splat(0),
     // normal: nz.Vec3(f32) = @splat(0),
 };
 

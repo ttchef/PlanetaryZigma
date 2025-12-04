@@ -91,7 +91,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
 
     //3 default textures, white, grey, black. 1 pixel each
-    var white: u32 = nz.color.Rgba(f32).white.toU32();
+    var white: u32 = nz.color.Rgba(u8).black.toU32();
     const _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -104,7 +104,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
-    var grey: u32 = nz.color.Rgba(f32).grey.toU32();
+    var grey: u32 = nz.color.Rgba(u8).grey.toU32();
     const _greyImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -128,17 +128,19 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
     try _blackImage.uploadDataToImage(device, vma.handle, &black);
 
+    const temp: u32 = 255;
+
     //checkerboard image
-    const magenta: u32 = nz.color.Rgba(u8).new(1, 0, 1, 1).toU32();
+    const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            if (@mod(x, 2) == 0) {
-                pixels[y * 16 + x] = magenta;
-            } else {
-                pixels[y * 16 + x] = black;
-            }
-            // pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
+            // if (@mod(x, 2) == 0) {
+            //     pixels[y * 16 + x] = magenta;
+            // } else {
+            //     pixels[y * 16 + x] = black;
+            // }
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) temp else magenta;
         }
     }
 
@@ -295,6 +297,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_DYNAMIC_STATE_VIEWPORT,
         vk.c.VK_DYNAMIC_STATE_SCISSOR,
     };
+    config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
@@ -743,8 +747,17 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
                 const pos_y = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 1))];
                 const pos_z = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 2))];
 
+                var uv_x: f32 = 0;
+                var uv_y: f32 = 0;
+
+                if (index.vt_idx >= 0) {
+                    uv_x = attribs.texcoords[@intCast(2 * index.vt_idx)];
+                    uv_y = attribs.texcoords[@intCast(2 * index.vt_idx + 1)];
+                }
+
                 const vertex: vk.Mesh.Vertex = .{
                     .position = .{ pos_x, pos_y, pos_z, 1.0 },
+                    .uv = .{ uv_x, uv_y },
                 };
 
                 try vertices_list.append(allocator, vertex);
