@@ -91,7 +91,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
 
     //3 default textures, white, grey, black. 1 pixel each
-    var white: u32 = nz.color.Rgba(u8).black.toU32();
+    var white: u32 = nz.color.Rgba(u8).white.toU32();
     const _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -128,8 +128,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
     try _blackImage.uploadDataToImage(device, vma.handle, &black);
 
-    const temp: u32 = 255;
-
     //checkerboard image
     const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
     var pixels: [16 * 16]u32 = undefined;
@@ -140,7 +138,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             // } else {
             //     pixels[y * 16 + x] = black;
             // }
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) temp else magenta;
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) black else magenta;
         }
     }
 
