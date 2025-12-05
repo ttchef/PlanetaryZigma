@@ -7,7 +7,7 @@ layout (location = 1) out vec2 outUV;
 struct Vertex {
 	vec4 position;
 	// vec3 normal;
-	// vec2 uv;
+	vec2 uv;
 }; 
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer{ 
@@ -30,5 +30,5 @@ void main()
 	gl_Position = PushConstants.render_matrix * v.position;
 	// gl_Position = vec4(gl_VertexIndex * 1, gl_VertexIndex * 2, 0, 1.0f);
 	outColor = vec3(1,0,0);
-	// outUV = v.uv;
+	outUV = v.uv;
 }

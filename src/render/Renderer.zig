@@ -3,6 +3,10 @@ const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
+pub const c = @import("c.zig");
+comptime {
+    _ = c;
+}
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 const GPUSceneData = struct {
@@ -22,6 +26,7 @@ meshes: std.ArrayList(vk.Mesh) = .empty,
 graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
+_drawImageDescitporLayour: vk.descriptor.Layout,
 globalDescriptorAllocator: vk.descriptor.Growable,
 _drawImageDescriptor: vk.c.VkDescriptorSet,
 scene_data: GPUSceneData,
@@ -90,7 +95,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
 
     //3 default textures, white, grey, black. 1 pixel each
-    var white: u32 = nz.color.Rgba(f32).white.toU32();
+    var white: u32 = nz.color.Rgba(u8).white.toU32();
     const _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -103,7 +108,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
-    var grey: u32 = nz.color.Rgba(f32).grey.toU32();
+    var grey: u32 = nz.color.Rgba(u8).grey.toU32();
     const _greyImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -115,7 +120,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
     try _greyImage.uploadDataToImage(device, vma.handle, &grey);
 
-    var black: u32 = nz.color.Rgba(f32).black.toU32();
+    var black: u32 = nz.color.Rgba(u8).black.toU32();
     const _blackImage: vk.Image = try .init(
         vma.handle,
         device,
@@ -128,11 +133,17 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _blackImage.uploadDataToImage(device, vma.handle, &black);
 
     //checkerboard image
-    const magenta: u32 = nz.color.Rgba(f32).new(1, 0, 1, 1).toU32();
+    const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
+    // _ = magenta;
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
+            // if (@mod(x, 2) == 0) {
+            //     pixels[y * 16 + x] = magenta;
+            // } else {
+            //     pixels[y * 16 + x] = black;
+            // }
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) white else magenta;
         }
     }
 
@@ -140,7 +151,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ .width = 1, .height = 1, .depth = 1 },
+        .{ .width = 16, .height = 16, .depth = 1 },
         vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
@@ -289,6 +300,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_DYNAMIC_STATE_VIEWPORT,
         vk.c.VK_DYNAMIC_STATE_SCISSOR,
     };
+    config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
+    config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
@@ -337,6 +350,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         ._gpuSceneDataDescriptorLayout = descriptor_gpu_scene_data,
         ._singleImageDescriptorLayout = _singleImageDescriptorLayout,
         .graphics_descriptor_layout = graphics_descriptor_layout,
+        ._drawImageDescitporLayour = _drawImageDescriptorLayoutlayout,
         .scene_data = std.mem.zeroes(GPUSceneData),
         ._whiteImage = _whiteImage,
         ._blackImage = _blackImage,
@@ -359,8 +373,16 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.depth_image.deinit(self.vma, self.device);
     self._blackImage.deinit(self.vma, self.device);
     self._greyImage.deinit(self.vma, self.device);
-    self._errorCheckerboardImage.deinit(self.vma, self.device);
     self._whiteImage.deinit(self.vma, self.device);
+    self._errorCheckerboardImage.deinit(self.vma, self.device);
+
+    vk.c.vkDestroySampler(self.device.handle, self._defaultSamplerLinear, null);
+    vk.c.vkDestroySampler(self.device.handle, self._defaultSamplerNearest, null);
+    self._gpuSceneDataDescriptorLayout.deinit(self.device);
+    self.graphics_descriptor_layout.deinit(self.device);
+    self._singleImageDescriptorLayout.deinit(self.device);
+    self._drawImageDescitporLayour.deinit(self.device);
+
     self.globalDescriptorAllocator.deinit(allocator, self.device);
 
     for (self.meshes.items) |mesh| {
@@ -408,8 +430,8 @@ pub fn draw(self: *@This(), time: f32) !void {
         self.resize_request = true;
         return;
     }
-
-    // try current_frame.descriptor.clearPools(self.allocator, self.device);
+    const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
+    try current_frame.descriptor.clearPools(self.allocator, self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -513,30 +535,30 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    defer gpuSceneDataBuffer.deinit(self.vma.handle);
-
-    //TODO: try removing the vma get info
-    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
-
-    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
-    {
-        var writer: vk.descriptor.Writer = .{};
-        writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        writer.updateSet(self.device, globalDescriptor);
-    }
-
-    //TODO: ADD WRITER
-    // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
-    // writer.Image(
-    //     self.allocator,
-    //     0,
-    //     self.draw_image.image_view,
-    //     vk.c.VK_NULL_HANDLE,
-    //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
-    //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-    // );
-    // writer.updateSet(self.device, )
+    // var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    // defer gpuSceneDataBuffer.deinit(self.vma.handle);
+    //
+    // //TODO: try removing the vma get info
+    // self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
+    //
+    // const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
+    // {
+    //     var writer: vk.descriptor.Writer = .{};
+    //     writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    //     writer.updateSet(self.device, globalDescriptor);
+    // }
+    //
+    // //TODO: ADD WRITER
+    // // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
+    // // writer.Image(
+    // //     self.allocator,
+    // //     0,
+    // //     self.draw_image.image_view,
+    // //     vk.c.VK_NULL_HANDLE,
+    // //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
+    // //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    // // );
+    // // writer.updateSet(self.device, )
 
     var viewport: vk.c.VkViewport = .{
         .x = 0,
@@ -562,10 +584,14 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    //Triangle
+    // //Triangle
     vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
 
     //The mesh
+    //TODO: ====================================
+    //TODO: ====================================
+    //TODO: ====================================
+    //
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
 
     const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout.handle, null);
@@ -574,6 +600,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         writer.updateSet(self.device, image_set);
     }
+
     vk.c.vkCmdBindDescriptorSets(
         cmd_buffer,
         vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -610,6 +637,9 @@ pub fn draw(self: *@This(), time: f32) !void {
     );
     vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
     vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
+    //TODO:===============================
+    //TODO: ====================================
+    //TODO: ====================================
 
     vk.c.vkCmdEndRendering(cmd_buffer);
     //DONE RENDERING VERTECIES
@@ -635,14 +665,14 @@ pub fn draw(self: *@This(), time: f32) !void {
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = current_frame.swapchain_semaphore,
             .stageMask = vk.c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
-            .value = 1,
+            .value = 0,
         },
         .signalSemaphoreInfoCount = 1,
         .pSignalSemaphoreInfos = &.{
             .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = current_frame.render_done_semaphore,
+            .semaphore = render_semaphore,
             .stageMask = vk.c.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-            .value = 1,
+            .value = 0,
         },
         .commandBufferInfoCount = 1,
         .pCommandBufferInfos = &.{
@@ -657,7 +687,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .pSwapchains = &self.swapchain.swapchain,
         .swapchainCount = 1,
-        .pWaitSemaphores = &current_frame.render_done_semaphore,
+        .pWaitSemaphores = &render_semaphore,
         .waitSemaphoreCount = 1,
         .pImageIndices = &image_index,
     };
@@ -719,8 +749,17 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
                 const pos_y = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 1))];
                 const pos_z = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 2))];
 
+                var uv_x: f32 = 0;
+                var uv_y: f32 = 0;
+
+                if (index.vt_idx >= 0) {
+                    uv_x = attribs.texcoords[@intCast(2 * index.vt_idx)];
+                    uv_y = attribs.texcoords[@intCast(2 * index.vt_idx + 1)];
+                }
+
                 const vertex: vk.Mesh.Vertex = .{
                     .position = .{ pos_x, pos_y, pos_z, 1.0 },
+                    .uv = .{ uv_x, uv_y },
                 };
 
                 try vertices_list.append(allocator, vertex);

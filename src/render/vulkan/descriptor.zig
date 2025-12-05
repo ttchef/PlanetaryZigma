@@ -49,10 +49,13 @@ pub const Growable = struct {
             vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0);
         }
         self.ready_pools.clearAndFree(allocator);
+        self.ready_pools.deinit(allocator);
         for (self.full_pools.items) |full_pool| {
             vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0);
         }
         self.full_pools.clearAndFree(allocator);
+        self.full_pools.deinit(allocator);
+        self.ratios.deinit(allocator);
     }
 
     pub fn allocate(self: *@This(), allocator: std.mem.Allocator, device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
@@ -98,6 +101,7 @@ pub const Growable = struct {
 
     fn createPool(allocator: std.mem.Allocator, device: vk.Device, set_count: u32, pool_ratios: []PoolSizeRatio) !vk.c.VkDescriptorPool {
         var pool_sizes: std.ArrayList(vk.c.VkDescriptorPoolSize) = try .initCapacity(allocator, pool_ratios.len);
+        defer pool_sizes.deinit(allocator);
         for (pool_ratios) |ratio| {
             const pool_size: vk.c.VkDescriptorPoolSize = .{
                 .type = ratio.desciptor_type,
@@ -128,14 +132,13 @@ pub const Writer = struct {
     writes: [16]vk.c.VkWriteDescriptorSet = undefined,
     writes_count: usize = 0,
 
-    pub fn appendImage(self: *@This(), binding: u32, image: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType) void {
+    pub fn appendImage(self: *@This(), binding: u32, image_view: vk.c.VkImageView, sampler: vk.c.VkSampler, layout: vk.c.VkImageLayout, descriptor_set_type: vk.c.VkDescriptorType) void {
         const info: vk.c.VkDescriptorImageInfo = .{
             .sampler = sampler,
-            .imageView = image,
+            .imageView = image_view,
             .imageLayout = layout,
         };
         self.image_infos[self.image_count] = info;
-        self.image_count += 1;
 
         const write: vk.c.VkWriteDescriptorSet = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -143,9 +146,10 @@ pub const Writer = struct {
             .dstSet = null,
             .descriptorCount = 1,
             .descriptorType = descriptor_set_type,
-            .pImageInfo = &info,
+            .pImageInfo = &self.image_infos[self.image_count],
         };
 
+        self.image_count += 1;
         self.writes[self.writes_count] = write;
         self.writes_count += 1;
     }
@@ -179,6 +183,7 @@ pub const Writer = struct {
     pub fn updateSet(self: *@This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {
         for (self.writes[0..self.writes_count]) |*writer| {
             writer.dstSet = set;
+            std.debug.print("desctype: {d}\n", .{writer.descriptorType});
         }
         vk.c.vkUpdateDescriptorSets(
             device.handle,
