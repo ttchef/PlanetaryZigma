@@ -3,6 +3,10 @@ const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
+pub const c = @import("c.zig");
+comptime {
+    _ = c;
+}
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 const GPUSceneData = struct {
@@ -130,6 +134,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //checkerboard image
     const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
+    // _ = magenta;
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
@@ -138,7 +143,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             // } else {
             //     pixels[y * 16 + x] = black;
             // }
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) black else magenta;
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) white else magenta;
         }
     }
 
@@ -426,8 +431,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         return;
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
-
-    // try current_frame.descriptor.clearPools(self.allocator, self.device);
+    try current_frame.descriptor.clearPools(self.allocator, self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));

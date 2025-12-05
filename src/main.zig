@@ -6,10 +6,15 @@ const physics = @import("physics.zig");
 const ecs = @import("ecs");
 const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
+const Watcher = @import("fileWatcher/watcher.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
 pub fn main() !void {
+    var watcher: Watcher.Game = try .init();
+    defer watcher.deinit();
+    var renderer_init = try watcher.lookup(Renderer.c.Init, "init");
+
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
@@ -44,7 +49,7 @@ pub fn main() !void {
     });
     defer window.deinit();
 
-    var renderer: Renderer = try .init(allocator, .{
+    var renderer_config: Renderer.Config = .{
         .instance = .{
             .extensions = blk: {
                 var arr: [8][*:0]const u8 = undefined;
@@ -92,18 +97,16 @@ pub fn main() !void {
             .width = @intCast(window.getSize().width),
             .heigth = @intCast(window.getSize().height),
         },
-    });
-    defer renderer.deinit(allocator);
+    };
 
-    std.debug.print("About to upload mesh\n", .{});
-    try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
-    std.debug.print("Mesh upload completed, meshes.len: {d}\n", .{renderer.meshes.items.len});
+    var renderer: Renderer = undefined;
+    try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
     // var accumulated_time: f32 = 0;
     // const seconds_per_update = 0.016;
-
     while (!window.shouldClose()) {
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
@@ -130,8 +133,19 @@ pub fn main() !void {
         //     //     std.debug.print("enitity {d}\n", .{@intFromEnum(entity)});
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
+        // renderer.deinit(allocator);
+        // try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+        // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
         // break;
+        if (try watcher.listen()) {
+            renderer.deinit(allocator);
+            try watcher.reload();
+            renderer_init = try watcher.lookup(Renderer.c.Init, "init");
+            try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+            try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
+        }
     }
+    renderer.deinit(allocator);
 }
 
 pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {

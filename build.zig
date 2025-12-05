@@ -67,6 +67,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "tiny_obj_loader", .module = tiny_obj_loader },
                 .{ .name = "stb", .module = stb.createModule() },
             },
+            .link_libcpp = true,
         }),
         .linkage = .dynamic,
     });
@@ -104,7 +105,14 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("vulkan", .{});
 
     // Add VMA implementation
-    exe.addCSourceFile(.{
+    // exe.addCSourceFile(.{
+    //     .file = b.addWriteFiles().add("vma_impl.cpp",
+    //         \\#define VMA_IMPLEMENTATION
+    //         \\#include "vk_mem_alloc.h"
+    //     ),
+    //     .flags = &.{"-std=c++14"},
+    // });
+    renderer.addCSourceFile(.{
         .file = b.addWriteFiles().add("vma_impl.cpp",
             \\#define VMA_IMPLEMENTATION
             \\#include "vk_mem_alloc.h"
@@ -112,17 +120,30 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c++14"},
     });
     // Add tiny obj loader implementation
-    exe.addCSourceFile(.{
+    // exe.addCSourceFile(.{
+    //     .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
+    //         \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
+    //         \\#include "tinyobj_loader_c.h"
+    //     ),
+    //     .flags = &.{"-std=c99"},
+    // });
+    renderer.addCSourceFile(.{
         .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
             \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
             \\#include "tinyobj_loader_c.h"
         ),
         .flags = &.{"-std=c99"},
     });
+    // exe.addIncludePath(vma_dep.path("include/"));
+    // exe.addIncludePath(vulkan_header_dep.path("include/"));
+    // exe.addIncludePath(tiny_obj_loader_dep.path("."));
+    //
 
-    exe.addIncludePath(vma_dep.path("include/"));
-    exe.addIncludePath(vulkan_header_dep.path("include/"));
-    exe.addIncludePath(tiny_obj_loader_dep.path("."));
+    renderer.addIncludePath(vma_dep.path("include/"));
+    renderer.addIncludePath(vulkan_header_dep.path("include/"));
+    renderer.addIncludePath(tiny_obj_loader_dep.path("."));
+
+
 
     b.installArtifact(exe);
 
