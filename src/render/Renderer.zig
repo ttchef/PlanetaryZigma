@@ -134,16 +134,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //checkerboard image
     const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
-    // _ = magenta;
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            // if (@mod(x, 2) == 0) {
-            //     pixels[y * 16 + x] = magenta;
-            // } else {
-            //     pixels[y * 16 + x] = black;
-            // }
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) white else magenta;
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
         }
     }
 

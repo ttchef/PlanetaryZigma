@@ -80,12 +80,14 @@ pub fn recreate(
     height: u32,
 ) !void {
     try check(vk.c.vkDeviceWaitIdle(device.handle));
-    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
-    const surface_format = try getSurfaceFormat(physical_device, surface);
-    const swapchain = try createSwapchain(physical_device, device, surface, surface_format, width, height);
-    self.swapchain = swapchain;
 
     const actual_extent = try getSurfaceExtent(physical_device, surface, width, height);
+
+    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
+    const surface_format = try getSurfaceFormat(physical_device, surface);
+    const swapchain = try createSwapchain(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
+    self.swapchain = swapchain;
+
     self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
     var image_count: u32 = undefined;
     try check(vk.c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
@@ -123,7 +125,7 @@ fn createSwapchain(
         .imageSharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = capabilities.currentTransform,
         .compositeAlpha = vk.c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR, //TODO: MAILBOX
+        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR,
         .clipped = 1,
     };
 

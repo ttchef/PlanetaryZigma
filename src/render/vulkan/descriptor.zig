@@ -55,6 +55,7 @@ pub const Growable = struct {
         }
         self.full_pools.clearAndFree(allocator);
         self.full_pools.deinit(allocator);
+        self.ratios.clearAndFree(allocator);
         self.ratios.deinit(allocator);
     }
 

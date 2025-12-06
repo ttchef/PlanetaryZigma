@@ -14,6 +14,7 @@ pub fn main() !void {
     var watcher: Watcher.Game = try .init();
     defer watcher.deinit();
     var renderer_init = try watcher.lookup(Renderer.c.Init, "init");
+    var renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -105,22 +106,22 @@ pub fn main() !void {
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
-    // var accumulated_time: f32 = 0;
-    // const seconds_per_update = 0.016;
+    var accumulated_time: f32 = 0;
+    const seconds_per_update = 0.016;
     while (!window.shouldClose()) {
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
-        // accumulated_time += delta_time;
+        accumulated_time += delta_time;
 
-        // if (accumulated_time >= seconds_per_update) {
-        try renderer.draw(time);
-        if (renderer.resize_request == true) {
+        if (renderer.resize_request) {
             const size = glfw.Window.getSize(window);
             try renderer.reCreateSwapchain(size.width, size.height);
             renderer.resize_request = false;
         }
-        //     accumulated_time -= seconds_per_update;
-        // }
+        if (accumulated_time >= seconds_per_update) {
+            try Renderer.c.toErr(renderer_draw(&renderer, time));
+            accumulated_time -= seconds_per_update;
+        }
         //     try proccessEvents(&spacetime, &world);
 
         //     Render.update(window, delta_time);
@@ -142,7 +143,8 @@ pub fn main() !void {
             try watcher.reload();
             renderer_init = try watcher.lookup(Renderer.c.Init, "init");
             try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
-            try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
+            try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+            renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
         }
     }
     renderer.deinit(allocator);
