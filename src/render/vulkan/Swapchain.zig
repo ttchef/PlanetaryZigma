@@ -123,7 +123,7 @@ fn createSwapchain(
         .imageSharingMode = vk.c.VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = capabilities.currentTransform,
         .compositeAlpha = vk.c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR, //TODO: MAILBOX
+        .presentMode = vk.c.VK_PRESENT_MODE_IMMEDIATE_KHR,
         .clipped = 1,
     };
 
