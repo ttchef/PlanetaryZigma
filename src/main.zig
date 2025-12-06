@@ -14,6 +14,7 @@ pub fn main() !void {
     var watcher: Watcher.Game = try .init();
     defer watcher.deinit();
     var renderer_init = try watcher.lookup(Renderer.c.Init, "init");
+    var renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -118,7 +119,7 @@ pub fn main() !void {
             renderer.resize_request = false;
         }
         if (accumulated_time >= seconds_per_update) {
-            try renderer.draw(time);
+            try Renderer.c.toErr(renderer_draw(&renderer, time));
             accumulated_time -= seconds_per_update;
         }
         //     try proccessEvents(&spacetime, &world);
@@ -143,6 +144,7 @@ pub fn main() !void {
             renderer_init = try watcher.lookup(Renderer.c.Init, "init");
             try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
             try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+            renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
         }
     }
     renderer.deinit(allocator);
