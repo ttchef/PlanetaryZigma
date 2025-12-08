@@ -17,6 +17,7 @@ pub const Pipeline = @import("pipeline.zig").Pipeline;
 pub const Barrier = @import("Barrier.zig");
 pub const Buffer = @import("Buffer.zig");
 pub const Mesh = @import("Mesh.zig");
+pub const Material = @import("Material.zig");
 
 pub const Instance = struct {
     handle: c.VkInstance,

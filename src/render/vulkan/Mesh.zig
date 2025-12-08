@@ -9,6 +9,7 @@ index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
 indecies_count: u32,
+first_index: u32,
 
 pub const Vertex = extern struct {
     position: nz.Vec4(f32),
@@ -88,6 +89,7 @@ pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertic
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
         .indecies_count = @intCast(indices.len),
+        .first_index = 0,
     };
 }
 

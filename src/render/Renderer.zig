@@ -4,9 +4,18 @@ pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 pub const c = @import("c.zig");
+
+//TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
     _ = c;
 }
+
+//TODO: Find out where this should be?
+const RenderObject = struct {
+    mesh: vk.Mesh,
+    transform: nz.Mat4x4(f32),
+    material: vk.Material.Instance,
+};
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 const GPUSceneData = struct {
@@ -400,9 +409,9 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
         @intCast(width),
         @intCast(height),
     );
-    const scale: f32 = 1;
-    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.image_extent.height))) * scale;
-    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.image_extent.width))) * scale;
+
+    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.image_extent.height)));
+    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.image_extent.width)));
     self.draw_image.image_extent.height = @intFromFloat(scaled_height);
     self.draw_image.image_extent.width = @intFromFloat(scaled_width);
 }
@@ -420,7 +429,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         null,
         &image_index,
     );
-    if (aquire_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR) {
+    if (aquire_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or aquire_result == vk.c.VK_SUBOPTIMAL_KHR) {
         self.resize_request = true;
         return;
     }
@@ -687,8 +696,9 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
 
     const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
-    if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR) {
+    if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or present_result == vk.c.VK_SUBOPTIMAL_KHR) {
         self.resize_request = true;
+        return;
     }
 
     self.swapchain.current_frame_inflight += 1;
