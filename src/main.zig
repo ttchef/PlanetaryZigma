@@ -19,7 +19,7 @@ pub fn main() !void {
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
-    var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = true, .safety = true }) = .init;
+    var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = false, .safety = false }) = .init;
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
@@ -102,7 +102,7 @@ pub fn main() !void {
 
     var renderer: Renderer = undefined;
     try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
-    try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
@@ -113,14 +113,14 @@ pub fn main() !void {
         time += delta_time;
         accumulated_time += delta_time;
 
+        if (accumulated_time >= seconds_per_update) {
+            try Renderer.c.toErr(renderer_draw(&renderer, time));
+            accumulated_time -= seconds_per_update;
+        }
         if (renderer.resize_request) {
             const size = glfw.Window.getSize(window);
             try renderer.reCreateSwapchain(size.width, size.height);
             renderer.resize_request = false;
-        }
-        if (accumulated_time >= seconds_per_update) {
-            try Renderer.c.toErr(renderer_draw(&renderer, time));
-            accumulated_time -= seconds_per_update;
         }
         //     try proccessEvents(&spacetime, &world);
 

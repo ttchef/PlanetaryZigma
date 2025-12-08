@@ -80,10 +80,10 @@ pub fn recreate(
     height: u32,
 ) !void {
     try check(vk.c.vkDeviceWaitIdle(device.handle));
+    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
 
     const actual_extent = try getSurfaceExtent(physical_device, surface, width, height);
 
-    vk.c.vkDestroySwapchainKHR(device.handle, self.swapchain, null);
     const surface_format = try getSurfaceFormat(physical_device, surface);
     const swapchain = try createSwapchain(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
     self.swapchain = swapchain;
