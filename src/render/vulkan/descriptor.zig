@@ -199,35 +199,11 @@ pub const Writer = struct {
 pub const Layout = struct {
     handle: vk.c.VkDescriptorSetLayout,
 
-    pub const Config = struct {
-        bindings: [16]vk.c.VkDescriptorSetLayoutBinding = undefined,
-        binding_count: usize = 0,
-
-        pub fn addBinding(self: *@This(), binding: u32, descriptor_type: vk.c.VkDescriptorType) void {
-            const newbind: vk.c.VkDescriptorSetLayoutBinding = .{
-                .binding = binding,
-                .descriptorCount = 1,
-                .descriptorType = descriptor_type,
-            };
-
-            self.bindings[self.binding_count] = newbind;
-            self.binding_count += 1;
-        }
-
-        pub fn clear(self: @This()) void {
-            self = std.mem.zeroes(@This());
-        }
-    };
-
-    pub fn init(device: vk.Device, config: *Config, shader_stages: vk.c.VkShaderStageFlags) !@This() {
-        for (config.bindings[0..config.binding_count]) |*binding| {
-            binding.stageFlags |= shader_stages;
-        }
-
+    pub fn init(device: vk.Device, bindings: []const vk.c.VkDescriptorSetLayoutBinding) !@This() {
         var info: vk.c.VkDescriptorSetLayoutCreateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pBindings = &config.bindings[0],
-            .bindingCount = @intCast(config.binding_count),
+            .pBindings = &bindings[0],
+            .bindingCount = @intCast(bindings.len),
         };
 
         var set: vk.c.VkDescriptorSetLayout = undefined;

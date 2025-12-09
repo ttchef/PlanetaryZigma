@@ -181,10 +181,17 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     var globalDescriptorAllocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
 
-    var _drawImageDescriptorLayoutconfig: vk.descriptor.Layout.Config = .{};
-    _drawImageDescriptorLayoutconfig.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-    const _drawImageDescriptorLayoutlayout: vk.descriptor.Layout = try .init(device, &_drawImageDescriptorLayoutconfig, vk.c.VK_SHADER_STAGE_COMPUTE_BIT);
-
+    const _drawImageDescriptorLayoutlayout: vk.descriptor.Layout = try .init(
+        device,
+        &[_]vk.c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .stageFlags = vk.c.VK_SHADER_STAGE_COMPUTE_BIT,
+            },
+        },
+    );
     const _drawImageDescriptor = try globalDescriptorAllocator.allocate(allocator, device, _drawImageDescriptorLayoutlayout.handle, null);
 
     var imgInfo: vk.c.VkDescriptorImageInfo = .{
@@ -202,24 +209,40 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     };
     vk.c.vkUpdateDescriptorSets(device.handle, 1, &drawImageWrite, 0, null);
 
-    var graphics_descriptor_config: vk.descriptor.Layout.Config = .{};
-    graphics_descriptor_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    const graphics_descriptor_layout: vk.descriptor.Layout = try .init(device, &graphics_descriptor_config, vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT);
-
-    var descriptor_gpu_scene_data_config: vk.descriptor.Layout.Config = .{};
-    descriptor_gpu_scene_data_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    const descriptor_gpu_scene_data: vk.descriptor.Layout = try .init(
+    const graphics_descriptor_layout: vk.descriptor.Layout = try .init(
         device,
-        &descriptor_gpu_scene_data_config,
-        vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        &[_]vk.c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            },
+        },
     );
 
-    var _singleImageDescriptorLayout_config: vk.descriptor.Layout.Config = .{};
-    _singleImageDescriptorLayout_config.addBinding(0, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    const descriptor_gpu_scene_data: vk.descriptor.Layout = try .init(
+        device,
+        &[_]vk.c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            },
+        },
+    );
+
     const _singleImageDescriptorLayout: vk.descriptor.Layout = try .init(
         device,
-        &_singleImageDescriptorLayout_config,
-        vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        &[_]vk.c.VkDescriptorSetLayoutBinding{
+            .{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            },
+        },
     );
 
     const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
