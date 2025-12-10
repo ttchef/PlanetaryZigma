@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.253+4314c9653",
+    .minimum_zig_version = "0.16.0-dev.1484+d0ba6642b",
     .dependencies = .{
         .zig_glfw = .{
             .url = "git+https://github.com/HaraldWik/zig-glfw#91728e2a95ee16bfcd6f88d7c2ab8b0512691420",

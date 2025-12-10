@@ -43,7 +43,7 @@ pub fn init(
         vma,
         @ptrCast(&img_info),
         &vma_alloc_info,
-        &image,
+        @ptrCast(&image),
         &vma_image_allocation,
         null,
     );

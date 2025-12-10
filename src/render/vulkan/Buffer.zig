@@ -22,7 +22,7 @@ pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBuffe
         vma_allocator,
         &buffer_info,
         &vmaalloc_info,
-        &new_buffer,
+        @ptrCast(&new_buffer),
         &allocation,
         &info,
     ));
