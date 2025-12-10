@@ -1423,17 +1423,23 @@ pub fn copyImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: 
 }
 
 pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule {
-    const file: std.fs.File = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    defer threaded.deinit();
 
-    var buffer: [1024]u32 = undefined;
+    const io: std.Io = threaded.io();
 
-    const bytes_read = try file.readAll(std.mem.sliceAsBytes(buffer[0..]));
+    const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch @panic("file open failed");
+    defer file.close(io);
+
+    var buffer: [4096]u8 = undefined;
+    const file_len: usize = @intCast((file.stat(io) catch @panic("file size failed")).size);
+    var reader = file.reader(io, &buffer);
+    const content = reader.interface.take(file_len) catch @panic("failed to read");
 
     var create_info: c.VkShaderModuleCreateInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = bytes_read,
-        .pCode = @ptrCast(&buffer),
+        .codeSize = content.len,
+        .pCode = @ptrCast(@alignCast(content.ptr)),
     };
 
     var shader_module: c.VkShaderModule = undefined;

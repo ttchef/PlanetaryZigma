@@ -7,12 +7,20 @@ pub fn tinyObjFileReader(ctx: ?*anyopaque, filename: [*c]const u8, is_mtl: c_int
     _ = is_mtl;
     _ = search_path;
 
-    const file = std.fs.cwd().openFile(std.mem.sliceTo(filename, 0), .{}) catch return;
-    defer file.close();
+    std.debug.print("Path  {s}\n", .{filename});
 
-    const stat = file.stat() catch return;
-    const content = std.heap.c_allocator.alloc(u8, stat.size) catch return;
-    _ = file.readAll(content) catch return;
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    defer threaded.deinit();
+
+    const io: std.Io = threaded.io();
+
+    const file = std.Io.Dir.cwd().openFile(io, std.mem.span(filename), .{}) catch return;
+    defer file.close(io);
+
+    const file_len: usize = @intCast((file.stat(io) catch @panic("file size failed")).size);
+    const alloc_content = std.heap.c_allocator.alloc(u8, file_len) catch @panic("tiny_obj_loader buffer failed allocation");
+    var reader = file.reader(io, alloc_content);
+    const content = reader.interface.take(file_len) catch @panic("failed to read");
 
     buffer.* = content.ptr;
     lengths.* = content.len;

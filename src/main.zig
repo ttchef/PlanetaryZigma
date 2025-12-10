@@ -31,11 +31,9 @@ pub fn main() !void {
 
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
-    // {
-    //     var envs = std.process.EnvMap.init(allocator);
-    //     defer envs.deinit();
-    //     if (envs.get("ENABLE_VULKAN_RENDERDOC_CAPTURE") == null) glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
-    // } TODO: Use this above somehow instead of forceing X11
+
+    // if (std.process.hasEnvVarConstant("RENDERDOC_CAPFILE"))
+
     glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
 
     try glfw.init();
