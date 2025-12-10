@@ -4,6 +4,7 @@ const Image = @import("Image.zig");
 const descriptor = @import("descriptor.zig");
 const Mesh = @import("Mesh.zig");
 const Device = @import("device.zig").Logical;
+const Pipeline = @import("pipeline.zig").Pipeline;
 
 const Pass = enum {
     main_color,
@@ -11,20 +12,15 @@ const Pass = enum {
     other,
 };
 
-const MaterialPipeline = struct {
-    pipeline: vk.VkPipeline,
-    layout: vk.VkPipelineLayout,
-};
-
 pub const Instance = struct {
-    pipeline: MaterialPipeline,
+    pipeline: Pipeline,
     descriptor_set: vk.VkDescriptorSet,
     pass_type: Pass,
 };
 
 const GltfMetallicRoughness = struct {
-    opaque_pipeline: MaterialPipeline,
-    transparent_pipeline: MaterialPipeline,
+    opaque_pipeline: Pipeline,
+    transparent_pipeline: Pipeline,
     desctiptor_set_layout: vk.c.VkDescriptorSetLayout,
     writer: descriptor.Writer,
 
@@ -44,7 +40,7 @@ const GltfMetallicRoughness = struct {
         data_buffer_offset: u32,
     };
 
-    // pub fn buildPipelines(device: Device) void {
+    // pub fn buildPipelines(device: Device, gpu_scene_data_descriptor_layout: vk.c.VkDescriptorSetLayout) void {
     //     const meshFragShader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
     //
     //     const meshVertexShader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
@@ -76,23 +72,18 @@ const GltfMetallicRoughness = struct {
     //         },
     //     });
     //
-    // VkDescriptorSetLayout layouts[] = { engine->_gpuSceneDataDescriptorLayout,
-    //        materialLayout };
+    //     var mesh_pipeline_config: Pipeline.Graphics.Config = .{
+    //             .descriptor_set_layouts = &.{
+    //                 gpu_scene_data_descriptor_layout.handle,
+    //                 material_layout.handle,
+    //             },
+    //             .push_constants = &matrixRange,
+    //         };
     //
-    // VkPipelineLayoutCreateInfo mesh_layout_info = vkinit::pipeline_layout_create_info();
-    // mesh_layout_info.setLayoutCount = 2;
-    // mesh_layout_info.pSetLayouts = layouts;
-    // mesh_layout_info.pPushConstantRanges = &matrixRange;
-    // mesh_layout_info.pushConstantRangeCount = 1;
+    //     var pipeline: Pipeline.Graphics = try .init(device, mesh_pipeline_config);
     //
-    // VkPipelineLayout newLayout;
-    // VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr, &newLayout));
     //
-    //    opaquePipeline.layout = newLayout;
-    //    transparentPipeline.layout = newLayout;
     //
-    // // build the stage-create-info for both vertex and fragment stages. This lets
-    // // the pipeline know the shader modules per stage
     // PipelineBuilder pipelineBuilder;
     // pipelineBuilder.set_shaders(meshVertexShader, meshFragShader);
     // pipelineBuilder.set_input_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
