@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan.zig");
 
 pub const Growable = struct {
+    allocator: std.mem.Allocator,
     ratios: std.ArrayList(PoolSizeRatio) = .empty,
     full_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
     ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty,
@@ -26,6 +27,7 @@ pub const Growable = struct {
         var ready_pools: std.ArrayList(vk.c.VkDescriptorPool) = .empty;
         try ready_pools.append(allocator, new_pool);
         return .{
+            .allocator = allocator,
             .full_pools = .empty,
             .sets_per_pool = sets_per_pool,
             .ready_pools = ready_pools,
@@ -33,34 +35,34 @@ pub const Growable = struct {
         };
     }
 
-    pub fn clearPools(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) !void {
+    pub fn clearPools(self: *@This(), device: vk.Device) !void {
         for (self.ready_pools.items) |ready_pool| {
             try vk.check(vk.c.vkResetDescriptorPool(device.handle, ready_pool, 0));
         }
         for (self.full_pools.items) |full_pool| {
             try vk.check(vk.c.vkResetDescriptorPool(device.handle, full_pool, 0));
-            try self.full_pools.append(allocator, full_pool);
+            try self.full_pools.append(self.allocator, full_pool);
         }
-        self.full_pools.clearAndFree(allocator);
+        self.full_pools.clearAndFree(self.allocator);
     }
 
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) void {
+    pub fn deinit(self: *@This(), device: vk.Device) void {
         for (self.ready_pools.items) |ready_pool| {
             vk.c.vkDestroyDescriptorPool(device.handle, ready_pool, 0);
         }
-        self.ready_pools.clearAndFree(allocator);
-        self.ready_pools.deinit(allocator);
+        self.ready_pools.clearAndFree(self.allocator);
+        self.ready_pools.deinit(self.allocator);
         for (self.full_pools.items) |full_pool| {
             vk.c.vkDestroyDescriptorPool(device.handle, full_pool, 0);
         }
-        self.full_pools.clearAndFree(allocator);
-        self.full_pools.deinit(allocator);
-        self.ratios.clearAndFree(allocator);
-        self.ratios.deinit(allocator);
+        self.full_pools.clearAndFree(self.allocator);
+        self.full_pools.deinit(self.allocator);
+        self.ratios.clearAndFree(self.allocator);
+        self.ratios.deinit(self.allocator);
     }
 
-    pub fn allocate(self: *@This(), allocator: std.mem.Allocator, device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
-        var pool_to_use = try self.getPool(allocator, device);
+    pub fn allocate(self: *@This(), device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
+        var pool_to_use = try self.getPool(self.allocator, device);
 
         var alloc_info: vk.c.VkDescriptorSetAllocateInfo = .{
             .pNext = pNext,
@@ -74,21 +76,21 @@ pub const Growable = struct {
         const result: vk.c.VkResult = vk.c.vkAllocateDescriptorSets(device.handle, &alloc_info, &descriptor_set);
 
         if (result == vk.c.VK_ERROR_OUT_OF_POOL_MEMORY or result == vk.c.VK_ERROR_FRAGMENTED_POOL) {
-            try self.full_pools.append(allocator, pool_to_use);
-            pool_to_use = try self.getPool(allocator, device);
+            try self.full_pools.append(self.allocator, pool_to_use);
+            pool_to_use = try self.getPool(self.allocator, device);
             alloc_info.descriptorPool = pool_to_use;
             try vk.check(vk.c.vkAllocateDescriptorSets(device.handle, &alloc_info, &descriptor_set));
         }
-        try self.ready_pools.append(allocator, pool_to_use);
+        try self.ready_pools.append(self.allocator, pool_to_use);
         return descriptor_set;
     }
 
-    fn getPool(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) !vk.c.VkDescriptorPool {
+    fn getPool(self: *@This(), device: vk.Device) !vk.c.VkDescriptorPool {
         var new_pool: vk.c.VkDescriptorPool = undefined;
         if (self.ready_pools.items.len != 0) {
             new_pool = self.ready_pools.pop().?;
         } else {
-            new_pool = try createPool(allocator, device, self.sets_per_pool, self.ratios.items);
+            new_pool = try createPool(self.allocator, device, self.sets_per_pool, self.ratios.items);
 
             self.sets_per_pool = @intFromFloat(@as(f32, @floatFromInt(self.sets_per_pool)) * 1.5);
 

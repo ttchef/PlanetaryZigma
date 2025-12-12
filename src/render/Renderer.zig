@@ -28,6 +28,8 @@ const GPUSceneData = struct {
 };
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
+defaultData: vk.Material.Instance,
+metalRoughMaterial: vk.Material.GltfMetallicRoughness,
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
@@ -58,19 +60,27 @@ draw_image: vk.Image,
 depth_image: vk.Image,
 resize_request: bool = false,
 
-pub const Config = struct { instance: struct {
-    extensions: ?[]const [*:0]const u8 = null,
-    layers: ?[]const [*:0]const u8 = null,
-    debug_config: vk.DebugMessenger.Config = .{},
-} = .{}, device: struct {
-    extensions: ?[]const [*:0]const u8 = null,
-} = .{}, surface: struct {
-    data: ?*anyopaque = null,
-    init: ?*const fn (vk.Instance, *anyopaque) anyerror!*anyopaque = null,
-} = .{}, swapchain: struct {
-    width: u32 = 0,
-    heigth: u32 = 0,
-} };
+pub const Config = struct {
+    instance: struct {
+        extensions: ?[]const [*:0]const u8 = null,
+        layers: ?[]const [*:0]const u8 = null,
+        debug_config: vk.DebugMessenger.Config = .{},
+    } = .{},
+
+    device: struct {
+        extensions: ?[]const [*:0]const u8 = null,
+    } = .{},
+
+    surface: struct {
+        data: ?*anyopaque = null,
+        init: ?*const fn (vk.Instance, *anyopaque) anyerror!*anyopaque = null,
+    } = .{},
+
+    swapchain: struct {
+        width: u32 = 0,
+        heigth: u32 = 0,
+    },
+};
 
 pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
@@ -330,6 +340,23 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
+    const metalRoughMaterial: vk.Material.GltfMetallicRoughness = .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
+    var materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
+        .color_image = _whiteImage,
+        .color_sampler = _defaultSamplerLinear,
+        .metal_rough_image = _whiteImage,
+        .metal_rough_sampler = _defaultSamplerLinear,
+    };
+    const materialConstants = try vk.Buffer.init(vma, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    var sceneUniformData: vk.Material.GltfMetallicRoughness.Constants = undefined;
+    vk.Vma.copyToAllocation(vk.Material.GltfMetallicRoughness.Constants, &sceneUniformData, materialConstants.vma_allocation, materialConstants.info);
+
+    sceneUniformData.color_factores = .{ 1, 1, 1, 1 };
+    sceneUniformData.metal_rough_factors = .{ 1, 0.5, 0, 0 };
+    materialResources.data_buffer = materialConstants.buffer;
+    materialResources.data_buffer_offset = 0;
+    const defaultData = metalRoughMaterial.writeMaterial(device, vk.Material.Pass.main_color, globalDescriptorAllocator);
+
     // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
     // defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
     // var config_mesh: vk.Pipeline.Graphics.Config = .{
@@ -386,6 +413,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         ._defaultSamplerNearest = _defaultSamplerNearest,
         .globalDescriptorAllocator = globalDescriptorAllocator,
         ._drawImageDescriptor = _drawImageDescriptor,
+        .metalRoughMaterial = metalRoughMaterial,
+        .defaultData = defaultData,
     };
 }
 
