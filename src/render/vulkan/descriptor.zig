@@ -62,7 +62,7 @@ pub const Growable = struct {
     }
 
     pub fn allocate(self: *@This(), device: vk.Device, layout: vk.c.VkDescriptorSetLayout, pNext: ?*void) !vk.c.VkDescriptorSet {
-        var pool_to_use = try self.getPool(self.allocator, device);
+        var pool_to_use = try self.getPool(device);
 
         var alloc_info: vk.c.VkDescriptorSetAllocateInfo = .{
             .pNext = pNext,
@@ -77,7 +77,7 @@ pub const Growable = struct {
 
         if (result == vk.c.VK_ERROR_OUT_OF_POOL_MEMORY or result == vk.c.VK_ERROR_FRAGMENTED_POOL) {
             try self.full_pools.append(self.allocator, pool_to_use);
-            pool_to_use = try self.getPool(self.allocator, device);
+            pool_to_use = try self.getPool(device);
             alloc_info.descriptorPool = pool_to_use;
             try vk.check(vk.c.vkAllocateDescriptorSets(device.handle, &alloc_info, &descriptor_set));
         }
@@ -179,8 +179,8 @@ pub const Writer = struct {
         self.writes_count += 1;
     }
 
-    pub fn clear(self: @This()) void {
-        self = std.mem.zeroes(@This());
+    pub fn clear(self: *@This()) void {
+        self.* = std.mem.zeroes(@This());
     }
 
     pub fn updateSet(self: *@This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {

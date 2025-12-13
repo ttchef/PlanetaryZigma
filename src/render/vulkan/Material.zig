@@ -5,6 +5,7 @@ const descriptor = @import("descriptor.zig");
 const Mesh = @import("Mesh.zig");
 const Device = @import("device.zig").Logical;
 const Pipeline = @import("pipeline.zig").Pipeline;
+pub const LoadShader = @import("utils.zig").loadShaderModule;
 
 pub const Pass = enum {
     main_color,
@@ -21,7 +22,7 @@ pub const Instance = struct {
 pub const GltfMetallicRoughness = struct {
     opaque_pipeline: Pipeline,
     transparent_pipeline: Pipeline,
-    desctiptor_set_layout: vk.c.VkDescriptorSetLayout,
+    descriptor_set_layout: vk.VkDescriptorSetLayout,
     writer: descriptor.Writer,
 
     pub const Constants = struct {
@@ -40,34 +41,34 @@ pub const GltfMetallicRoughness = struct {
         data_buffer_offset: u32,
     };
 
-    pub fn initBuildPipelines(device: Device, gpu_scene_data_descriptor_layout: vk.c.VkDescriptorSetLayout, draw_image: Image, depth_image: Image) @This() {
-        const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
-        const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
+    pub fn initBuildPipelines(device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
+        const mesh_frag_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
+        const mesh_vertex_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
 
-        const matrixRange: vk.c.VkPushConstantRange = .{
+        const matrixRange: vk.VkPushConstantRange = .{
             .offset = 0,
             .size = @sizeOf(Mesh.GPUDrawPushConstants),
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+            .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT,
         };
 
-        var material_layout: descriptor.Layout = .init(device, &[_]vk.c.VkDescriptorSetLayout{
+        var material_layout: descriptor.Layout = try .init(device, &.{
             .{
                 .binding = 0,
                 .descriptorCount = 1,
-                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .descriptorType = vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
             },
             .{
                 .binding = 1,
                 .descriptorCount = 1,
-                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
             },
             .{
                 .binding = 2,
                 .descriptorCount = 1,
-                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+                .descriptorType = vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT | vk.VK_SHADER_STAGE_FRAGMENT_BIT,
             },
         });
 
@@ -82,22 +83,22 @@ pub const GltfMetallicRoughness = struct {
                 gpu_scene_data_descriptor_layout.handle,
                 material_layout.handle,
             },
-            .push_constants = &matrixRange,
+            .push_constants = &.{matrixRange},
         };
         mesh_pipeline_config.render_info.colorAttachmentCount = 1;
         mesh_pipeline_config.render_info.pColorAttachmentFormats = &draw_image.format;
         mesh_pipeline_config.render_info.depthAttachmentFormat = depth_image.format;
-        mesh_pipeline_config.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-        const opaque_pipeline: Pipeline.Graphics = try .init(device, mesh_pipeline_config);
+        mesh_pipeline_config.enableDepthTesting(vk.VK_TRUE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
+        const opaque_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
-        mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
-        mesh_pipeline_config.enableDepthTesting(vk.c.VK_FALSE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-        const transparent_pipeline: Pipeline.Graphics = try .init(device, mesh_pipeline_config);
+        mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE);
+        mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
+        const transparent_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
         return .{
             .opaque_pipeline = opaque_pipeline,
             .transparent_pipeline = transparent_pipeline,
-            .descriptor_set_layout = material_layout,
+            .descriptor_set_layout = material_layout.handle,
             .writer = .{},
         };
     }
@@ -110,7 +111,7 @@ pub const GltfMetallicRoughness = struct {
 
     pub fn writeMaterial(
         self: *@This(),
-        device: vk.c.VkDevice,
+        device: Device,
         pass: Pass,
         resources: *Resources,
         descriptorAllocator: *descriptor.Growable,
@@ -118,18 +119,19 @@ pub const GltfMetallicRoughness = struct {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
         if (pass == .transparent) {
-            material_data_instance.pipeline = &self.transparent_pipeline;
+            material_data_instance.pipeline = self.transparent_pipeline;
         } else {
-            material_data_instance.pipeline = &self.opaque_pipeline;
+            material_data_instance.pipeline = self.opaque_pipeline;
         }
-        material_data_instance.descriptor_set = descriptorAllocator.allocate(device, self.desctiptor_set_layout);
+        _ = descriptorAllocator;
+        material_data_instance.descriptor_set = undefined; // try descriptorAllocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
-        self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        self.writer.appendImage(1, resources.color_image.image_view, resources.color_sampler, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        self.writer.appendImage(2, resources.metal_rough_image.image_view, resources.metal_rough_sampler, vk.c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        self.writer.appendImage(1, resources.color_image.image_view, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        self.writer.appendImage(2, resources.metal_rough_image.image_view, resources.metal_rough_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         self.writer.updateSet(device, material_data_instance.descriptor_set);
         return material_data_instance;
     }
 
-    // pub fn clearResources(device: vk.c.VkDevice) void {}
+    // pub fn clearResources(device: vk.VkDevice) void {}
 };

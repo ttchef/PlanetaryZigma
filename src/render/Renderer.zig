@@ -202,7 +202,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             },
         },
     );
-    const _drawImageDescriptor = try globalDescriptorAllocator.allocate(allocator, device, _drawImageDescriptorLayoutlayout.handle, null);
+    const _drawImageDescriptor = try globalDescriptorAllocator.allocate(device, _drawImageDescriptorLayoutlayout.handle, null);
 
     var imgInfo: vk.c.VkDescriptorImageInfo = .{
         .imageView = draw_image.image_view,
@@ -340,22 +340,32 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     config_mesh.render_info.depthAttachmentFormat = depth_image.format;
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
-    const metalRoughMaterial: vk.Material.GltfMetallicRoughness = .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
+    var metalRoughMaterial: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
+    var materialConstants = try vk.Buffer.init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     var materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
         .color_image = _whiteImage,
         .color_sampler = _defaultSamplerLinear,
         .metal_rough_image = _whiteImage,
         .metal_rough_sampler = _defaultSamplerLinear,
+        .data_buffer = materialConstants.buffer,
+        .data_buffer_offset = 0,
     };
-    const materialConstants = try vk.Buffer.init(vma, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     var sceneUniformData: vk.Material.GltfMetallicRoughness.Constants = undefined;
-    vk.Vma.copyToAllocation(vk.Material.GltfMetallicRoughness.Constants, &sceneUniformData, materialConstants.vma_allocation, materialConstants.info);
+    vma.copyToAllocation(
+        vk.Material.GltfMetallicRoughness.Constants,
+        sceneUniformData,
+        materialConstants.vma_allocation,
+        &materialConstants.info,
+    );
 
     sceneUniformData.color_factores = .{ 1, 1, 1, 1 };
     sceneUniformData.metal_rough_factors = .{ 1, 0.5, 0, 0 };
-    materialResources.data_buffer = materialConstants.buffer;
-    materialResources.data_buffer_offset = 0;
-    const defaultData = metalRoughMaterial.writeMaterial(device, vk.Material.Pass.main_color, globalDescriptorAllocator);
+    const defaultData = metalRoughMaterial.writeMaterial(
+        device,
+        vk.Material.Pass.main_color,
+        &materialResources,
+        &globalDescriptorAllocator,
+    );
 
     // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
     // defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
@@ -420,7 +430,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.handle);
-    self.swapchain.deinit(allocator, self.device);
+    self.swapchain.deinit(self.device);
 
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
@@ -438,7 +448,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self._singleImageDescriptorLayout.deinit(self.device);
     self._drawImageDescitporLayour.deinit(self.device);
 
-    self.globalDescriptorAllocator.deinit(allocator, self.device);
+    self.globalDescriptorAllocator.deinit(self.device);
 
     for (self.meshes.items) |mesh| {
         mesh.deinit(self.vma.handle);
@@ -486,7 +496,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         return;
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
-    try current_frame.descriptor.clearPools(self.allocator, self.device);
+    try current_frame.descriptor.clearPools(self.device);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -649,7 +659,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     //
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
 
-    const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._singleImageDescriptorLayout.handle, null);
+    const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._singleImageDescriptorLayout.handle, null);
     {
         var writer: vk.descriptor.Writer = .{};
         writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
