@@ -61,10 +61,9 @@ pub fn init(
 
 pub fn deinit(
     self: *@This(),
-    allocator: std.mem.Allocator,
     device: vk.Device,
 ) void {
-    for (&self.frames) |*frame| frame.deinit(allocator, device);
+    for (&self.frames) |*frame| frame.deinit(device);
     for (0..self.image_count) |i| {
         vk.c.vkDestroySemaphore(device.handle, self.render_semaphores[i], null);
     }
@@ -223,10 +222,10 @@ const FrameData = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: vk.Device) void {
+    pub fn deinit(self: *@This(), device: vk.Device) void {
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);
         vk.c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
-        self.descriptor.deinit(allocator, device);
+        self.descriptor.deinit(device);
     }
 };
