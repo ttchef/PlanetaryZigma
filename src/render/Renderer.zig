@@ -4,6 +4,7 @@ pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 pub const c = @import("c.zig");
+pub const Node = @import("Node.zig");
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
@@ -47,6 +48,9 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
+mainDrawContext: Node.DrawContext,
+loaded_nodes: [16]Node,
+node_count: usize,
 
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -624,6 +628,24 @@ pub fn draw(self: *@This(), time: f32) !void {
     // //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     // // );
     // // writer.updateSet(self.device, )
+    for (self.node_count) |i| {
+        const node = self.loaded_nodes[i];
+
+        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material.pipeline.get().handle);
+
+        //TODO:CONTINUE from here.
+        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material.pipeline.get().handle, 0, 1, &self.globalDescriptiorAllocator   globalDescriptor, 0, null);
+        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material.pipeline.get().handle, 1, 1, &draw.material.descriptor_set, 0, null);
+
+        vk.c.vkCmdBindIndexBuffer(cmd_buffer, draw.indexBuffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+
+        var push_constant: vk.Mesh.GPUDrawPushConstants = undefined;
+        pushConstants.vertexBuffer = draw.vertexBufferAddress;
+        pushConstants.worldMatrix = draw.transform;
+        vk.c.vkCmdPushConstants(cmd_buffer, draw.material.pipeline.get().handle, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+
+        vk.c.vkCmdDrawIndexed(cmd_buffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
+    }
 
     var viewport: vk.c.VkViewport = .{
         .x = 0,
