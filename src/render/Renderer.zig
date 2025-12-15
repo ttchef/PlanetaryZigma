@@ -22,9 +22,9 @@ const GPUSceneData = struct {
     view: nz.Mat4x4(f32),
     proj: nz.Mat4x4(f32),
     viewproj: nz.Mat4x4(f32),
-    ambient_color: nz.Vec3(f32),
-    sunlight_direction: nz.Vec3(f32),
-    sunlight_color: nz.Vec3(f32),
+    ambient_color: nz.Vec4(f32),
+    sunlight_direction: nz.Vec4(f32),
+    sunlight_color: nz.Vec4(f32),
 };
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
@@ -47,6 +47,9 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
+mainDrawContext: vk.Node.DrawContext,
+loaded_nodes: [16]vk.Node,
+node_count: usize,
 
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -367,35 +370,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &globalDescriptorAllocator,
     );
 
-    // const mesh_vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
-    // defer vk.c.vkDestroyShaderModule(device.handle, mesh_vert, null);
-    // var config_mesh: vk.Pipeline.Graphics.Config = .{
-    //     .fragment_shaders = .{
-    //         .module = frag,
-    //     },
-    //     .vertex_shaders = .{
-    //         .module = mesh_vert,
-    //     },
-    //     .descriptor_set_layouts = &.{graphics_descriptor._drawImageDescriptorLayou},
-    //     .push_constants = &.{.{
-    //         .offset = 0,
-    //         .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
-    //         .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-    //     }},
-    // };
-
-    // config_mesh.dynamic_state.dynamicStateCount = 2;
-    // config_mesh.dynamic_state.pDynamicStates = &state[0];
-    // config_mesh.render_info.colorAttachmentCount = 1;
-    // config_mesh.render_info.pColorAttachmentFormats = &draw_image.format;
-    // config_mesh.render_info.depthAttachmentFormat = depth_image.format;
-    // config_mesh.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
-    // config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    // // config_mesh.setBlendingDestinationColorBlendFactor(vk.c.VK_BLEND_FACTOR_ONE);
-    // pipelines[3] = try .initGraphics(device, &config_mesh);
-
-    // std.debug.print("Address {*}\n", .{instance.handle});
-
     return .{
         .allocator = allocator,
         .instance = instance,
@@ -600,30 +574,17 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    // var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    // defer gpuSceneDataBuffer.deinit(self.vma.handle);
-    //
-    // //TODO: try removing the vma get info
-    // self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
-    //
-    // const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
-    // {
-    //     var writer: vk.descriptor.Writer = .{};
-    //     writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    //     writer.updateSet(self.device, globalDescriptor);
-    // }
-    //
-    // //TODO: ADD WRITER
-    // // var writer: vk.DescriptorAllocatorGrowable.Writer = .{};
-    // // writer.Image(
-    // //     self.allocator,
-    // //     0,
-    // //     self.draw_image.image_view,
-    // //     vk.c.VK_NULL_HANDLE,
-    // //     vk.c.VK_IMAGE_LAYOUT_GENERAL,
-    // //     vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-    // // );
-    // // writer.updateSet(self.device, )
+    var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    defer gpuSceneDataBuffer.deinit(self.vma.handle);
+
+    //TODO: try removing the vma get info
+    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
+    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
+    {
+        var writer: vk.descriptor.Writer = .{};
+        writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.updateSet(self.device, globalDescriptor);
+    }
 
     var viewport: vk.c.VkViewport = .{
         .x = 0,
@@ -656,52 +617,80 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     //TODO: ====================================
     //TODO: ====================================
-    //
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
-
-    const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._singleImageDescriptorLayout.handle, null);
-    {
-        var writer: vk.descriptor.Writer = .{};
-        writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        writer.updateSet(self.device, image_set);
-    }
-
-    vk.c.vkCmdBindDescriptorSets(
-        cmd_buffer,
-        vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        self.pipelines[3].get().layout,
-        0,
-        1,
-        &image_set,
-        0,
-        null,
-    );
-
+    self.mainDrawContext.clear();
+    self.loaded_nodes[0].draw(nz.Transform3D(f32).fromMat4x4(nz.Mat4x4(f32).identity), self.mainDrawContext);
+    self.scene_data.view = .translate(.{ 0, 0, -5 });
     //projection matrix + view + model
-    const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
+    // const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
     var projection: nz.Mat4x4(f32) = .perspective(
         70,
         @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
-        10000,
         0.1,
+        10000,
     );
-    projection.d[5] *= -1;
+    projection.d[6] *= -1;
+    self.scene_data.viewproj = self.scene_data.proj.mul(self.scene_data.view);
+    self.scene_data.ambient_color = @splat(1);
+    self.scene_data.sunlight_color = @splat(1);
+    self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
-    var push: vk.Mesh.GPUDrawPushConstants = .{
-        .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
-        .world_matrix = projection.mul(view).d,
-    };
+    for (self.node_count) |i| {
+        const node = self.loaded_nodes[i];
 
-    vk.c.vkCmdPushConstants(
-        cmd_buffer,
-        self.pipelines[3].get().layout,
-        vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-        0,
-        @sizeOf(vk.Mesh.GPUDrawPushConstants),
-        &push,
-    );
-    vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
-    vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
+        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle);
+
+        //TODO:CONTINUE from here.
+        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle, 0, 1, &self.globalDescriptiorAllocator, globalDescriptor, 0, null);
+        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle, 1, 1, &node.material.descriptor_set, 0, null);
+
+        vk.c.vkCmdBindIndexBuffer(cmd_buffer, node.indexBuffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+
+        var push_constant: vk.Mesh.GPUDrawPushConstants = .{
+            .vertexBuffer = node.vertexBufferAddress,
+            .worldMatrix = node.transform,
+        };
+        vk.c.vkCmdPushConstants(cmd_buffer, node.material.pipeline.get().handle, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+
+        vk.c.vkCmdDrawIndexed(cmd_buffer, node.indexCount, 1, node.firstIndex, 0, 0);
+    }
+
+    //
+    //
+    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
+    //
+    // const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._singleImageDescriptorLayout.handle, null);
+    // {
+    //     var writer: vk.descriptor.Writer = .{};
+    //     writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    //     writer.updateSet(self.device, image_set);
+    // }
+    //
+    // vk.c.vkCmdBindDescriptorSets(
+    //     cmd_buffer,
+    //     vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+    //     self.pipelines[3].get().layout,
+    //     0,
+    //     1,
+    //     &image_set,
+    //     0,
+    //     null,
+    // );
+    //
+    // var push: vk.Mesh.GPUDrawPushConstants = .{
+    //     .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
+    //     .world_matrix = projection.mul(self.scene_data.view).d,
+    // };
+    //
+    // vk.c.vkCmdPushConstants(
+    //     cmd_buffer,
+    //     self.pipelines[3].get().layout,
+    //     vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+    //     0,
+    //     @sizeOf(vk.Mesh.GPUDrawPushConstants),
+    //     &push,
+    // );
+    // vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+    // vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
     //TODO:===============================
     //TODO: ====================================
     //TODO: ====================================
@@ -844,6 +833,13 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
             indecies_list.items,
             vertices_list.items,
         ));
+        //TODO: add sufaces?
+        self.loaded_nodes[self.node_count] = .{
+            .mesh = self.meshes.getLast(),
+            .world_transform = .fromMat4x4(nz.Mat4x4(f32).identity),
+            .local_transform = .fromMat4x4(nz.Mat4x4(f32).identity),
+        };
+        self.node_count += 1;
     } else {
         std.debug.print("\nNo valid mesh data found in {s}\n\n", .{path});
     }
