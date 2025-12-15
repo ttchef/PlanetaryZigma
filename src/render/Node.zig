@@ -30,6 +30,7 @@ pub fn draw(self: *@This(), top_transform: nz.Transform3D(f32), ctx: DrawContext
         .transform = node_transform,
         .vertex_buffer_address = self.mesh.vertex_buffer_address,
     };
+    ctx.count += 1;
 
     for (0..self.child_count) |i| {
         self.children[i].draw(top_transform, ctx);
@@ -48,4 +49,8 @@ const RenderObject = struct {
 pub const DrawContext = struct {
     opaque_surfaces: [4]RenderObject,
     count: usize,
+
+    pub fn clear(self: *@This()) void {
+        self.* = std.mem.zeroes(@This());
+    }
 };
