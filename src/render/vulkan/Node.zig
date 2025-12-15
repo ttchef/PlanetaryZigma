@@ -1,13 +1,13 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const nz = @import("numz");
-const Mesh = @import("vulkan/Mesh.zig");
-const Material = @import("vulkan/Material.zig");
+const Mesh = @import("Mesh.zig");
+const Material = @import("Material.zig");
 
 parent: *@This(),
 mesh: Mesh,
 material: Material.Instance,
-children: [4]@This(),
+children: [4]@This(), //TODO: DONT use struct that dont exist yet,
 child_count: usize,
 
 local_transform: nz.Transform3D(f32),

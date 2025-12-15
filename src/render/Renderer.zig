@@ -4,7 +4,6 @@ pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 pub const c = @import("c.zig");
-pub const Node = @import("Node.zig");
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
@@ -48,8 +47,8 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
-mainDrawContext: Node.DrawContext,
-loaded_nodes: [16]Node,
+mainDrawContext: vk.Node.DrawContext,
+loaded_nodes: [16]vk.Node,
 node_count: usize,
 
 allocator: std.mem.Allocator,
