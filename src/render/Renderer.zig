@@ -47,9 +47,9 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
-mainDrawContext: vk.Node.DrawContext,
-loaded_nodes: [16]vk.Node,
-node_count: usize,
+mainDrawContext: vk.Node.DrawContext = undefined,
+loaded_nodes: [16]vk.Node = undefined,
+node_count: usize = 0,
 
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -579,7 +579,7 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     //TODO: try removing the vma get info
     self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
-    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.allocator, self.device, self._gpuSceneDataDescriptorLayout.handle, null);
+    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._gpuSceneDataDescriptorLayout.handle, null);
     {
         var writer: vk.descriptor.Writer = .{};
         writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -618,7 +618,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     //TODO: ====================================
     self.mainDrawContext.clear();
-    self.loaded_nodes[0].draw(nz.Transform3D(f32).fromMat4x4(nz.Mat4x4(f32).identity), self.mainDrawContext);
+    self.loaded_nodes[0].draw(nz.Transform3D(f32).fromMat4x4(nz.Mat4x4(f32).identity), &self.mainDrawContext);
     self.scene_data.view = .translate(.{ 0, 0, -5 });
     //projection matrix + view + model
     // const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
@@ -634,24 +634,42 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
-    for (self.node_count) |i| {
+    for (0..self.node_count) |i| {
         const node = self.loaded_nodes[i];
 
         vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle);
 
         //TODO:CONTINUE from here.
-        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle, 0, 1, &self.globalDescriptiorAllocator, globalDescriptor, 0, null);
-        vk.c.vkCmdBindDescriptorSets(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle, 1, 1, &node.material.descriptor_set, 0, null);
+        vk.c.vkCmdBindDescriptorSets(
+            cmd_buffer,
+            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            node.material.pipeline.get().layout,
+            0,
+            1,
+            &globalDescriptor,
+            0,
+            null,
+        );
+        vk.c.vkCmdBindDescriptorSets(
+            cmd_buffer,
+            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            node.material.pipeline.get().layout,
+            1,
+            1,
+            &node.material.descriptor_set,
+            0,
+            null,
+        );
 
-        vk.c.vkCmdBindIndexBuffer(cmd_buffer, node.indexBuffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+        vk.c.vkCmdBindIndexBuffer(cmd_buffer, node.mesh.index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
 
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
-            .vertexBuffer = node.vertexBufferAddress,
-            .worldMatrix = node.transform,
+            .vertex_buffer = node.mesh.vertex_buffer_address,
+            .world_matrix = node.world_transform.toMat4x4().d,
         };
-        vk.c.vkCmdPushConstants(cmd_buffer, node.material.pipeline.get().handle, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+        vk.c.vkCmdPushConstants(cmd_buffer, node.material.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
-        vk.c.vkCmdDrawIndexed(cmd_buffer, node.indexCount, 1, node.firstIndex, 0, 0);
+        vk.c.vkCmdDrawIndexed(cmd_buffer, node.mesh.indecies_count, 1, node.mesh.first_index, 0, 0);
     }
 
     //
@@ -835,6 +853,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
         ));
         //TODO: add sufaces?
         self.loaded_nodes[self.node_count] = .{
+            .material = &self.defaultData,
             .mesh = self.meshes.getLast(),
             .world_transform = .fromMat4x4(nz.Mat4x4(f32).identity),
             .local_transform = .fromMat4x4(nz.Mat4x4(f32).identity),

@@ -1431,7 +1431,7 @@ pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule 
     const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch @panic("file open failed");
     defer file.close(io);
 
-    var buffer: [4096]u8 = undefined;
+    var buffer: [10000]u8 = undefined;
     const file_len: usize = @intCast((file.stat(io) catch @panic("file size failed")).size);
     var reader = file.reader(io, &buffer);
     const content = reader.interface.take(file_len) catch @panic("failed to read");
