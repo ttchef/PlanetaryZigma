@@ -85,6 +85,14 @@ pub const GltfMetallicRoughness = struct {
             },
             .push_constants = &.{matrixRange},
         };
+        mesh_pipeline_config.viewport_state.scissorCount = 1;
+        mesh_pipeline_config.viewport_state.viewportCount = 1;
+        mesh_pipeline_config.dynamic_state.dynamicStateCount = 2;
+        mesh_pipeline_config.dynamic_state.pDynamicStates = &[_]c_uint{
+            vk.VK_DYNAMIC_STATE_VIEWPORT,
+            vk.VK_DYNAMIC_STATE_SCISSOR,
+        };
+
         mesh_pipeline_config.render_info.colorAttachmentCount = 1;
         mesh_pipeline_config.render_info.pColorAttachmentFormats = &draw_image.format;
         mesh_pipeline_config.render_info.depthAttachmentFormat = depth_image.format;

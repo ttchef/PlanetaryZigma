@@ -143,8 +143,6 @@ pub fn build(b: *std.Build) void {
     renderer.addIncludePath(vulkan_header_dep.path("include/"));
     renderer.addIncludePath(tiny_obj_loader_dep.path("."));
 
-
-
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
@@ -162,7 +160,7 @@ fn compileShaders(b: *std.Build) !void {
     var it = dir.iterate();
 
     while (try it.next()) |entry| {
-        if (entry.kind != .file) continue;
+        if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".glsl")) continue;
         const cmp_cmd = b.addSystemCommand(&.{
             "glslc",
             b.fmt("assets/shaders/{s}", .{entry.name}),

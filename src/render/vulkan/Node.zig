@@ -4,12 +4,10 @@ const nz = @import("numz");
 const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
 
-parent: *@This(),
+parent: ?*@This() = null,
 mesh: Mesh,
-material: Material.Instance,
-children: [4]@This(), //TODO: DONT use struct that dont exist yet,
-child_count: usize,
-
+material: *Material.Instance,
+children: std.ArrayList(@This()) = .empty,
 local_transform: nz.Transform3D(f32),
 world_transform: nz.Transform3D(f32),
 
@@ -20,20 +18,20 @@ pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) 
     }
 }
 
-pub fn draw(self: *@This(), top_transform: nz.Transform3D(f32), ctx: DrawContext) void {
-    const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform).mul(self.world_transform);
+pub fn draw(self: *@This(), top_transform: nz.Transform3D(f32), ctx: *DrawContext) void {
+    const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_transform.toMat4x4()));
     ctx.opaque_surfaces[ctx.count] = .{
         .index_count = self.mesh.indecies_count,
         .first_index = self.mesh.first_index,
-        .index_buffer = self.mesh.index_buffer,
-        .material_instance = self.material,
+        .index_buffer = self.mesh.index_buffer.buffer,
+        .material_instance = self.material.*,
         .transform = node_transform,
         .vertex_buffer_address = self.mesh.vertex_buffer_address,
     };
     ctx.count += 1;
 
-    for (0..self.child_count) |i| {
-        self.children[i].draw(top_transform, ctx);
+    for (self.children.items) |*child| {
+        child.*.draw(top_transform, ctx);
     }
 }
 
@@ -47,10 +45,10 @@ const RenderObject = struct {
 };
 
 pub const DrawContext = struct {
-    opaque_surfaces: [4]RenderObject,
-    count: usize,
+    opaque_surfaces: [4]RenderObject = undefined,
+    count: usize = 0,
 
     pub fn clear(self: *@This()) void {
-        self.* = std.mem.zeroes(@This());
+        self.* = .{};
     }
 };
