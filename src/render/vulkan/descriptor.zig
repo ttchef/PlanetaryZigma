@@ -164,7 +164,6 @@ pub const Writer = struct {
             .range = size,
         };
         self.buffer_infos[self.buffer_count] = info;
-        self.buffer_count += 1;
 
         const write: vk.c.VkWriteDescriptorSet = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -172,10 +171,11 @@ pub const Writer = struct {
             .dstSet = null,
             .descriptorCount = 1,
             .descriptorType = descriptor_set_type,
-            .pBufferInfo = &info,
+            .pBufferInfo = &self.buffer_infos[self.buffer_count],
         };
 
         self.writes[self.writes_count] = write;
+        self.buffer_count += 1;
         self.writes_count += 1;
     }
 
