@@ -30,6 +30,8 @@ const GPUSceneData = struct {
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 defaultData: vk.Material.Instance,
 metalRoughMaterial: vk.Material.GltfMetallicRoughness,
+materialBuffer: vk.Buffer,
+materialResources: vk.Material.GltfMetallicRoughness.Resources,
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
@@ -190,6 +192,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 1 },
+        .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 },
     };
 
     var globalDescriptorAllocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
@@ -344,29 +347,36 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     pipelines[3] = try .initGraphics(device, &config_mesh);
 
     var metalRoughMaterial: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
-    var materialConstants = try vk.Buffer.init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    var materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
+    var materialBuffer = try vk.Buffer.init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+    // Initialize the uniform data with proper values BEFORE copying
+    const sceneUniformData: vk.Material.GltfMetallicRoughness.Constants = .{
+        .color_factores = .{ 1, 1, 1, 1 },
+        .metal_rough_factors = .{ 1, 0.5, 0, 0 },
+        .extra = std.mem.zeroes([14]nz.Vec4(f32)),
+    };
+
+    // Copy the initialized data to GPU memory
+    vma.copyToAllocation(
+        vk.Material.GltfMetallicRoughness.Constants,
+        sceneUniformData,
+        materialBuffer.vma_allocation,
+        &materialBuffer.info,
+    );
+
+    const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
         .color_image = _whiteImage,
         .color_sampler = _defaultSamplerLinear,
         .metal_rough_image = _whiteImage,
         .metal_rough_sampler = _defaultSamplerLinear,
-        .data_buffer = materialConstants.buffer,
-        .data_buffer_offset = 0,
+        .data_buffer = materialBuffer.buffer,
+        .data_buffer_offset = 0, // This is already aligned since it's the start of the buffer
     };
-    var sceneUniformData: vk.Material.GltfMetallicRoughness.Constants = undefined;
-    vma.copyToAllocation(
-        vk.Material.GltfMetallicRoughness.Constants,
-        sceneUniformData,
-        materialConstants.vma_allocation,
-        &materialConstants.info,
-    );
 
-    sceneUniformData.color_factores = .{ 1, 1, 1, 1 };
-    sceneUniformData.metal_rough_factors = .{ 1, 0.5, 0, 0 };
-    const defaultData = metalRoughMaterial.writeMaterial(
+    const defaultData = try metalRoughMaterial.writeMaterial(
         device,
         vk.Material.Pass.main_color,
-        &materialResources,
+        materialResources,
         &globalDescriptorAllocator,
     );
 
@@ -398,6 +408,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .globalDescriptorAllocator = globalDescriptorAllocator,
         ._drawImageDescriptor = _drawImageDescriptor,
         .metalRoughMaterial = metalRoughMaterial,
+        .materialBuffer = materialBuffer,
+        .materialResources = materialResources,
         .defaultData = defaultData,
     };
 }
@@ -421,6 +433,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.graphics_descriptor_layout.deinit(self.device);
     self._singleImageDescriptorLayout.deinit(self.device);
     self._drawImageDescitporLayour.deinit(self.device);
+    self.metalRoughMaterial.deinit(self.device);
+    self.materialBuffer.deinit(self.vma.handle);
 
     self.globalDescriptorAllocator.deinit(self.device);
 
@@ -429,12 +443,11 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     }
     self.meshes.deinit(allocator);
 
-    self.vma.deinit();
-
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
     self.instance.deinit();
+    self.vma.deinit();
 }
 
 pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
@@ -471,6 +484,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     try current_frame.descriptor.clearPools(self.device);
+    // current_frame.gpu_scene.deinit(self.vma.handle);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -574,15 +588,14 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    var gpuSceneDataBuffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    defer gpuSceneDataBuffer.deinit(self.vma.handle);
+    current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     //TODO: try removing the vma get info
-    self.vma.copyToAllocation(GPUSceneData, self.scene_data, gpuSceneDataBuffer.vma_allocation, &gpuSceneDataBuffer.info);
+    self.vma.copyToAllocation(GPUSceneData, self.scene_data, current_frame.gpu_scene.vma_allocation, &current_frame.gpu_scene.info);
     const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._gpuSceneDataDescriptorLayout.handle, null);
     {
         var writer: vk.descriptor.Writer = .{};
-        writer.appendBuffer(0, gpuSceneDataBuffer.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.appendBuffer(0, current_frame.gpu_scene.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         writer.updateSet(self.device, globalDescriptor);
     }
 
@@ -771,6 +784,8 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
 
     self.swapchain.current_frame_inflight += 1;
+
+    current_frame.gpu_scene.deinit(self.vma.handle);
 }
 
 //TODO: move logic away

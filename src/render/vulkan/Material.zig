@@ -38,12 +38,14 @@ pub const GltfMetallicRoughness = struct {
         metal_rough_image: Image,
         metal_rough_sampler: vk.VkSampler,
         data_buffer: vk.VkBuffer,
-        data_buffer_offset: u32,
+        data_buffer_offset: vk.VkDeviceSize,
     };
 
     pub fn initBuildPipelines(device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
         const mesh_frag_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
         const mesh_vertex_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
+        defer vk.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
+        defer vk.vkDestroyShaderModule(device.handle, mesh_vertex_shader, null);
 
         const matrixRange: vk.VkPushConstantRange = .{
             .offset = 0,
@@ -114,16 +116,16 @@ pub const GltfMetallicRoughness = struct {
     pub fn deinit(self: *@This(), device: Device) void {
         self.opaque_pipeline.deinit(device);
         self.transparent_pipeline.deinit(device);
-        self.desctiptor_set_layout.deinit();
+        vk.vkDestroyDescriptorSetLayout(device.handle, self.descriptor_set_layout, null);
     }
 
     pub fn writeMaterial(
         self: *@This(),
         device: Device,
         pass: Pass,
-        resources: *Resources,
+        resources: Resources,
         descriptorAllocator: *descriptor.Growable,
-    ) Instance {
+    ) !Instance {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
         if (pass == .transparent) {
@@ -131,8 +133,7 @@ pub const GltfMetallicRoughness = struct {
         } else {
             material_data_instance.pipeline = self.opaque_pipeline;
         }
-        _ = descriptorAllocator;
-        material_data_instance.descriptor_set = undefined; // try descriptorAllocator.allocate(device, self.descriptor_set_layout, null);
+        material_data_instance.descriptor_set = try descriptorAllocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
         self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         self.writer.appendImage(1, resources.color_image.image_view, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);

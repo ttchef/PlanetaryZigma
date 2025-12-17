@@ -176,6 +176,7 @@ const FrameData = struct {
     render_fence: vk.c.VkFence,
     command_buffer: vk.c.VkCommandBuffer,
     descriptor: vk.descriptor.Growable,
+    gpu_scene: vk.Buffer = undefined, //TODO: CONTINUE from here LUCAS please fix this, poraro
 
     pub fn init(allocator: std.mem.Allocator, device: vk.Device) !@This() {
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
