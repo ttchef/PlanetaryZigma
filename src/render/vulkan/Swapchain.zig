@@ -184,6 +184,8 @@ const FrameData = struct {
     gpu_scene: vk.Buffer,
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device) !@This() {
+        _ = vma;
+
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = device.command_pool.handle,
@@ -225,12 +227,7 @@ const FrameData = struct {
                 1000,
                 &frame_sizes,
             ),
-            .gpu_scene = try .init(
-                vma.handle,
-                @sizeOf(vk.GPUSceneData),
-                vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
-            ),
+            .gpu_scene = undefined,
         };
     }
 

@@ -84,8 +84,17 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const vma: vk.Vma = try .init(instance, physical_device, device);
-    const swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
-    std.debug.print("INIT - PTR: {*}\n", .{&swapchain.frames[0].gpu_scene});
+    var swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+
+    for (&swapchain.frames) |*frame| {
+        frame.gpu_scene = try .init(
+            vma.handle,
+            @sizeOf(vk.GPUSceneData),
+            vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+        );
+        std.debug.print("INIT - PTR: {*}\n", .{&frame.gpu_scene.buffer});
+    }
 
     const draw_image: vk.Image = try .init(
         vma.handle,
@@ -477,8 +486,8 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     try current_frame.descriptor.clearPools(self.device);
+    std.debug.print("draw PTR: {*}\n", .{&current_frame.gpu_scene.buffer});
     current_frame.gpu_scene.deinit(self.vma.handle);
-    std.debug.print("draw PTR: {*}\n", .{&self.swapchain.frames[0].gpu_scene});
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));

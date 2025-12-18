@@ -1,3 +1,4 @@
+const std = @import("std");
 const vk = @import("vulkan.zig");
 buffer: vk.c.VkBuffer,
 vma_allocation: vk.Vma.Allocation,
@@ -35,5 +36,7 @@ pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBuffe
 }
 
 pub fn deinit(self: @This(), vma_allocator: vk.Vma.Allocator) void {
+    std.debug.print("DENINIT PTR: {*}\n", .{&self.buffer});
+
     vk.Vma.c.vmaDestroyBuffer(vma_allocator, @ptrCast(self.buffer), self.vma_allocation);
 }
