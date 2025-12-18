@@ -16,6 +16,7 @@ frames: [max_frames_inflight]FrameData = undefined,
 
 pub fn init(
     allocator: std.mem.Allocator,
+    vma: vk.Vma,
     physical_device: vk.PhysicalDevice,
     device: vk.Device,
     surface: vk.Surface,
@@ -43,7 +44,9 @@ pub fn init(
     }
 
     var frames: [max_frames_inflight]FrameData = undefined;
-    for (&frames) |*frame| frame.* = try .init(allocator, device);
+    for (&frames) |*frame| {
+        frame.* = try .init(allocator, vma, device);
+    }
 
     const actual_extent: vk.c.VkExtent2D = try getSurfaceExtent(physical_device, surface, width, height);
 
@@ -61,9 +64,10 @@ pub fn init(
 
 pub fn deinit(
     self: *@This(),
+    vma: vk.Vma,
     device: vk.Device,
 ) void {
-    for (&self.frames) |*frame| frame.deinit(device);
+    for (&self.frames) |*frame| frame.deinit(vma, device);
     for (0..self.image_count) |i| {
         vk.c.vkDestroySemaphore(device.handle, self.render_semaphores[i], null);
     }
@@ -176,9 +180,9 @@ const FrameData = struct {
     render_fence: vk.c.VkFence,
     command_buffer: vk.c.VkCommandBuffer,
     descriptor: vk.descriptor.Growable,
-    gpu_scene: vk.Buffer = undefined, //TODO: CONTINUE from here LUCAS please fix this, poraro
+    gpu_scene: vk.Buffer,
 
-    pub fn init(allocator: std.mem.Allocator, device: vk.Device) !@This() {
+    pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device) !@This() {
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = device.command_pool.handle,
@@ -210,6 +214,8 @@ const FrameData = struct {
             .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 4 },
         };
 
+        const gpu_scene: vk.Buffer = try .init(vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+
         return .{
             .command_buffer = command_buffer,
             .swapchain_semaphore = swapchain_semaphore,
@@ -220,13 +226,15 @@ const FrameData = struct {
                 1000,
                 &frame_sizes,
             ),
+            .gpu_scene = gpu_scene,
         };
     }
 
-    pub fn deinit(self: *@This(), device: vk.Device) void {
+    pub fn deinit(self: *@This(), vma: vk.Vma, device: vk.Device) void {
         vk.c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         vk.c.vkDestroyFence(device.handle, self.render_fence, null);
         vk.c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
         self.descriptor.deinit(device);
+        self.gpu_scene.deinit(vma.handle);
     }
 };

@@ -18,16 +18,6 @@ const RenderObject = struct {
 };
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
-const GPUSceneData = struct {
-    view: nz.Mat4x4(f32),
-    proj: nz.Mat4x4(f32),
-    viewproj: nz.Mat4x4(f32),
-    ambient_color: nz.Vec4(f32),
-    sunlight_direction: nz.Vec4(f32),
-    sunlight_color: nz.Vec4(f32),
-};
-
-//TODO: WILL REMOVE (but exist temporarly for the learnding):
 defaultData: vk.Material.Instance,
 metalRoughMaterial: vk.Material.GltfMetallicRoughness,
 materialBuffer: vk.Buffer,
@@ -42,7 +32,7 @@ _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
 _drawImageDescitporLayour: vk.descriptor.Layout,
 globalDescriptorAllocator: vk.descriptor.Growable,
 _drawImageDescriptor: vk.c.VkDescriptorSet,
-scene_data: GPUSceneData,
+scene_data: vk.GPUSceneData,
 _whiteImage: vk.Image,
 _blackImage: vk.Image,
 _greyImage: vk.Image,
@@ -93,8 +83,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
-    const swapchain: vk.Swapchain = try .init(allocator, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const vma: vk.Vma = try .init(instance, physical_device, device);
+    const swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
 
     const draw_image: vk.Image = try .init(
         vma.handle,
@@ -398,7 +388,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         ._singleImageDescriptorLayout = _singleImageDescriptorLayout,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         ._drawImageDescitporLayour = _drawImageDescriptorLayoutlayout,
-        .scene_data = std.mem.zeroes(GPUSceneData),
+        .scene_data = std.mem.zeroes(vk.GPUSceneData),
         ._whiteImage = _whiteImage,
         ._blackImage = _blackImage,
         ._greyImage = _greyImage,
@@ -416,7 +406,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.handle);
-    self.swapchain.deinit(self.device);
+    self.swapchain.deinit(self.vma, self.device);
 
     for (0..self.max_pipelines) |i|
         self.pipelines[i].deinit(self.device);
@@ -484,7 +474,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     try current_frame.descriptor.clearPools(self.device);
-    // current_frame.gpu_scene.deinit(self.vma.handle);
+    current_frame.gpu_scene.deinit(self.vma.handle);
 
     const cmd_buffer = current_frame.command_buffer;
     try vk.check(vk.c.vkResetCommandBuffer(cmd_buffer, 0));
@@ -588,14 +578,14 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
-    current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     //TODO: try removing the vma get info
-    self.vma.copyToAllocation(GPUSceneData, self.scene_data, current_frame.gpu_scene.vma_allocation, &current_frame.gpu_scene.info);
+    self.vma.copyToAllocation(vk.GPUSceneData, self.scene_data, current_frame.gpu_scene.vma_allocation, &current_frame.gpu_scene.info);
     const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._gpuSceneDataDescriptorLayout.handle, null);
     {
         var writer: vk.descriptor.Writer = .{};
-        writer.appendBuffer(0, current_frame.gpu_scene.buffer, @sizeOf(GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        writer.appendBuffer(0, current_frame.gpu_scene.buffer, @sizeOf(vk.GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         writer.updateSet(self.device, globalDescriptor);
     }
 
@@ -784,8 +774,6 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
 
     self.swapchain.current_frame_inflight += 1;
-
-    current_frame.gpu_scene.deinit(self.vma.handle);
 }
 
 //TODO: move logic away

@@ -69,7 +69,7 @@ pub fn main() !void {
             },
             .layers = &.{
                 "VK_LAYER_KHRONOS_validation",
-                // "VK_LAYER_LUNARG_api_dump",
+                "VK_LAYER_LUNARG_api_dump",
             },
             .debug_config = .{
                 .severities = .{
@@ -100,7 +100,7 @@ pub fn main() !void {
 
     var renderer: Renderer = undefined;
     try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
-    // try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
@@ -143,7 +143,8 @@ pub fn main() !void {
             try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
         }
-        break;
+        // if (accumulated_time > 1000)
+        //     break;
     }
     renderer.deinit(allocator);
 }
