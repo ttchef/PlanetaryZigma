@@ -100,7 +100,7 @@ pub fn main() !void {
 
     var renderer: Renderer = undefined;
     try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
-    // try renderer.uploadMeshToGPU(allocator, "assets/objects/chung.obj");
+    try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
 
     var time: f32 = 0;
     var timer = try std.time.Timer.start();
@@ -143,7 +143,8 @@ pub fn main() !void {
             try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
         }
-        break;
+        if (time > 0.5)
+            break;
     }
     renderer.deinit(allocator);
 }

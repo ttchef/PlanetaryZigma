@@ -1,4 +1,5 @@
 const std = @import("std");
+const nz = @import("numz");
 
 pub const c = @import("vulkan");
 pub const check = @import("utils.zig").check;
@@ -19,6 +20,16 @@ pub const Buffer = @import("Buffer.zig");
 pub const Mesh = @import("Mesh.zig");
 pub const Material = @import("Material.zig");
 pub const Node = @import("Node.zig");
+
+//TODO: WILL REMOVE (but exist temporarly for the learnding):
+pub const GPUSceneData = struct {
+    view: nz.Mat4x4(f32),
+    proj: nz.Mat4x4(f32),
+    viewproj: nz.Mat4x4(f32),
+    ambient_color: nz.Vec4(f32),
+    sunlight_direction: nz.Vec4(f32),
+    sunlight_color: nz.Vec4(f32),
+};
 
 pub const Instance = struct {
     handle: c.VkInstance,
