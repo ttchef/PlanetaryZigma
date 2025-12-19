@@ -12,9 +12,11 @@ indecies_count: u32,
 first_index: u32,
 
 pub const Vertex = extern struct {
-    position: nz.Vec4(f32),
-    uv: nz.Vec2(f32) = @splat(0),
-    // normal: nz.Vec3(f32) = @splat(0),
+    position: [3]f32 = @splat(0),
+    uv_x: f32 = 0,
+    normal: [3]f32 = @splat(0),
+    uv_y: f32 = 0,
+    color: [4]f32 = @splat(0),
 };
 
 pub const GPUDrawPushConstants = extern struct {

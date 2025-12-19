@@ -46,8 +46,8 @@ pub fn init(
     var frames: [max_frames_inflight]FrameData = undefined;
     for (&frames) |*frame| {
         frame.* = try .init(allocator, vma, device);
+        // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
     }
-    std.debug.print("PTR: {*}\n", .{&frames[0].gpu_scene});
 
     const actual_extent: vk.c.VkExtent2D = try getSurfaceExtent(physical_device, surface, width, height);
 
@@ -184,8 +184,6 @@ const FrameData = struct {
     gpu_scene: vk.Buffer,
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device) !@This() {
-        _ = vma;
-
         var alloc_info: vk.c.VkCommandBufferAllocateInfo = .{
             .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = device.command_pool.handle,
@@ -227,7 +225,12 @@ const FrameData = struct {
                 1000,
                 &frame_sizes,
             ),
-            .gpu_scene = undefined,
+            .gpu_scene = try .init(
+                vma.handle,
+                @sizeOf(vk.GPUSceneData),
+                vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            ),
         };
     }
 

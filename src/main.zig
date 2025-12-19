@@ -143,8 +143,6 @@ pub fn main() !void {
             try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
         }
-        if (time > 0.5)
-            break;
     }
     renderer.deinit(allocator);
 }

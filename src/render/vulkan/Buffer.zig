@@ -28,6 +28,8 @@ pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBuffe
         &info,
     ));
 
+    std.debug.print("INIT BUFFER PTR: {*}\n", .{new_buffer});
+
     return .{
         .buffer = new_buffer,
         .vma_allocation = allocation,
@@ -36,7 +38,7 @@ pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBuffe
 }
 
 pub fn deinit(self: @This(), vma_allocator: vk.Vma.Allocator) void {
-    std.debug.print("DENINIT PTR: {*}\n", .{&self.buffer});
+    std.debug.print("DENINIT PTR: {*}\n", .{self.buffer});
 
     vk.Vma.c.vmaDestroyBuffer(vma_allocator, @ptrCast(self.buffer), self.vma_allocation);
 }
