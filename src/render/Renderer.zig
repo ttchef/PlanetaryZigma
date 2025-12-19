@@ -84,17 +84,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const vma: vk.Vma = try .init(instance, physical_device, device);
-    var swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
-
-    for (&swapchain.frames) |*frame| {
-        frame.gpu_scene = try .init(
-            vma.handle,
-            @sizeOf(vk.GPUSceneData),
-            vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
-        );
-        std.debug.print("INIT - PTR: {*}\n", .{&frame.gpu_scene.buffer});
-    }
+    const swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
 
     const draw_image: vk.Image = try .init(
         vma.handle,
@@ -370,7 +360,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .metal_rough_image = _whiteImage,
         .metal_rough_sampler = _defaultSamplerLinear,
         .data_buffer = materialBuffer.buffer,
-        .data_buffer_offset = 0, // This is already aligned since it's the start of the buffer
+        .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
     };
 
     const defaultData = try metalRoughMaterial.writeMaterial(
@@ -469,7 +459,7 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
 
 pub fn draw(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
-    var current_frame = self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
+    var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     try vk.check(vk.c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
     const aquire_result = vk.c.vkAcquireNextImageKHR(
@@ -486,7 +476,6 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     try current_frame.descriptor.clearPools(self.device);
-    std.debug.print("draw PTR: {*}\n", .{&current_frame.gpu_scene.buffer});
     current_frame.gpu_scene.deinit(self.vma.handle);
 
     const cmd_buffer = current_frame.command_buffer;
@@ -645,7 +634,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         10000,
     );
     projection.d[6] *= -1;
-    self.scene_data.viewproj = self.scene_data.proj.mul(self.scene_data.view);
+    self.scene_data.viewproj = projection.mul(self.scene_data.view);
     self.scene_data.ambient_color = @splat(1);
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
@@ -686,6 +675,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         vk.c.vkCmdPushConstants(cmd_buffer, node.material.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
         vk.c.vkCmdDrawIndexed(cmd_buffer, node.mesh.indecies_count, 1, node.mesh.first_index, 0, 0);
+        std.debug.print("Indecies: {d}\n", .{node.mesh.indecies_count});
     }
 
     //
@@ -723,7 +713,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     //     @sizeOf(vk.Mesh.GPUDrawPushConstants),
     //     &push,
     // );
-    // vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+    // vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffeconstuffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
     // vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
     //TODO:===============================
     //TODO: ====================================
@@ -847,8 +837,9 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
                 }
 
                 const vertex: vk.Mesh.Vertex = .{
-                    .position = .{ pos_x, pos_y, pos_z, 1.0 },
-                    .uv = .{ uv_x, uv_y },
+                    .position = .{ pos_x, pos_y, pos_z },
+                    .uv_x = uv_x,
+                    .uv_y = uv_y,
                 };
 
                 try vertices_list.append(allocator, vertex);
