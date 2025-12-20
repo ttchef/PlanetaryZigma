@@ -107,6 +107,9 @@ pub fn main() !void {
     var accumulated_time: f32 = 0;
     const seconds_per_update = 0.016;
     while (!window.shouldClose()) {
+        glfw.io.events.poll();
+        if (glfw.io.Key.escape.get(window)) break;
+
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
         accumulated_time += delta_time;
@@ -136,6 +139,7 @@ pub fn main() !void {
         // try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
         // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
         if (try watcher.listen()) {
+            std.debug.print("RELOAD\n", .{});
             renderer.deinit(allocator);
             try watcher.reload();
             renderer_init = try watcher.lookup(Renderer.c.Init, "init");

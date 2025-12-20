@@ -81,6 +81,7 @@ pub const Game = struct {
     }
 
     pub fn listen(self: *@This()) !bool {
+        std.debug.print("Listen\n", .{});
         return try self.file_watcher.listen();
     }
 

@@ -490,7 +490,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vk.c.VK_ACCESS_SHADER_WRITE_BIT);
 
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
-    std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
+    // std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
 
     const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
 
@@ -623,32 +623,35 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     //TODO: ====================================
     self.mainDrawContext.clear();
-    self.loaded_nodes[0].draw(nz.Transform3D(f32).fromMat4x4(nz.Mat4x4(f32).identity), &self.mainDrawContext);
+    const top_matrix: nz.Transform3D(f32) = .{ .position = .{ 0, 0, -20 } };
+    self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
     self.scene_data.view = .translate(.{ 0, 0, -5 });
     //projection matrix + view + model
-    // const view: nz.Mat4x4(f32) = .translate(.{ 0, 0, -5 });
-    var projection: nz.Mat4x4(f32) = .perspective(
+    self.scene_data.proj = .perspective(
         70,
         @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
         0.1,
         10000,
     );
-    projection.d[6] *= -1;
-    self.scene_data.viewproj = projection.mul(self.scene_data.view);
+    self.scene_data.proj.d[6] *= -1;
+    // self.scene_data.viewproj = self.scene_data.view.mul(self.scene_data.proj);
+    self.scene_data.viewproj = self.scene_data.proj.mul(self.scene_data.view);
     self.scene_data.ambient_color = @splat(1);
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
-    for (0..self.node_count) |i| {
-        const node = self.loaded_nodes[i];
+    // std.debug.print("\nsceneDATA {any}\n", .{self.scene_data});
+    for (0..self.mainDrawContext.count) |i| {
+        // std.debug.print("\nRENDER NODE\n", .{});
+        const opaque_draw = &self.mainDrawContext.opaque_surfaces[i];
 
-        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, node.material.pipeline.get().handle);
+        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, opaque_draw.material_instance.pipeline.get().handle);
 
         //TODO:CONTINUE from here.
         vk.c.vkCmdBindDescriptorSets(
             cmd_buffer,
             vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            node.material.pipeline.get().layout,
+            opaque_draw.material_instance.pipeline.get().layout,
             0,
             1,
             &globalDescriptor,
@@ -658,24 +661,25 @@ pub fn draw(self: *@This(), time: f32) !void {
         vk.c.vkCmdBindDescriptorSets(
             cmd_buffer,
             vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            node.material.pipeline.get().layout,
+            opaque_draw.material_instance.pipeline.get().layout,
             1,
             1,
-            &node.material.descriptor_set,
+            &opaque_draw.material_instance.descriptor_set,
             0,
             null,
         );
 
-        vk.c.vkCmdBindIndexBuffer(cmd_buffer, node.mesh.index_buffer.buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+        vk.c.vkCmdBindIndexBuffer(cmd_buffer, opaque_draw.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+
+        // std.debug.print("world_matrix: {any}\n", .{opaque_draw.transform.toMat4x4().d});
 
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
-            .vertex_buffer = node.mesh.vertex_buffer_address,
-            .world_matrix = node.world_transform.toMat4x4().d,
+            .world_matrix = opaque_draw.transform.toMat4x4().d,
+            .vertex_buffer = opaque_draw.vertex_buffer_address,
         };
-        vk.c.vkCmdPushConstants(cmd_buffer, node.material.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+        vk.c.vkCmdPushConstants(cmd_buffer, opaque_draw.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
-        vk.c.vkCmdDrawIndexed(cmd_buffer, node.mesh.indecies_count, 1, node.mesh.first_index, 0, 0);
-        std.debug.print("Indecies: {d}\n", .{node.mesh.indecies_count});
+        vk.c.vkCmdDrawIndexed(cmd_buffer, opaque_draw.index_count, 1, opaque_draw.first_index, 0, 0);
     }
 
     //
@@ -862,9 +866,10 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
         self.loaded_nodes[self.node_count] = .{
             .material = &self.defaultData,
             .mesh = self.meshes.getLast(),
-            .world_transform = .fromMat4x4(nz.Mat4x4(f32).identity),
-            .local_transform = .fromMat4x4(nz.Mat4x4(f32).identity),
+            .world_transform = .{},
+            .local_transform = .{},
         };
+        std.debug.print("MATRIX on init: {any}\n", .{self.loaded_nodes[self.node_count].world_transform.toMat4x4()});
         self.node_count += 1;
     } else {
         std.debug.print("\nNo valid mesh data found in {s}\n\n", .{path});
