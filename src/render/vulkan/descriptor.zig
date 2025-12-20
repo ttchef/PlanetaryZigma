@@ -186,7 +186,7 @@ pub const Writer = struct {
     pub fn updateSet(self: *@This(), device: vk.Device, set: vk.c.VkDescriptorSet) void {
         for (self.writes[0..self.writes_count]) |*writer| {
             writer.dstSet = set;
-            std.debug.print("desctype: {d}\n", .{writer.descriptorType});
+            // std.debug.print("desctype: {d}\n", .{writer.descriptorType});
         }
         vk.c.vkUpdateDescriptorSets(
             device.handle,
