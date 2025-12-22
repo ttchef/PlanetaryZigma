@@ -435,11 +435,11 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     }
     self.meshes.deinit(allocator);
 
+    self.vma.deinit();
     self.device.deinit();
     self.surface.deinit(self.instance);
     self.debug_messenger.deinit(self.instance);
     self.instance.deinit();
-    self.vma.deinit();
 }
 
 pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
