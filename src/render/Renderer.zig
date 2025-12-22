@@ -623,19 +623,40 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     //TODO: ====================================
     self.mainDrawContext.clear();
-    const top_matrix: nz.Transform3D(f32) = .{ .position = .{ 0, 0, -20 } };
+    const top_matrix: nz.Transform3D(f32) = .{
+        .position = .{ 0, 0, 0 },
+    };
     self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
-    self.scene_data.view = .translate(.{ 0, 0, -5 });
+    self.scene_data.view = .translate(.{ 0, 0, 0 });
     //projection matrix + view + model
-    self.scene_data.proj = .perspective(
-        70,
-        @floatFromInt(self.draw_image.image_extent.width / self.draw_image.image_extent.height),
+    // const angle_width: f32 = std.math.tan(1.5);
+    // const angle_height: f32 = std.math.tan(1.5);
+    //
+    // var projection_matrix = nz.Mat4x4(f32).identity;
+    //
+    // //TODO: defines?
+    // const far_distance: f32 = 10000;
+    // const near_distance: f32 = 0.01;
+    //
+    // projection_matrix.d[0] = 2.0 / angle_width;
+    // projection_matrix.d[8] = std.math.tan(1.5);
+    // projection_matrix.d[5] = 2.0 / angle_height;
+    // projection_matrix.d[9] = std.math.tan(1.5);
+    // projection_matrix.d[10] = -far_distance / (far_distance - near_distance);
+    // projection_matrix.d[14] = -(far_distance * near_distance) / (far_distance - near_distance);
+    // projection_matrix.d[11] = -1;
+    self.scene_data.proj = .perspective_rh(
+        1.5,
+        (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
         0.1,
         10000,
     );
-    self.scene_data.proj.d[6] *= -1;
+    std.debug.print("proj: {any}\n", .{self.scene_data.proj});
+    // self.scene_data.proj = projection_matrix.transpose();
+    // self.scene_data.proj.d[6] *= -1;
     // self.scene_data.viewproj = self.scene_data.view.mul(self.scene_data.proj);
     self.scene_data.viewproj = self.scene_data.proj.mul(self.scene_data.view);
+    std.debug.print("projView: {any}\n", .{self.scene_data.viewproj});
     self.scene_data.ambient_color = @splat(1);
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
