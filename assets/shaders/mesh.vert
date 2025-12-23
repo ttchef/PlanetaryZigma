@@ -30,6 +30,17 @@ void main() {
 	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 	vec4 position = vec4(v.position, 1.0f);
 
+// test 1: model only (you said this is fine)
+// gl_Position = PushConstants.render_matrix * p;
+
+// test 2: viewproj only
+// gl_Position = sceneData.viewproj * p;
+
+// test 3: transpose viewproj
+// gl_Position = transpose(sceneData.viewproj) * PushConstants.render_matrix * p;
+
+// test 4: swap order
+// gl_Position = PushConstants.render_matrix * sceneData.viewproj * p;
   gl_Position = sceneData.viewproj * PushConstants.render_matrix * position;
   // gl_Position =  position;
 

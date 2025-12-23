@@ -22,13 +22,13 @@ pub const Material = @import("Material.zig");
 pub const Node = @import("Node.zig");
 
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
-pub const GPUSceneData = struct {
-    view: nz.Mat4x4(f32),
-    proj: nz.Mat4x4(f32),
-    viewproj: nz.Mat4x4(f32),
-    ambient_color: nz.Vec4(f32),
-    sunlight_direction: nz.Vec4(f32),
-    sunlight_color: nz.Vec4(f32),
+pub const GPUSceneData = extern struct {
+    view: [16]f32,
+    proj: [16]f32,
+    viewproj: [16]f32,
+    ambient_color: [4]f32,
+    sunlight_direction: [4]f32,
+    sunlight_color: [4]f32,
 };
 
 pub const Instance = struct {
