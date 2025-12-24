@@ -170,16 +170,24 @@ pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
 
     // ---- Keyboard movement ----
     var move: nz.Vec3(f32) = .{ 0, 0, 0 };
-    const speed: f32 = 5.0;
+    const speed: f32 = 1.0;
 
     if (glfw.io.Key.w.get(window)) move[2] -= speed;
     if (glfw.io.Key.s.get(window)) move[2] += speed;
     if (glfw.io.Key.a.get(window)) move[0] -= speed;
     if (glfw.io.Key.d.get(window)) move[0] += speed;
 
-    const cameraRotation = camera.getRotationMatrix();
-    const vec4: nz.Vec4(f32) = .{ camera.velocity, 0 };
-    camera.position += .{cameraRotation.mul(vec4)};
+    // const cameraRotation = camera.getRotationMatrix();
+    //
+    // const dir4: nz.Vec4(f32) = .{
+    //     camera.velocity[0],
+    //     camera.velocity[1],
+    //     camera.velocity[2],
+    //     0.0,
+    // };
+    // const moved4: nz.Vec4(f32) = cameraRotation.mulVec4(dir4);
+    // camera.position += .{ moved4[0], moved4[1], moved4[2] };
+    camera.position += .{ move[0], move[1], move[2] };
 }
 
 export fn cursorPosCallback(

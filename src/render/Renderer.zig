@@ -625,15 +625,12 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     //TODO: ====================================
     self.mainDrawContext.clear();
-    var top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -2 },
-        .rotation = .{ 0, time * 100, time * 100 },
+    const top_matrix: nz.Transform3D(f32) = .{
+        .position = .{ 0, 0, 2 },
+        .rotation = .{ 0, 0, time * 100 },
     };
     self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
-    top_matrix.position[0] = -1;
-    top_matrix.rotation[0] = time * 100;
-    self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
-    const view = nz.Mat4x4(f32).translate(.{ 0, 0, 0 });
+    const view = self.camera.getViewMatrix();
     var projection = nz.Mat4x4(f32).perspective(
         1.5,
         (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
