@@ -10,6 +10,12 @@ const Watcher = @import("fileWatcher/watcher.zig");
 
 pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
 
+var delta_x: f32 = 0;
+var delta_y: f32 = 0;
+var last_x: f64 = 0;
+var last_y: f64 = 0;
+var first_mouse: bool = true;
+
 pub fn main() !void {
     var watcher: Watcher.Game = try .init();
     defer watcher.deinit();
@@ -115,6 +121,7 @@ pub fn main() !void {
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
+            proccessCamera(&renderer.camera, window);
             try Renderer.c.toErr(renderer_draw(&renderer, time));
             accumulated_time -= seconds_per_update;
         }
@@ -149,6 +156,60 @@ pub fn main() !void {
         }
     }
     renderer.deinit(allocator);
+}
+
+pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
+    // ---- Mouse movement ----
+    _ = glfw.c.glfwSetCursorPosCallback(window.toC(), cursorPosCallback);
+    const sensitivity: f32 = 0.002;
+
+    camera.yaw += delta_x * sensitivity;
+    camera.pitch -= delta_y * sensitivity;
+
+    camera.pitch = std.math.clamp(camera.pitch, -1.55, 1.55);
+
+    // ---- Keyboard movement ----
+    var move: nz.Vec3(f32) = .{ 0, 0, 0 };
+    const speed: f32 = 1.0;
+
+    if (glfw.io.Key.w.get(window)) move[2] -= speed;
+    if (glfw.io.Key.s.get(window)) move[2] += speed;
+    if (glfw.io.Key.a.get(window)) move[0] -= speed;
+    if (glfw.io.Key.d.get(window)) move[0] += speed;
+
+    // const cameraRotation = camera.getRotationMatrix();
+    //
+    // const dir4: nz.Vec4(f32) = .{
+    //     camera.velocity[0],
+    //     camera.velocity[1],
+    //     camera.velocity[2],
+    //     0.0,
+    // };
+    // const moved4: nz.Vec4(f32) = cameraRotation.mulVec4(dir4);
+    // camera.position += .{ moved4[0], moved4[1], moved4[2] };
+    camera.position += .{ move[0], move[1], move[2] };
+}
+
+export fn cursorPosCallback(
+    window: ?*glfw.c.GLFWwindow,
+    xpos: f64,
+    ypos: f64,
+) callconv(.c) void {
+    _ = window;
+    if (first_mouse) {
+        last_x = xpos;
+        last_y = ypos;
+        first_mouse = false;
+        return;
+    }
+
+    delta_x = @floatCast(xpos - last_x);
+    delta_y = @floatCast(ypos - last_y);
+
+    last_x = xpos;
+    last_y = ypos;
+
+    // store deltas somewhere global / ring buffer / input state
 }
 
 pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
