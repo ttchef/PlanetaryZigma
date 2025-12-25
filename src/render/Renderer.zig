@@ -43,7 +43,7 @@ _defaultSamplerNearest: vk.c.VkSampler,
 mainDrawContext: vk.Node.DrawContext = undefined,
 loaded_nodes: [16]vk.Node = undefined,
 node_count: usize = 0,
-camera: Camera = .{},
+camera: Camera = .{ .position = .{ 0, 0, 5 } },
 
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -626,11 +626,12 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     self.mainDrawContext.clear();
     const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, 2 },
-        .rotation = .{ 0, 0, time * 100 },
+        .position = .{ 0, 0, -2 },
+        .rotation = .{ 0, 0, 0 },
     };
     self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
     const view = self.camera.getViewMatrix();
+    // const view = nz.Mat4x4(f32).identity;
     var projection = nz.Mat4x4(f32).perspective(
         1.5,
         (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
