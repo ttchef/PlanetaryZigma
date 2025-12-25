@@ -161,33 +161,38 @@ pub fn main() !void {
 pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
     // ---- Mouse movement ----
     _ = glfw.c.glfwSetCursorPosCallback(window.toC(), cursorPosCallback);
-    const sensitivity: f32 = 0.002;
 
-    camera.yaw += delta_x * sensitivity;
-    camera.pitch -= delta_y * sensitivity;
+    camera.yaw += delta_x / 200.0;
+    camera.pitch -= delta_y / 200.0;
 
     camera.pitch = std.math.clamp(camera.pitch, -1.55, 1.55);
 
     // ---- Keyboard movement ----
-    var move: nz.Vec3(f32) = .{ 0, 0, 0 };
-    const speed: f32 = 1.0;
+    const speed: f32 = 0.1;
 
-    if (glfw.io.Key.w.get(window)) move[2] -= speed;
-    if (glfw.io.Key.s.get(window)) move[2] += speed;
-    if (glfw.io.Key.a.get(window)) move[0] -= speed;
-    if (glfw.io.Key.d.get(window)) move[0] += speed;
+    if (glfw.io.Key.w.get(window)) camera.velocity[2] -= speed;
+    if (glfw.io.Key.s.get(window)) camera.velocity[2] += speed;
+    if (glfw.io.Key.a.get(window)) camera.velocity[0] -= speed;
+    if (glfw.io.Key.d.get(window)) camera.velocity[0] += speed;
+    const len = @typeInfo(@TypeOf(camera.velocity)).vector.len;
+    inline for (0..len) |i| {
+        if (camera.velocity[i] > 0) {
+            camera.velocity[i] = std.math.clamp(camera.velocity[i] - speed / 2, 0, 5);
+        } else if (camera.velocity[i] < 0) {
+            camera.velocity[i] = std.math.clamp(camera.velocity[i] + speed / 2, -5, 0);
+        }
+    }
 
-    // const cameraRotation = camera.getRotationMatrix();
-    //
-    // const dir4: nz.Vec4(f32) = .{
-    //     camera.velocity[0],
-    //     camera.velocity[1],
-    //     camera.velocity[2],
-    //     0.0,
-    // };
-    // const moved4: nz.Vec4(f32) = cameraRotation.mulVec4(dir4);
-    // camera.position += .{ moved4[0], moved4[1], moved4[2] };
-    camera.position += .{ move[0], move[1], move[2] };
+    const cameraRotation = camera.getRotationMatrix();
+
+    const dir4: nz.Vec4(f32) = .{
+        camera.velocity[0],
+        camera.velocity[1],
+        camera.velocity[2],
+        0.0,
+    };
+    const moved4: nz.Vec4(f32) = cameraRotation.mulVec4(dir4);
+    camera.position += .{ moved4[0], moved4[1], moved4[2] };
 }
 
 export fn cursorPosCallback(
