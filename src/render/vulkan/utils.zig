@@ -1422,7 +1422,7 @@ pub fn copyImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: 
     c.vkCmdBlitImage2(cmd, &blit_info);
 }
 
-pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule {
+pub fn loadFileIntoBuffer(path: []const u8, buffer: []u8) !usize {
     var threaded: std.Io.Threaded = .init_single_threaded;
     defer threaded.deinit();
 
@@ -1431,15 +1431,20 @@ pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule 
     const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch @panic("file open failed");
     defer file.close(io);
 
-    var buffer: [10000]u8 = undefined;
     const file_len: usize = @intCast((file.stat(io) catch @panic("file size failed")).size);
-    var reader = file.reader(io, &buffer);
+    var reader = file.reader(io, buffer);
     const content = reader.interface.take(file_len) catch @panic("failed to read");
 
+    return content.len;
+}
+
+pub fn loadShaderModule(device: c.VkDevice, path: []const u8) !c.VkShaderModule {
+    var buffer: [10000]u8 align(4) = undefined;
+    const read_bytes = try loadFileIntoBuffer(path, buffer[0..]);
     var create_info: c.VkShaderModuleCreateInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = content.len,
-        .pCode = @ptrCast(@alignCast(content.ptr)),
+        .codeSize = read_bytes,
+        .pCode = @ptrCast(@alignCast(&buffer)),
     };
 
     var shader_module: c.VkShaderModule = undefined;
