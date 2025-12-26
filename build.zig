@@ -34,6 +34,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).createModule();
 
+    const cgltf_dep = b.dependency("cgltf", .{});
+    const cgltf = b.addTranslateC(.{
+        .root_source_file = cgltf_dep.path("cgltf.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
             "c.h",
@@ -65,6 +72,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "vma", .module = vma },
                 .{ .name = "tiny_obj_loader", .module = tiny_obj_loader },
+                .{ .name = "cgltf", .module = cgltf },
                 .{ .name = "stb", .module = stb.createModule() },
             },
             .link_libcpp = true,
@@ -104,14 +112,6 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("spacetime", .{});
     exe.root_module.linkSystemLibrary("vulkan", .{});
 
-    // Add VMA implementation
-    // exe.addCSourceFile(.{
-    //     .file = b.addWriteFiles().add("vma_impl.cpp",
-    //         \\#define VMA_IMPLEMENTATION
-    //         \\#include "vk_mem_alloc.h"
-    //     ),
-    //     .flags = &.{"-std=c++14"},
-    // });
     renderer.addCSourceFile(.{
         .file = b.addWriteFiles().add("vma_impl.cpp",
             \\#define VMA_IMPLEMENTATION
@@ -119,14 +119,7 @@ pub fn build(b: *std.Build) void {
         ),
         .flags = &.{"-std=c++14"},
     });
-    // Add tiny obj loader implementation
-    // exe.addCSourceFile(.{
-    //     .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
-    //         \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
-    //         \\#include "tinyobj_loader_c.h"
-    //     ),
-    //     .flags = &.{"-std=c99"},
-    // });
+
     renderer.addCSourceFile(.{
         .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
             \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
@@ -134,14 +127,11 @@ pub fn build(b: *std.Build) void {
         ),
         .flags = &.{"-std=c99"},
     });
-    // exe.addIncludePath(vma_dep.path("include/"));
-    // exe.addIncludePath(vulkan_header_dep.path("include/"));
-    // exe.addIncludePath(tiny_obj_loader_dep.path("."));
-    //
 
     renderer.addIncludePath(vma_dep.path("include/"));
     renderer.addIncludePath(vulkan_header_dep.path("include/"));
     renderer.addIncludePath(tiny_obj_loader_dep.path("."));
+    renderer.addIncludePath(cgltf_dep.path("."));
 
     b.installArtifact(exe);
 
