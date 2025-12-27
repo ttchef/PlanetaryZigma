@@ -38,7 +38,7 @@
         },
         .cgltf = .{
             .url = "git+https://github.com/jkuhlmann/cgltf.git",
-            .hash = "N-V-__8AAKWmBQDq9z-2g3I1U-0lcQNLp3GjkIX3CScXeOiN",
+            .hash = "N-V-__8AAEpsBAA5vmDdnUJyrMbhpss88BWHjCHd5X15vEst",
         },
     },
     .paths = .{
