@@ -26,7 +26,7 @@ fn extractMagFilter(filter: cgltf.cgltf_filter_type) vk.c.VkFilter  {
 }
 
 
-fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path: []const u8, TMP_IMAGE: vk.c.VkImage) !@This() {
+fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path: []const u8, TMP_IMAGES: [3]vk.c.VkImage, TMP_SAMPLER: [2]vk.c.VkSampler, metal_rough_material: *vk.Material.GltfMetallicRoughness) !@This() {
     std.log.info("Loading GLTF: {s}", .{filePath});
 
     const options: cgltf.cgltf_options = .{};
@@ -61,17 +61,17 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
     var meshes: std.ArrayList(*vk.Mesh) = .empty;
     var nodes: std.ArrayList(*vk.Node) = .empty;
     var images: std.ArrayList(vk.Image) = .empty;
-    var materials: std.ArrayList(*vk.Material.Instance) = .empty;
+    var materials: std.StringHashMapUnmanaged(vk.Material.Instance) = .empty;
 
     for (data.images[0..data.samplers_count]) |image| {
         _ = image;
-        images.append(allocator, TMP_IMAGE);
+        images.append(allocator, TMP_IMAGE[0]);
     }
 
     const material_data_buffer: vk.Buffer = .init(vma, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     const data_index: u32 = 0;
 
-    const scene_material_constans: vk.Material.GltfMetallicRoughness.Constants = .{}; 
+    var scene_material_constans: vk.Material.GltfMetallicRoughness.Constants = .{}; 
     vma.copyToAllocation(
         vk.Material.GltfMetallicRoughness.Constants,
         scene_material_constans,
@@ -80,52 +80,51 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
     );
 
     for (data.materials[0..data.materials_count]) |material| {
-        var new_material: vk.Material.Instance = .{};
+        const constant: vk.Material.GltfMetallicRoughness.Constants = .{
+            .color_factores = .{
+                .x = material.pbr_metallic_roughness.base_color_factor[0],
+                .y = material.pbr_metallic_roughness.base_color_factor[1],
+                .z = material.pbr_metallic_roughness.base_color_factor[2],
+                .w = material.pbr_metallic_roughness.base_color_factor[3],
+            },
+            .metal_rough_factors = .{
+                .x = material.pbr_metallic_roughness.metallic_factor,
+                .y = material.pbr_metallic_roughness.roughness_factor,
+            },
+        };
+        scene_material_constans[data_index] = constant;
 
-        materials.push_back(newMat);
-        file.materials[mat.name.c_str()] = newMat;
+        const pass_type: vk.Material.Pass = if(material.alpha_mode == cgltf.cgltf_alpha_mode_blend) vk.Material.Pass.transparent
+            else vk.Material.Pass.main_color;
 
-        GLTFMetallic_Roughness::MaterialConstants constants;
-        constants.colorFactors.x = mat.pbrData.baseColorFactor[0];
-        constants.colorFactors.y = mat.pbrData.baseColorFactor[1];
-        constants.colorFactors.z = mat.pbrData.baseColorFactor[2];
-        constants.colorFactors.w = mat.pbrData.baseColorFactor[3];
+        var material_resources: vk.Material.GltfMetallicRoughness.Resources = .{
+            .color_image = TMP_IMAGES[1],
+            .color_sampler = TMP_SAMPLER[0],
+            .metal_rough_image = TMP_IMAGES[2],
+            .metal_rough_sampler = TMP_IMAGES[1],
+            .data_buffer = material_data_buffer,
+            .data_buffer_offset = data_index * @sizeOf(vk.Material.GltfMetallicRoughness.Constants),
+        };
 
-        constants.metal_rough_factors.x = mat.pbrData.metallicFactor;
-        constants.metal_rough_factors.y = mat.pbrData.roughnessFactor;
-        // write material parameters to buffer
-        sceneMaterialConstants[data_index] = constants;
-
-        MaterialPass passType = MaterialPass::MainColor;
-        if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
-            passType = MaterialPass::Transparent;
+        if (material.pbr_metallic_roughness.base_color_texture.texture) {
+            const tex= material.pbr_metallic_roughness.base_color_texture.texture.*;
+            if (tex.image) {
+                //TODO: FIX Pointer subtraction
+                const img_index = (tex.image - data.images);
+                material_resources.color_image = images[img_index];
+            }
+            if (tex.sampler) {
+                //TODO: FIX Pointer subtraction
+                const samp_index = (tex.sampler - data.samplers);
+                material_resources.color_sampler = samplers[samp_index];
+            }
         }
-
-        GLTFMetallic_Roughness::MaterialResources materialResources;
-        // default the material textures
-        materialResources.colorImage = engine->_whiteImage;
-        materialResources.colorSampler = engine->_defaultSamplerLinear;
-        materialResources.metalRoughImage = engine->_whiteImage;
-        materialResources.metalRoughSampler = engine->_defaultSamplerLinear;
-
-        // set the uniform buffer for the material data
-        materialResources.dataBuffer = file.materialDataBuffer.buffer;
-        materialResources.dataBufferOffset = data_index * sizeof(GLTFMetallic_Roughness::MaterialConstants);
-        // grab textures from gltf file
-        if (mat.pbrData.baseColorTexture.has_value()) {
-            size_t img = gltf.textures[mat.pbrData.baseColorTexture.value().textureIndex].imageIndex.value();
-            size_t sampler = gltf.textures[mat.pbrData.baseColorTexture.value().textureIndex].samplerIndex.value();
-
-            materialResources.colorImage = images[img];
-            materialResources.colorSampler = file.samplers[sampler];
-        }
-        // build material
-        newMat->data = engine->metalRoughMaterial.write_material(engine->_device, passType, materialResources, file.descriptorPool);
-
-        data_index++;
+        materials.put(allocator, material.name, metal_rough_material.writeMaterial(device, pass_type, material_resources, descriptor_allocator));
+        data_index += 1;
     }
-    return .{
 
+    return .{
+        
     }
 }
 
