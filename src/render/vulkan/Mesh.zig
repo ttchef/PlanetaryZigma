@@ -5,11 +5,10 @@ const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
 
+surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
-indecies_count: u32,
-first_index: u32,
 
 pub const Vertex = extern struct {
     position: [3]f32 = @splat(0),
@@ -22,6 +21,11 @@ pub const Vertex = extern struct {
 pub const GPUDrawPushConstants = extern struct {
     world_matrix: [16]f32,
     vertex_buffer: c.VkDeviceAddress,
+};
+
+pub const GeoSurface = struct {
+    index_start: i32,
+    index_count: i32,
 };
 
 pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
