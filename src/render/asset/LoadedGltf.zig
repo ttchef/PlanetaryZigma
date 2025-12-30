@@ -26,6 +26,90 @@ fn extractMagFilter(filter: cgltf.cgltf_filter_type) vk.c.VkFilter  {
 }
 
 
+fn findAttributeAccessor(prim: *cgltf.cgltf_primitive, name: []const u8) ?*cgltf.cgltf_accessor{
+    for (prim.attributes[0..prim.attributes_count]) |attribute|{
+       if (std.mem.eql(u8, attribute.name, name)) return attribute.data; 
+    }
+    return null;
+}
+
+pub fn accessorBasePtr(acc: *const cgltf.cgltf_accessor) [*]const u8 {
+    const bv: *const cgltf.cgltf_buffer_view = acc.*.buffer_view ;
+    const buf: *const cgltf.cgltf_buffer = bv.*.buffer;
+    const buf_data: [*]const u8 = @ptrCast([*]const u8, buf.*.data);
+    const off: usize = bv.*.offset + acc.*.offset;
+    return buf_data + off;
+}
+
+
+pub fn accessorStride(acc: *const c.cgltf_accessor) usize {
+    if (acc.*.stride != 0) return @as(usize, @intCast(acc.*.stride));
+    const cs = cgltf.cgltf_component_size(acc.*.component_type);
+    const nc = cgltf.cgltf_num_components(acc.*.type);
+    return cs * nc;
+}
+
+pub fn readVec2F32(acc: *const c.cgltf_accessor, index: usize) [2]f32 {
+    // Assumes component_type == r_32f and type == vec2 (common for TEXCOORD_0)
+    const base = accessorBasePtr(acc);
+    const stride = accessorStride(acc);
+    const p = base + index * stride;
+    return .{ readF32LE(p + 0), readF32LE(p + 4) };
+}
+
+pub fn readVec3F32(acc: *const c.cgltf_accessor, index: usize) [3]f32 {
+    // Assumes component_type == r_32f and type == vec3 (POSITION/NORMAL)
+    const base = accessorBasePtr(acc);
+    const stride = accessorStride(acc);
+    const p = base + index * stride;
+    return .{ readF32LE(p + 0), readF32LE(p + 4), readF32LE(p + 8) };
+}
+
+pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
+    // COLOR_0 can be VEC3 or VEC4
+    // component can be f32 or normalized u8/u16 (very common)
+    // If unknown, returns white.
+    const comps: usize = numComponents(acc.*.type);
+    const base = accessorBasePtr(acc);
+    const stride = accessorStride(acc);
+    const p = base + index * stride;
+
+    var out: [4]f32 = .{ 1.0, 1.0, 1.0, 1.0 };
+
+    switch (acc.*.component_type) {
+        c.cgltf_component_type_r_32f => {
+            // read comps floats
+            var i: usize = 0;
+            while (i < comps and i < 4) : (i += 1) {
+                out[i] = readF32LE(p + i * 4);
+            }
+            if (comps == 3) out[3] = 1.0;
+            return out;
+        },
+        c.cgltf_component_type_r_8u => {
+            if (acc.*.normalized == 0) return out; // non-normalized colors are unusual; ignore
+            var i: usize = 0;
+            while (i < comps and i < 4) : (i += 1) {
+                const u: u8 = p[i];
+                out[i] = @as(f32, @floatFromInt(u)) / 255.0;
+            }
+            if (comps == 3) out[3] = 1.0;
+            return out;
+        },
+        c.cgltf_component_type_r_16u => {
+            if (acc.*.normalized == 0) return out;
+            var i: usize = 0;
+            while (i < comps and i < 4) : (i += 1) {
+                const u: u16 = readU16LE(p + i * 2);
+                out[i] = @as(f32, @floatFromInt(u)) / 65535.0;
+            }
+            if (comps == 3) out[3] = 1.0;
+            return out;
+        },
+        else => return out,
+    }
+}
+
 fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path: []const u8, TMP_IMAGES: [3]vk.c.VkImage, TMP_SAMPLER: [2]vk.c.VkSampler, metal_rough_material: *vk.Material.GltfMetallicRoughness) !@This() {
     std.log.info("Loading GLTF: {s}", .{filePath});
 
@@ -123,6 +207,104 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
         data_index += 1;
     }
 
+    //NOTE: MESH LAODING move to another place?
+    var indecies_list: std.ArrayList(u32) = .empty;
+    var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
+    defer indecies_list.deinit(allocator);
+    defer vertices_list.deinit(allocator);
+
+    for (data.meshes[0..data.meshes_count]) |mesh| {
+        //TODO : MOVE TO END    
+        //std::shared_ptr<MeshAsset> newmesh = std::make_shared<MeshAsset>();
+        // meshes.push_back(newmesh);
+        // file.meshes[mesh.name.c_str()] = newmesh;
+        // newmesh->name = mesh.name;
+
+        indecies_list.clearAndFree(allocator);
+        vertices_list.clearAndFree(allocator);
+
+
+        for (mesh.primitives[0..mesh.primitives_count]) |primitive|{
+            //TODO:surface mesh
+            // GeoSurface newSurface;
+            // var new_mesh: vk.Mesh =
+            // newSurface.startIndex = (uint32_t)indices.size();
+            // newSurface.count = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
+
+            var initial_vtx = vertices_list.items.len;
+
+            // load indexes
+            {
+                fastgltf::Accessor& indexaccessor = gltf.accessors[p.indicesAccessor.value()];
+                indices.reserve(indices.size() + indexaccessor.count);
+
+                fastgltf::iterateAccessor<std::uint32_t>(gltf, indexaccessor,
+                    [&](std::uint32_t idx) {
+                        indices.push_back(idx + initial_vtx);
+                    });
+            }
+
+            data.accessors[primitive.]
+
+            // load vertex positions
+            {
+                fastgltf::Accessor& posAccessor = gltf.accessors[p.findAttribute("POSITION")->second];
+                vertices.resize(vertices.size() + posAccessor.count);
+
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, posAccessor,
+                    [&](glm::vec3 v, size_t index) {
+                        Vertex newvtx;
+                        newvtx.position = v;
+                        newvtx.normal = { 1, 0, 0 };
+                        newvtx.color = glm::vec4 { 1.f };
+                        newvtx.uv_x = 0;
+                        newvtx.uv_y = 0;
+                        vertices[initial_vtx + index] = newvtx;
+                    });
+            }
+
+            // load vertex normals
+            auto normals = p.findAttribute("NORMAL");
+            if (normals != p.attributes.end()) {
+
+                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, gltf.accessors[(*normals).second],
+                    [&](glm::vec3 v, size_t index) {
+                        vertices[initial_vtx + index].normal = v;
+                    });
+            }
+
+            // load UVs
+            auto uv = p.findAttribute("TEXCOORD_0");
+            if (uv != p.attributes.end()) {
+
+                fastgltf::iterateAccessorWithIndex<glm::vec2>(gltf, gltf.accessors[(*uv).second],
+                    [&](glm::vec2 v, size_t index) {
+                        vertices[initial_vtx + index].uv_x = v.x;
+                        vertices[initial_vtx + index].uv_y = v.y;
+                    });
+            }
+
+            // load vertex colors
+            auto colors = p.findAttribute("COLOR_0");
+            if (colors != p.attributes.end()) {
+
+                fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*colors).second],
+                    [&](glm::vec4 v, size_t index) {
+                        vertices[initial_vtx + index].color = v;
+                    });
+            }
+
+            if (p.materialIndex.has_value()) {
+                newSurface.material = materials[p.materialIndex.value()];
+            } else {
+                newSurface.material = materials[0];
+            }
+
+            newmesh->surfaces.push_back(newSurface);
+        }
+
+        newmesh->meshBuffers = engine->uploadMesh(indices, vertices);
+    }
     return .{
         
     }
