@@ -21,8 +21,8 @@ pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) 
 pub fn draw(self: *@This(), top_transform: nz.Transform3D(f32), ctx: *DrawContext) void {
     const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_transform.toMat4x4()));
     ctx.opaque_surfaces[ctx.count] = .{
-        .index_count = self.mesh.indecies_count,
-        .first_index = self.mesh.first_index,
+        .index_count = @intCast(self.mesh.surfaces.items[0].index_count),
+        .first_index = @intCast(self.mesh.surfaces.items[0].index_start),
         .index_buffer = self.mesh.index_buffer.buffer,
         .material_instance = self.material.*,
         .transform = node_transform,

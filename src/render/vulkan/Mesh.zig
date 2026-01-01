@@ -16,7 +16,7 @@ pub const Vertex = extern struct {
     normal: [3]f32 = @splat(0),
     uv_y: f32 = 0,
     color: [4]f32 = @splat(0),
-};
+}; //NOTE: WILL BE BEACKSOON HAVE TO RESTART OBS XD
 
 pub const GPUDrawPushConstants = extern struct {
     world_matrix: [16]f32,
@@ -28,7 +28,7 @@ pub const GeoSurface = struct {
     index_count: i32,
 };
 
-pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(device: Device, allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
@@ -90,12 +90,14 @@ pub fn init(device: Device, vma_allocator: Vma.Allocator, indices: []u32, vertic
 
     staging.deinit(vma_allocator);
 
+    var surface: std.ArrayList(GeoSurface) = .empty;
+    try surface.append(allocator, .{ .index_count = @intCast(indices.len), .index_start = 0 });
+
     return .{
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
-        .indecies_count = @intCast(indices.len),
-        .first_index = 0,
+        .surfaces = surface,
     };
 }
 
