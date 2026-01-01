@@ -25,10 +25,22 @@ fn extractMagFilter(filter: cgltf.cgltf_filter_type) vk.c.VkFilter  {
     return if (filter == cgltf.cgltf_filter_type_nearest) vk.c.VK_FILTER_NEAREST else vk.c.VK_FILTER_LINEAR;
 }
 
+fn readU16LE(p: [*]const u8) u16 {
+    return std.mem.readIntLittle(u16, p[0..2]);
+}
+
+fn readU32LE(p: [*]const u8) u32 {
+    return std.mem.readIntLittle(u32, p[0..4]);
+}
+
+fn readF32LE(p: [*]const u8) f32 {
+    const bits = readU32LE(p);
+    return @bitCast(f32, bits);
+}
 
 fn findAttributeAccessor(prim: *cgltf.cgltf_primitive, name: []const u8) ?*cgltf.cgltf_accessor{
     for (prim.attributes[0..prim.attributes_count]) |attribute|{
-       if (std.mem.eql(u8, attribute.name, name)) return attribute.data; 
+       if (std.mem.eql(u8, attribute.name, name)) return attribute.data;
     }
     return null;
 }
@@ -42,34 +54,32 @@ pub fn accessorBasePtr(acc: *const cgltf.cgltf_accessor) [*]const u8 {
 }
 
 
-pub fn accessorStride(acc: *const c.cgltf_accessor) usize {
+pub fn accessorStride(acc: *const cgl_cgltf.cgltf_accessor) usize {
     if (acc.*.stride != 0) return @as(usize, @intCast(acc.*.stride));
     const cs = cgltf.cgltf_component_size(acc.*.component_type);
     const nc = cgltf.cgltf_num_components(acc.*.type);
     return cs * nc;
 }
 
-pub fn readVec2F32(acc: *const c.cgltf_accessor, index: usize) [2]f32 {
-    // Assumes component_type == r_32f and type == vec2 (common for TEXCOORD_0)
+pub fn readVec2F32(acc: *const cgl_cgltf.cgltf_accessor, index: usize) [2]f32 {
     const base = accessorBasePtr(acc);
     const stride = accessorStride(acc);
     const p = base + index * stride;
     return .{ readF32LE(p + 0), readF32LE(p + 4) };
 }
 
-pub fn readVec3F32(acc: *const c.cgltf_accessor, index: usize) [3]f32 {
-    // Assumes component_type == r_32f and type == vec3 (POSITION/NORMAL)
+pub fn readVec3F32(acc: *const cgl_cgltf.cgltf_accessor, index: usize) [3]f32 {
     const base = accessorBasePtr(acc);
     const stride = accessorStride(acc);
     const p = base + index * stride;
     return .{ readF32LE(p + 0), readF32LE(p + 4), readF32LE(p + 8) };
 }
 
-pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
+pub fn readColorVec4(acc: *const cgltf.cgltf_accessor, index: usize) [4]f32 {
     // COLOR_0 can be VEC3 or VEC4
     // component can be f32 or normalized u8/u16 (very common)
     // If unknown, returns white.
-    const comps: usize = numComponents(acc.*.type);
+    const comps: usize = cgltf.cgltf_component_size(acc.*.type);
     const base = accessorBasePtr(acc);
     const stride = accessorStride(acc);
     const p = base + index * stride;
@@ -77,7 +87,7 @@ pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
     var out: [4]f32 = .{ 1.0, 1.0, 1.0, 1.0 };
 
     switch (acc.*.component_type) {
-        c.cgltf_component_type_r_32f => {
+        cgltf.cgltf_component_type_r_32f => {
             // read comps floats
             var i: usize = 0;
             while (i < comps and i < 4) : (i += 1) {
@@ -86,7 +96,7 @@ pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
             if (comps == 3) out[3] = 1.0;
             return out;
         },
-        c.cgltf_component_type_r_8u => {
+        cgltf.cgltf_component_type_r_8u => {
             if (acc.*.normalized == 0) return out; // non-normalized colors are unusual; ignore
             var i: usize = 0;
             while (i < comps and i < 4) : (i += 1) {
@@ -96,7 +106,7 @@ pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
             if (comps == 3) out[3] = 1.0;
             return out;
         },
-        c.cgltf_component_type_r_16u => {
+        cgltf.cgltf_component_type_r_16u => {
             if (acc.*.normalized == 0) return out;
             var i: usize = 0;
             while (i < comps and i < 4) : (i += 1) {
@@ -107,6 +117,42 @@ pub fn readColorVec4(acc: *const c.cgltf_accessor, index: usize) [4]f32 {
             return out;
         },
         else => return out,
+    }
+}
+
+pub fn readIndexU32(acc: *const cgltf.cgltf_accessor, index: usize) u32 {
+    // Indices accessor: component_type should be r_8u / r_16u / r_32u
+    const base = accessorBasePtr(acc);
+    const stride = accessorStride(acc);
+    const p = base + index * stride;
+
+    return switch (acc.*.component_type) {
+        cgltf.cgltf_component_type_r_8u => @as(u32, p[0]),
+        cgltf.cgltf_component_type_r_16u => @as(u32, readU16LE(p)),
+        cgltf.cgltf_component_type_r_32u => readU32LE(p),
+        else => 0,
+    };
+}
+
+// ---- optional: TEXCOORD_0 reader that also supports normalized u16 ----
+// (fastgltf auto-converted this; cgltf will not.)
+pub fn readVec2UV(acc: *const cgltf.cgltf_accessor, index: usize) [2]f32 {
+    const base = accessorBasePtr(acc);
+    const stride = accessorStride(acc);
+    const p = base + index * stride;
+
+    switch (acc.*.component_type) {
+        cgltf.cgltf_component_type_r_32f => return .{ readF32LE(p + 0), readF32LE(p + 4) },
+        cgltf.cgltf_component_type_r_16u => {
+            if (acc.*.normalized == 0) return .{ 0, 0 };
+            const u0 = readU16LE(p + 0);
+            const u1 = readU16LE(p + 2);
+            return .{
+                @as(f32, @floatFromInt(u0)) / 65535.0,
+                @as(f32, @floatFromInt(u1)) / 65535.0,
+            };
+        },
+        else => return .{ 0, 0 },
     }
 }
 
@@ -155,7 +201,7 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
     const material_data_buffer: vk.Buffer = .init(vma, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     const data_index: u32 = 0;
 
-    var scene_material_constans: vk.Material.GltfMetallicRoughness.Constants = .{}; 
+    var scene_material_constans: vk.Material.GltfMetallicRoughness.Constants = .{};
     vma.copyToAllocation(
         vk.Material.GltfMetallicRoughness.Constants,
         scene_material_constans,
@@ -214,7 +260,7 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
     defer vertices_list.deinit(allocator);
 
     for (data.meshes[0..data.meshes_count]) |mesh| {
-        //TODO : MOVE TO END    
+        //TODO : MOVE TO END
         //std::shared_ptr<MeshAsset> newmesh = std::make_shared<MeshAsset>();
         // meshes.push_back(newmesh);
         // file.meshes[mesh.name.c_str()] = newmesh;
@@ -232,96 +278,120 @@ fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, file_path:
             // newSurface.count = (uint32_t)gltf.accessors[p.indicesAccessor.value()].count;
 
             var initial_vtx = vertices_list.items.len;
+            var idx_acc = primitive.indices;
+            if (!idx_acc) continue;
 
-            // load indexes
-            {
-                fastgltf::Accessor& indexaccessor = gltf.accessors[p.indicesAccessor.value()];
-                indices.reserve(indices.size() + indexaccessor.count);
+            var pos_acc = findAttributeAccessor(primitive, "POSITION");
+            if (!pos_acc) continue;
 
-                fastgltf::iterateAccessor<std::uint32_t>(gltf, indexaccessor,
-                    [&](std::uint32_t idx) {
-                        indices.push_back(idx + initial_vtx);
-                    });
+            vertices_list.resize(allocator, initial_vtx + pos_acc.?.count);
+            for (0..pos_acc.?.count) |i|{
+                const pos3 = readVec3F32(pos_acc, i);
+                // var v:  vk.Mesh.Vertex  =
+                vertices_list.items[initial_vtx + i] = .{
+                    .position = pos3,
+                    .normal = .{1,0,0},
+                    .color = .{1,1,1,1},
+                    .uv_x = 0,
+                    .uv_y = 0,
+                };
             }
 
-            data.accessors[primitive.]
-
-            // load vertex positions
-            {
-                fastgltf::Accessor& posAccessor = gltf.accessors[p.findAttribute("POSITION")->second];
-                vertices.resize(vertices.size() + posAccessor.count);
-
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, posAccessor,
-                    [&](glm::vec3 v, size_t index) {
-                        Vertex newvtx;
-                        newvtx.position = v;
-                        newvtx.normal = { 1, 0, 0 };
-                        newvtx.color = glm::vec4 { 1.f };
-                        newvtx.uv_x = 0;
-                        newvtx.uv_y = 0;
-                        vertices[initial_vtx + index] = newvtx;
-                    });
+            indecies_list.resize(allocator,  indecies_list.items.len + idx_acc.?.count);
+            for (0..idx_acc.?.count) |i| {
+                const idx = readIndexU32(idx_acc, i);
+                indecies_list.appendAssumeCapacity(idx + initial_vtx);
             }
 
-            // load vertex normals
-            auto normals = p.findAttribute("NORMAL");
-            if (normals != p.attributes.end()) {
-
-                fastgltf::iterateAccessorWithIndex<glm::vec3>(gltf, gltf.accessors[(*normals).second],
-                    [&](glm::vec3 v, size_t index) {
-                        vertices[initial_vtx + index].normal = v;
-                    });
+            var nrm_acc = findAttributeAccessor(primitive, "NORMAL");
+            if (nrm_acc) {
+                for (0..nrm_acc.count)|i|{
+                    const n3 = readVec3F32(nrm_acc, i);
+                    vertices_list.items[initial_vtx + i].normal = n3;
+                }
             }
 
-            // load UVs
-            auto uv = p.findAttribute("TEXCOORD_0");
-            if (uv != p.attributes.end()) {
-
-                fastgltf::iterateAccessorWithIndex<glm::vec2>(gltf, gltf.accessors[(*uv).second],
-                    [&](glm::vec2 v, size_t index) {
-                        vertices[initial_vtx + index].uv_x = v.x;
-                        vertices[initial_vtx + index].uv_y = v.y;
-                    });
+            var uv_acc = findAttributeAccessor(primitive, "TEXCOORD_0");
+            if (uv_acc) {
+                for (0..uv_acc.count) |i| {
+                     const uv2 = readVec2UV(uv_acc, i);
+                    vertices_list.items[initial_vtx + i].uv_x = uv2[0];
+                    vertices_list.items[initial_vtx + i].uv_y = uv2[1];
+                }
             }
 
-            // load vertex colors
-            auto colors = p.findAttribute("COLOR_0");
-            if (colors != p.attributes.end()) {
-
-                fastgltf::iterateAccessorWithIndex<glm::vec4>(gltf, gltf.accessors[(*colors).second],
-                    [&](glm::vec4 v, size_t index) {
-                        vertices[initial_vtx + index].color = v;
-                    });
+            var col_acc = findAttributeAccessor(primitive, "COLOR_0");
+            if (col_acc){
+                const c4 = readColorVec4(col_acc, i);
+                vertices_list.items[initial_vtx + i].color = c4;
             }
 
-            if (p.materialIndex.has_value()) {
-                newSurface.material = materials[p.materialIndex.value()];
-            } else {
-                newSurface.material = materials[0];
-            }
+            if (primitive.material) {
+                const material_idx = primitive.material - data.materials;
 
-            newmesh->surfaces.push_back(newSurface);
+            }
+            //TODO: think about it. how do we donnect this with out Implmenation
+            // if (p.materialIndex.has_value()) {
+            //     newSurface.material = materials[p.materialIndex.value()];
+            // } else {
+            //     newSurface.material = materials[0];
+            // }
+            //
+            // newmesh->surfaces.push_back(newSurface);
+        }
+        
+        //TODO: Move UploadMesh to a new place?
+        //newmesh->meshBuffers = engine->uploadMesh(indices, vertices);
+    }
+
+    // load all nodes and their meshes
+    for (fastgltf::Node& node : gltf.nodes) {
+        std::shared_ptr<Node> newNode;
+
+        // find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
+        if (node.meshIndex.has_value()) {
+            newNode = std::make_shared<MeshNode>();
+            static_cast<MeshNode*>(newNode.get())->mesh = meshes[*node.meshIndex];
+        } else {
+            newNode = std::make_shared<Node>();
         }
 
-        newmesh->meshBuffers = engine->uploadMesh(indices, vertices);
+        nodes.push_back(newNode);
+        file.nodes[node.name.c_str()];
+
+        std::visit(fastgltf::visitor { [&](fastgltf::Node::TransformMatrix matrix) {
+                                          memcpy(&newNode->localTransform, matrix.data(), sizeof(matrix));
+                                      },
+                       [&](fastgltf::Node::TRS transform) {
+                           glm::vec3 tl(transform.translation[0], transform.translation[1],
+                               transform.translation[2]);
+                           glm::quat rot(transform.rotation[3], transform.rotation[0], transform.rotation[1],
+                               transform.rotation[2]);
+                           glm::vec3 sc(transform.scale[0], transform.scale[1], transform.scale[2]);
+
+                           glm::mat4 tm = glm::translate(glm::mat4(1.f), tl);
+                           glm::mat4 rm = glm::toMat4(rot);
+                           glm::mat4 sm = glm::scale(glm::mat4(1.f), sc);
+
+                           newNode->localTransform = tm * rm * sm;
+                       } },
+            node.transform);
     }
+
+
     return .{
-        
+
     }
 }
 
-fn extractMinFilter(filter: cgltf.cgltf_filter_type) vk.c.VkFilter  {
+fn extractMinFilter(filter: cgltf.cgltf_filter_type) vk.c.VkFilter {
     // glTF default minFilter = LINEAR_MIPMAP_LINEAR
     if (filter == 0) return vk.c.VK_FILTER_LINEAR;
     switch (filter) {
-        cgltf.cgltf_filter_type_nearest,
-        cgltf.cgltf_filter_type_nearest_mipmap_nearest,
-        cgltf.cgltf_filter_type_nearest_mipmap_linear
-        => return vk.c.VK_FILTER_NEAREST,
-    else => return vk.c.VK_FILTER_LINEAR,
+        cgltf.cgltf_filter_type_nearest, cgltf.cgltf_filter_type_nearest_mipmap_nearest, cgltf.cgltf_filter_type_nearest_mipmap_linear => return vk.c.VK_FILTER_NEAREST,
+        else => return vk.c.VK_FILTER_LINEAR,
     }
 }
-
 
 fn extract_mipmap_mode(filter: cgltf.cgltf_filter_type) vk.c.VkSamplerMipmapMode {
     switch (filter) {
@@ -335,5 +405,3 @@ fn extract_mipmap_mode(filter: cgltf.cgltf_filter_type) vk.c.VkSamplerMipmapMode
 
     }
 }
-
-

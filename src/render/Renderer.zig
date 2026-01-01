@@ -864,6 +864,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
 
         try self.meshes.append(allocator, try .init(
             self.device,
+            allocator,
             self.vma.handle,
             indecies_list.items,
             vertices_list.items,
