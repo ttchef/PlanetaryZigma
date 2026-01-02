@@ -3,6 +3,7 @@ const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
 const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
+const LoadedGltf = @import("asset/LoadedGltf.zig");
 pub const c = @import("c.zig");
 pub const Camera = @import("Camera.zig");
 
@@ -44,6 +45,7 @@ mainDrawContext: vk.Node.DrawContext = undefined,
 loaded_nodes: [16]vk.Node = undefined,
 node_count: usize = 0,
 camera: Camera = .{ .position = .{ 0, 0, 5 } },
+loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -372,6 +374,18 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &globalDescriptorAllocator,
     );
 
+    var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
+    const strcture_file = try LoadedGltf.init(
+        allocator,
+        vma,
+        device,
+        "assets/objects/structure.glb",
+        .{ _errorCheckerboardImage, _whiteImage },
+        _defaultSamplerLinear,
+        &metalRoughMaterial,
+    );
+    loaded_scenes.put(allocator, "structure", strcture_file);
+
     return .{
         .allocator = allocator,
         .instance = instance,
@@ -403,6 +417,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .materialBuffer = materialBuffer,
         .materialResources = materialResources,
         .defaultData = defaultData,
+        .loaded_scenes = loaded_scenes,
     };
 }
 
@@ -410,6 +425,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     _ = vk.c.vkDeviceWaitIdle(self.device.handle);
     std.debug.print("NOW FREEING\n", .{});
     std.log.debug("", .{});
+
+    self.loaded_scenes.deinit(allocator);
     self.swapchain.deinit(self.vma, self.device);
 
     for (0..self.max_pipelines) |i|
@@ -629,7 +646,9 @@ pub fn draw(self: *@This(), time: f32) !void {
         .position = .{ 0, 0, -2 },
         .rotation = .{ 0, 0, 0 },
     };
-    self.loaded_nodes[0].draw(top_matrix, &self.mainDrawContext);
+    try self.loaded_nodes[0].draw(self.allocator, top_matrix, &self.mainDrawContext);
+    var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
+    try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
     const view = self.camera.getViewMatrix();
     // const view = nz.Mat4x4(f32).identity;
     var projection = nz.Mat4x4(f32).perspective(
@@ -649,7 +668,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     // std.debug.print("\nsceneDATA {any}\n", .{self.scene_data});
     for (0..self.mainDrawContext.count) |i| {
         // std.debug.print("\nRENDER NODE\n", .{});
-        const opaque_draw = &self.mainDrawContext.opaque_surfaces[i];
+        const opaque_draw = &self.mainDrawContext.opaque_surfaces.items[i];
 
         vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, opaque_draw.material_instance.pipeline.get().handle);
 
@@ -862,9 +881,12 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
     if (vertices_list.items.len > 0 and indecies_list.items.len > 0) {
         std.debug.print("\nADDED MESH {s}\n\n", .{path});
 
+        var surface: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
+        try surface.append(allocator, .{ .index_start = 0, .index_count = @intCast(indecies_list.items.len), .material = self.defaultData });
+
         try self.meshes.append(allocator, try .init(
             self.device,
-            allocator,
+            surface,
             self.vma.handle,
             indecies_list.items,
             vertices_list.items,

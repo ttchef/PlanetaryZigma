@@ -3,12 +3,14 @@ const c = @import("vulkan");
 const nz = @import("numz");
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
+const Material = @import("Material.zig");
 const Vma = @import("Vma.zig");
 
 surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
+name: []const u8 = "default",
 
 pub const Vertex = extern struct {
     position: [3]f32 = @splat(0),
@@ -26,9 +28,10 @@ pub const GPUDrawPushConstants = extern struct {
 pub const GeoSurface = struct {
     index_start: i32,
     index_count: i32,
+    material: Material.Instance,
 };
 
-pub fn init(device: Device, allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(device: Device, geo_surfaces: std.ArrayListUnmanaged(GeoSurface), vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
@@ -90,14 +93,11 @@ pub fn init(device: Device, allocator: std.mem.Allocator, vma_allocator: Vma.All
 
     staging.deinit(vma_allocator);
 
-    var surface: std.ArrayList(GeoSurface) = .empty;
-    try surface.append(allocator, .{ .index_count = @intCast(indices.len), .index_start = 0 });
-
     return .{
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
-        .surfaces = surface,
+        .surfaces = geo_surfaces,
     };
 }
 
