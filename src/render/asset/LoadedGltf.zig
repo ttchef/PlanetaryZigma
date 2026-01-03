@@ -207,7 +207,7 @@ pub fn init(
     }
 
     var images: std.ArrayList(vk.Image) = .empty;
-    for (data.images[0..data.samplers_count]) |image| {
+    for (data.images[0..data.images_count]) |image| {
         _ = image;
         try images.append(allocator, TMP_IMAGES[0]);
     }
@@ -215,7 +215,8 @@ pub fn init(
     file.material_data_buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
     var data_index: u32 = 0;
 
-    var scene_material_constants: []vk.Material.GltfMetallicRoughness.Constants = @ptrCast(@alignCast(file.material_data_buffer.info.pMappedData));
+    var ptr: [*]vk.Material.GltfMetallicRoughness.Constants = @ptrCast(@alignCast(file.material_data_buffer.info.pMappedData));
+    var scene_material_constants = ptr[0..data.materials_count];
     var materials: std.ArrayList(*vk.Material.Instance) = .empty;
     for (data.materials[0..data.materials_count]) |material| {
         const constant: vk.Material.GltfMetallicRoughness.Constants = .{
@@ -295,7 +296,7 @@ pub fn init(
                 };
             }
 
-            try indices_list.resize(allocator, indices_list.items.len + idx_acc.count);
+            try indices_list.ensureTotalCapacity(allocator, indices_list.items.len + idx_acc.count);
             for (0..idx_acc.count) |i| {
                 const idx = readIndexU32(&idx_acc, i);
                 indices_list.appendAssumeCapacity(idx + @as(u32, @intCast(initial_vtx)));
@@ -347,6 +348,7 @@ pub fn init(
         }
 
         nodes.appendAssumeCapacity(new_node);
+        std.debug.print("new-MAX {d}\n", .{nodes.items.len});
 
         try file.nodes.put(allocator, std.mem.span(node.name), new_node);
 
@@ -361,11 +363,14 @@ pub fn init(
         }
     }
 
-    for (data.nodes[0..data.nodes_count], 0..data.nodes_count) |node, i| {
+    for (data.nodes[0..data.nodes_count], 0..data.nodes_count) |*node, i| {
         var scene_node = nodes.items[i];
-
+        if (node.children == null) continue;
         for (node.children[0..node.children_count]) |c| {
-            const child_index = c - data.nodes;
+            const child_index = @intFromPtr(c) - @intFromPtr(data.nodes);
+            const child_node = nodes.items[child_index];
+            std.debug.print("index: {d}, MAX {d}\n", .{ child_index, nodes.items.len });
+            std.debug.print("node: {any}\n", .{child_node});
             try scene_node.children.append(allocator, nodes.items[child_index]);
             nodes.items[child_index].parent = scene_node;
         }

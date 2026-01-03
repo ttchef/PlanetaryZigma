@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }).createModule();
+    cgltf.addIncludePath(cgltf_dep.path("."));
 
     const stb = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add(
@@ -124,6 +125,14 @@ pub fn build(b: *std.Build) void {
         .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
             \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
             \\#include "tinyobj_loader_c.h"
+        ),
+        .flags = &.{"-std=c99"},
+    });
+
+    renderer.addCSourceFile(.{
+        .file = b.addWriteFiles().add("cgltf_impl.c",
+            \\#define CGLTF_IMPLEMENTATION
+            \\#include "cgltf.h"
         ),
         .flags = &.{"-std=c99"},
     });
