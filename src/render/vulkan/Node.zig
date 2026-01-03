@@ -5,16 +5,16 @@ const Mesh = @import("Mesh.zig");
 const Material = @import("Material.zig");
 
 parent: ?*@This() = null,
-mesh: ?Mesh,
-material: *Material.Instance,
-children: std.ArrayList(@This()) = .empty,
-local_transform: nz.Transform3D(f32),
-world_transform: nz.Transform3D(f32),
+mesh: ?*Mesh = null,
+material: *Material.Instance = undefined,
+children: std.ArrayList(*@This()) = .empty,
+local_transform: nz.Transform3D(f32) = undefined,
+world_transform: nz.Transform3D(f32) = undefined,
 
 pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) void {
-    self.world_transform = .fromMat4x4(parent_transform).mul(self.local_transform);
-    for (0..self.child_count) |i| {
-        self.children[i].refreshTransform(self.world_transform);
+    self.world_transform = nz.Transform3D(f32).fromMat4x4(parent_transform.toMat4x4().mul(self.local_transform.toMat4x4()));
+    for (self.children.items[0..self.children.items.len]) |child| {
+        child.refreshTransform(&self.world_transform);
     }
 }
 

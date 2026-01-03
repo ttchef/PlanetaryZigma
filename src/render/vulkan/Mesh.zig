@@ -28,7 +28,7 @@ pub const GPUDrawPushConstants = extern struct {
 pub const GeoSurface = struct {
     index_start: i32,
     index_count: i32,
-    material: Material.Instance,
+    material: *Material.Instance,
 };
 
 pub fn init(device: Device, geo_surfaces: std.ArrayListUnmanaged(GeoSurface), vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
