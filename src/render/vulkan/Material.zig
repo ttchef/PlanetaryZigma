@@ -26,10 +26,9 @@ pub const GltfMetallicRoughness = struct {
     writer: descriptor.Writer,
 
     pub const Constants = struct {
-        color_factores: nz.Vec4(f32),
-        metal_rough_factors: nz.Vec4(f32),
-        //NOTE: padding, we need it anyway for uniform buffers: Source: https://vkguide.dev/docs/new_chapter_4/materials/
-        extra: [14]nz.Vec4(f32),
+        color_factores: nz.Vec4(f32) = undefined,
+        metal_rough_factors: nz.Vec4(f32) = undefined,
+        extra: [14]nz.Vec4(f32) = undefined,
     };
 
     pub const Resources = struct {
@@ -124,7 +123,7 @@ pub const GltfMetallicRoughness = struct {
         device: Device,
         pass: Pass,
         resources: Resources,
-        descriptorAllocator: *descriptor.Growable,
+        pDescriptorAllocator: *descriptor.Growable,
     ) !Instance {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
@@ -133,7 +132,7 @@ pub const GltfMetallicRoughness = struct {
         } else {
             material_data_instance.pipeline = self.opaque_pipeline;
         }
-        material_data_instance.descriptor_set = try descriptorAllocator.allocate(device, self.descriptor_set_layout, null);
+        material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
         self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         self.writer.appendImage(1, resources.color_image.image_view, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);

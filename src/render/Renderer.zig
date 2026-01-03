@@ -384,7 +384,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         _defaultSamplerLinear,
         &metalRoughMaterial,
     );
-    loaded_scenes.put(allocator, "structure", strcture_file);
+    try loaded_scenes.put(allocator, "structure", strcture_file);
 
     return .{
         .allocator = allocator,
@@ -882,7 +882,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
         std.debug.print("\nADDED MESH {s}\n\n", .{path});
 
         var surface: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
-        try surface.append(allocator, .{ .index_start = 0, .index_count = @intCast(indecies_list.items.len), .material = self.defaultData });
+        try surface.append(allocator, .{ .index_start = 0, .index_count = @intCast(indecies_list.items.len), .material = &self.defaultData });
 
         try self.meshes.append(allocator, try .init(
             self.device,
@@ -894,7 +894,7 @@ pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []con
         //TODO: add sufaces?
         self.loaded_nodes[self.node_count] = .{
             .material = &self.defaultData,
-            .mesh = self.meshes.getLast(),
+            .mesh = &self.meshes.items[self.meshes.items.len - 1],
             .world_transform = .{},
             .local_transform = .{},
         };
