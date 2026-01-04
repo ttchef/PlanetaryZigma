@@ -2,11 +2,11 @@ const std = @import("std");
 const nz = @import("numz");
 const vk = @import("../vulkan/vulkan.zig");
 const cgltf = @import("cgltf");
-
+const stb = @import("stb");
 // storage for all the data on a given glTF file
 meshes: std.StringHashMapUnmanaged(*vk.Mesh) = .empty,
 nodes: std.StringHashMapUnmanaged(*vk.Node) = .empty,
-images: std.StringHashMapUnmanaged(*vk.Image) = .empty,
+images: std.StringHashMapUnmanaged(vk.Image) = .empty,
 materials: std.StringHashMapUnmanaged(*vk.Material.Instance) = .empty,
 
 // nodes that dont have a parent, for iterating through the file in tree order
@@ -17,7 +17,12 @@ descriptor_pool: vk.descriptor.Growable = undefined,
 
 material_data_buffer: vk.Buffer = undefined,
 
-// pub fn clearAll() void {};
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma) void {
+    _ = self;
+    _ = allocator;
+    _ = vma;
+    @panic("REMEBER TO ADD FREE!");
+}
 pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Transform3D(f32), ctx: *vk.Node.DrawContext) !void {
     for (self.top_nodes.items) |node| {
         try node.draw(allocator, top_transform, ctx);
@@ -186,6 +191,7 @@ pub fn init(
     var data: cgltf.cgltf_data = out_data.*.*;
 
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
+        .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 3 },
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .ratio = 3 },
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
     };
@@ -208,8 +214,11 @@ pub fn init(
 
     var images: std.ArrayList(vk.Image) = .empty;
     for (data.images[0..data.images_count]) |image| {
-        _ = image;
-        try images.append(allocator, TMP_IMAGES[0]);
+        const img = loadImage(vma, device, image) catch TMP_IMAGES[0];
+        try images.append(allocator, img);
+        if (image.name) |name_z| {
+            try file.images.put(allocator, std.mem.span(name_z), img);
+        }
     }
 
     file.material_data_buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -335,6 +344,7 @@ pub fn init(
         stack_mesh.name = try allocator.dupe(u8, std.mem.span(mesh.name));
         const new_mesh = try allocator.create(vk.Mesh);
         new_mesh.* = stack_mesh;
+        new_mesh.surfaces = surfaces;
         try meshes.append(allocator, new_mesh);
         try file.meshes.put(allocator, std.mem.span(mesh.name), new_mesh);
     }
@@ -342,13 +352,13 @@ pub fn init(
     var nodes: std.ArrayList(*vk.Node) = try .initCapacity(allocator, data.nodes_count);
     for (data.nodes[0..data.nodes_count]) |node| {
         var new_node = try allocator.create(vk.Node);
+        new_node.* = .{};
         if (node.mesh != null) {
             const mesh_index: usize = @intCast(node.mesh - data.meshes);
             new_node.mesh = meshes.items[mesh_index];
         }
 
         nodes.appendAssumeCapacity(new_node);
-        std.debug.print("new-MAX {d}\n", .{nodes.items.len});
 
         try file.nodes.put(allocator, std.mem.span(node.name), new_node);
 
@@ -367,10 +377,7 @@ pub fn init(
         var scene_node = nodes.items[i];
         if (node.children == null) continue;
         for (node.children[0..node.children_count]) |c| {
-            const child_index = @intFromPtr(c) - @intFromPtr(data.nodes);
-            const child_node = nodes.items[child_index];
-            std.debug.print("index: {d}, MAX {d}\n", .{ child_index, nodes.items.len });
-            std.debug.print("node: {any}\n", .{child_node});
+            const child_index = @as(usize, @intCast(c - data.nodes));
             try scene_node.children.append(allocator, nodes.items[child_index]);
             nodes.items[child_index].parent = scene_node;
         }
@@ -407,4 +414,36 @@ fn extract_mipmap_mode(filter: cgltf.cgltf_filter_type) vk.c.VkSamplerMipmapMode
         //case fastgltf::Filter::LinearMipMapLinear:
 
     }
+}
+
+pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.Image {
+    var width: i32, var height: i32, var nr_channel: i32 = .{ 0, 0, 0 };
+
+    if (image.uri != null and image.uri[0] != 0) {
+        try if (std.mem.eql(u8, "data:", std.mem.span(image.uri)[0..5])) error.DataNotsupported;
+
+        const pixels = stb.stbi_load(image.uri, &width, &height, &nr_channel, 4);
+        defer stb.stbi_image_free(pixels);
+        try if (pixels == null) error.LoadingStbi;
+        const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
+
+        const stack_image: vk.Image = try .init(vma.handle, device, vk.c.VK_FORMAT_R8G8B8A8_UNORM, extent, vk.c.VK_IMAGE_USAGE_SAMPLED_BIT, vk.c.VK_IMAGE_ASPECT_COLOR_BIT, false);
+        return stack_image;
+    } else if (image.buffer_view != null) {
+        const bv = image.buffer_view;
+        const buf = bv.*.buffer;
+        try if (buf == null or buf.*.data == null) error.BufferView;
+
+        const bytes: [*]const u8 = @ptrCast(buf.*.data);
+        const bytes_offset = bytes[bv.*.offset .. bv.*.offset + bv.*.size];
+
+        const pixels = stb.stbi_load_from_memory(bytes_offset.ptr, @intCast(bytes_offset.len), &width, &height, &nr_channel, 4);
+        defer stb.stbi_image_free(pixels);
+        try if (pixels == null) error.LoadingStbi;
+        const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
+
+        const stack_image: vk.Image = try .init(vma.handle, device, vk.c.VK_FORMAT_R8G8B8A8_UNORM, extent, vk.c.VK_IMAGE_USAGE_SAMPLED_BIT, vk.c.VK_IMAGE_ASPECT_COLOR_BIT, false);
+        return stack_image;
+    }
+    return error.loadImage;
 }

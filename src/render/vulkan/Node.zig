@@ -20,16 +20,18 @@ pub fn refreshTransform(self: *@This(), parent_transform: *nz.Transform3D(f32)) 
 
 pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Transform3D(f32), ctx: *DrawContext) !void {
     const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_transform.toMat4x4()));
-    for (self.mesh.?.surfaces.items[0..self.mesh.?.surfaces.items.len]) |surface| {
-        try ctx.opaque_surfaces.append(allocator, .{
-            .index_count = @intCast(surface.index_count),
-            .first_index = @intCast(surface.index_start),
-            .index_buffer = self.mesh.?.index_buffer.buffer,
-            .material_instance = self.material.*,
-            .transform = node_transform,
-            .vertex_buffer_address = self.mesh.?.vertex_buffer_address,
-        });
-        ctx.count += 1;
+    if (self.mesh) |mesh| {
+        for (mesh.surfaces.items[0..mesh.surfaces.items.len]) |surface| {
+            try ctx.opaque_surfaces.append(allocator, .{
+                .index_count = @intCast(surface.index_count),
+                .first_index = @intCast(surface.index_start),
+                .index_buffer = mesh.index_buffer.buffer,
+                .material_instance = surface.material,
+                .transform = node_transform,
+                .vertex_buffer_address = mesh.vertex_buffer_address,
+            });
+            ctx.count += 1;
+        }
     }
 
     for (self.children.items) |*child| {
@@ -42,7 +44,7 @@ const RenderObject = struct {
     first_index: u32,
     index_buffer: vk.VkBuffer,
     vertex_buffer_address: vk.VkDeviceAddress,
-    material_instance: Material.Instance,
+    material_instance: *Material.Instance,
     transform: nz.Transform3D(f32),
 };
 
