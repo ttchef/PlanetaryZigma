@@ -447,6 +447,12 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.metalRoughMaterial.deinit(self.device);
     self.materialBuffer.deinit(self.vma.handle);
 
+    var iter = self.loaded_scenes.iterator();
+    while (iter.next()) |scene| {
+        scene.value_ptr.deinit(self.allocator, self.vma);
+    }
+    self.loaded_scenes.deinit(allocator);
+
     self.globalDescriptorAllocator.deinit(self.device);
 
     for (self.meshes.items) |mesh| {
@@ -646,7 +652,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .position = .{ 0, 0, -2 },
         .rotation = .{ 0, 0, 0 },
     };
-    try self.loaded_nodes[0].draw(self.allocator, top_matrix, &self.mainDrawContext);
+    // try self.loaded_nodes[0].draw(self.allocator, top_matrix, &self.mainDrawContext);
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
     try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
     const view = self.camera.getViewMatrix();

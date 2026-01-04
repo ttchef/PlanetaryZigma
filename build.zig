@@ -42,14 +42,9 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     cgltf.addIncludePath(cgltf_dep.path("."));
 
+    const stb_dep = b.dependency("stb", .{});
     const stb = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add(
-            "c.h",
-            \\#define STBI_ONLY_PNG
-            \\#define STB_IMAGE_IMPLEMENTATION
-            \\#include "stb_image.h"
-            ,
-        ),
+        .root_source_file = stb_dep.path("stb_image.h"),
         .target = target,
         .optimize = optimize,
     });
@@ -137,10 +132,18 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c99"},
     });
 
+    renderer.addCSourceFile(.{
+        .file = b.addWriteFiles().add("stbi_impl.c",
+            \\#define STB_IMAGE_IMPLEMENTATION
+            \\#include "stb_image.h"
+        ),
+    });
+
     renderer.addIncludePath(vma_dep.path("include/"));
     renderer.addIncludePath(vulkan_header_dep.path("include/"));
     renderer.addIncludePath(tiny_obj_loader_dep.path("."));
     renderer.addIncludePath(cgltf_dep.path("."));
+    renderer.addIncludePath(stb_dep.path("."));
 
     b.installArtifact(exe);
 
