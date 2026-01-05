@@ -132,13 +132,21 @@ pub const DebugMessenger = struct {
     }
 
     fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {
-        switch (severity) {
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => std.log.info("VK:\n{s}\n", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => std.log.info("VK:\n{s}\n", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => std.log.warn("VK:\n{s}\n", .{callback_data.*.pMessage}),
-            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => std.log.err("VK:\n{s}\n", .{callback_data.*.pMessage}),
+        //NOTE: for deperate times if Vulkan Validation layers crashes.
+        // const cc = @cImport({
+        //     @cInclude("vulkan/vulkan.h");
+        //     @cInclude("stdio.h");
+        // });
+        // const cbd = callback_data orelse return c.VK_FALSE;
+        // const msg_ptr = cbd.*.pMessage;
+        // const msg: []const u8 = if (msg_ptr != null) std.mem.span(msg_ptr) else "<null>";
+        _ = switch (severity) {
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
+            c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
             else => unreachable,
-        }
+        };
 
         return c.VK_FALSE;
     }

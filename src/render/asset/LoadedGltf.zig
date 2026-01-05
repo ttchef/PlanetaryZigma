@@ -214,6 +214,7 @@ pub fn init(
 
     var images: std.ArrayList(vk.Image) = .empty;
     for (data.images[0..data.images_count]) |image| {
+        // _ = image;
         const img = loadImage(vma, device, image) catch TMP_IMAGES[0];
         try images.append(allocator, img);
         if (image.name) |name_z| {
@@ -253,12 +254,10 @@ pub fn init(
         if (material.pbr_metallic_roughness.base_color_texture.texture != null) {
             const tex = material.pbr_metallic_roughness.base_color_texture.texture.*;
             if (tex.image != null) {
-                //TODO: FIX Pointer subtraction
                 const img_index = (tex.image - data.images);
                 material_resources.color_image = images.items[img_index];
             }
             if (tex.sampler != null) {
-                //TODO: FIX Pointer subtraction
                 const samp_index = (tex.sampler - data.samplers);
                 material_resources.color_sampler = file.samplers.items[samp_index];
             }

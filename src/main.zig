@@ -38,9 +38,11 @@ pub fn main() !void {
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
 
-    // if (std.process.hasEnvVarConstant("RENDERDOC_CAPFILE"))
-
-    glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
+    if (std.process.hasEnvVarConstant("ENABLE_VULKAN_RENDERDOC_CAPTURE")) {
+        glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
+    } else {
+        glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_WAYLAND);
+    }
 
     try glfw.init();
     defer glfw.deinit();
@@ -60,6 +62,7 @@ pub fn main() !void {
                 var arr: [8][*:0]const u8 = undefined;
                 arr[0] = "VK_KHR_surface";
                 arr[1] = "VK_EXT_debug_utils";
+                arr[2] = "VK_KHR_wayland_surface";
 
                 var count: usize = 2;
                 var glfw_ext_count: u32 = 0;
