@@ -654,6 +654,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
     // try self.loaded_nodes[0].draw(self.allocator, top_matrix, &self.mainDrawContext);
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
+
     try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
     const view = self.camera.getViewMatrix();
     // const view = nz.Mat4x4(f32).identity;
@@ -806,6 +807,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     };
 
     const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
+
     if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or present_result == vk.c.VK_SUBOPTIMAL_KHR) {
         self.resize_request = true;
         return;
