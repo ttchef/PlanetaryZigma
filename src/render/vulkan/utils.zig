@@ -1379,7 +1379,7 @@ pub fn imageMemBarrier(
     // c.vkCmdPipelineBarrier2(cmd, &dep_info);
 }
 
-pub fn copyImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: c.VkImage, srcSize: c.VkExtent3D, dstSize: c.VkExtent3D) void {
+pub fn blitImageToImage(cmd: c.VkCommandBuffer, source: c.VkImage, destination: c.VkImage, srcSize: c.VkExtent3D, dstSize: c.VkExtent3D) void {
     var blit_region: c.VkImageBlit2 = .{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .pNext = null,

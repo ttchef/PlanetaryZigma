@@ -167,6 +167,8 @@ pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
 
     camera.yaw += delta_x / 200.0;
     camera.pitch -= delta_y / 200.0;
+    camera.yaw = 0;
+    camera.pitch = 0;
 
     camera.pitch = std.math.clamp(camera.pitch, -1.55, 1.55);
 
@@ -186,8 +188,8 @@ pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
         }
     }
 
-    const cameraRotation = camera.getRotationMatrix();
-
+    // const cameraRotation = camera.getRotationMatrix();
+    const cameraRotation = nz.Mat4x4(f32).identity;
     const dir4: nz.Vec4(f32) = .{
         camera.velocity[0],
         camera.velocity[1],
