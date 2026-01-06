@@ -18,7 +18,7 @@ pub const Vertex = extern struct {
     normal: [3]f32 = @splat(0),
     uv_y: f32 = 0,
     color: [4]f32 = @splat(0),
-}; //NOTE: WILL BE BEACKSOON HAVE TO RESTART OBS XD
+};
 
 pub const GPUDrawPushConstants = extern struct {
     world_matrix: [16]f32,

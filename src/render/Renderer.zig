@@ -44,7 +44,7 @@ _defaultSamplerNearest: vk.c.VkSampler,
 mainDrawContext: vk.Node.DrawContext = undefined,
 loaded_nodes: [16]vk.Node = undefined,
 node_count: usize = 0,
-camera: Camera = .{ .position = .{ 0, 0, 5 } },
+camera: Camera = .{ .position = .{ 30, 0, -85.0 } },
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
 allocator: std.mem.Allocator,
@@ -762,13 +762,14 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
-    vk.copyImageToImage(
+    vk.blipImageToImage(
         cmd_buffer,
         self.draw_image.image,
         self.swapchain.vk_images[image_index],
         self.draw_image.image_extent,
         self.swapchain.extent,
     );
+    // swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, , vk.c.VK_PIPELINE_STAGE_SH)
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 

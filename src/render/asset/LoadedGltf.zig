@@ -262,9 +262,8 @@ pub fn init(
                 material_resources.color_sampler = file.samplers.items[samp_index];
             }
         }
-        const stack_mat = try metal_rough_material.writeMaterial(device, pass_type, material_resources, &file.descriptor_pool);
         const new_material = try allocator.create(vk.Material.Instance);
-        new_material.* = stack_mat;
+        new_material.* = try metal_rough_material.writeMaterial(device, pass_type, material_resources, &file.descriptor_pool);
         try materials.append(allocator, new_material);
         try file.materials.put(allocator, std.mem.span(material.name), new_material);
         data_index += 1;
@@ -426,8 +425,17 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
 
-        const stack_image: vk.Image = try .init(vma.handle, device, vk.c.VK_FORMAT_R8G8B8A8_UNORM, extent, vk.c.VK_IMAGE_USAGE_SAMPLED_BIT, vk.c.VK_IMAGE_ASPECT_COLOR_BIT, false);
-        return stack_image;
+        const out_image: vk.Image = try .init(
+            vma.handle,
+            device,
+            vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+            extent,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+            false,
+        );
+        try out_image.uploadDataToImage(device, vma.handle, pixels);
+        return out_image;
     } else if (image.buffer_view != null) {
         const bv = image.buffer_view;
         const buf = bv.*.buffer;
@@ -441,8 +449,17 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
 
-        const stack_image: vk.Image = try .init(vma.handle, device, vk.c.VK_FORMAT_R8G8B8A8_UNORM, extent, vk.c.VK_IMAGE_USAGE_SAMPLED_BIT, vk.c.VK_IMAGE_ASPECT_COLOR_BIT, false);
-        return stack_image;
+        const out_image: vk.Image = try .init(
+            vma.handle,
+            device,
+            vk.c.VK_FORMAT_R8G8B8A8_UNORM,
+            extent,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+            false,
+        );
+        try out_image.uploadDataToImage(device, vma.handle, pixels);
+        return out_image;
     }
     return error.loadImage;
 }

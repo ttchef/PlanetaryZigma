@@ -6,7 +6,7 @@ pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
 pub const LoadShader = @import("utils.zig").loadShaderModule;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
-pub const copyImageToImage = @import("utils.zig").copyImageToImage;
+pub const blipImageToImage = @import("utils.zig").blitImageToImage;
 
 pub const Device = @import("device.zig").Logical;
 pub const PhysicalDevice = @import("device.zig").Physical;

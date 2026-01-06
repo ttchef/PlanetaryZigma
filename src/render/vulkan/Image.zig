@@ -81,7 +81,7 @@ pub fn uploadDataToImage(self: @This(), device: vk.Device, vma: vk.Vma.Allocator
 
     @memcpy(
         @as([*]u8, @ptrCast(upload_buffer.info.pMappedData))[0..@intCast(data_size)],
-        std.mem.asBytes(data)[0..@intCast(data_size)],
+        @as([*]u8, @ptrCast(data))[0..@intCast(data_size)],
     );
 
     const cmd = try device.beginImmediateCommand();
