@@ -3,6 +3,9 @@ const nz = @import("numz");
 const vk = @import("../vulkan/vulkan.zig");
 const cgltf = @import("cgltf");
 const stb = @import("stb");
+
+default_image: vk.Image,
+
 // storage for all the data on a given glTF file
 meshes: std.StringHashMapUnmanaged(*vk.Mesh) = .empty,
 nodes: std.StringHashMapUnmanaged(*vk.Node) = .empty,
@@ -17,11 +20,31 @@ descriptor_pool: vk.descriptor.Growable = undefined,
 
 material_data_buffer: vk.Buffer = undefined,
 
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma) void {
-    _ = self;
-    _ = allocator;
-    _ = vma;
-    @panic("REMEBER TO ADD FREE!");
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device) void {
+    self.descriptor_pool.deinit(device);
+    self.material_data_buffer.deinit(vma.handle);
+
+    var mesh_it = self.meshes.iterator();
+    while (mesh_it.next()) |mesh| {
+        mesh.value_ptr.*.deinit(vma.handle);
+    }
+
+    var images_it = self.images.iterator();
+    while (images_it.next()) |image| {
+        if (image.value_ptr.image == self.default_image.image) continue;
+        image.value_ptr.deinit(vma, device);
+    }
+
+    for (self.samplers.items[0..self.samplers.items.len]) |sampler| {
+        vk.c.vkDestroySampler(device.handle, sampler, null);
+    }
+
+    self.meshes.deinit(allocator);
+    self.nodes.deinit(allocator);
+    self.images.deinit(allocator);
+    self.materials.deinit(allocator);
+    self.top_nodes.deinit(allocator);
+    self.samplers.deinit(allocator);
 }
 pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Transform3D(f32), ctx: *vk.Node.DrawContext) !void {
     for (self.top_nodes.items) |node| {
@@ -175,7 +198,7 @@ pub fn init(
     metal_rough_material: *vk.Material.GltfMetallicRoughness,
 ) !@This() {
     std.log.info("Loading GLTF: {s}", .{file_path});
-    var file: @This() = .{};
+    var file: @This() = .{ .default_image = TMP_IMAGES[0] };
 
     const options: cgltf.cgltf_options = .{};
     var cptr_data: ?*cgltf.cgltf_data = null;
@@ -188,6 +211,7 @@ pub fn init(
     try if (cgltf.cgltf_load_buffers(&options, out_data.*, c_path) != cgltf.cgltf_result_success) error.GltfLoad;
     try if (cgltf.cgltf_validate(out_data.*) != cgltf.cgltf_result_success) error.CltfValidation;
     try if (out_data.? == null or out_data.*.? == null) error.CPointerData;
+    std.debug.print("images: {d}\n", .{out_data.*.*.images_count});
     var data: cgltf.cgltf_data = out_data.*.*;
 
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
@@ -197,29 +221,36 @@ pub fn init(
     };
 
     file.descriptor_pool = try .init(allocator, device, @intCast(data.materials_count), &sizes);
-
-    for (data.samplers[0..data.samplers_count]) |sampler| {
-        const sampler_info: vk.c.VkSamplerCreateInfo = .{
-            .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .maxLod = vk.c.VK_LOD_CLAMP_NONE,
-            .minLod = 0,
-            .magFilter = extractMagFilter(sampler.mag_filter),
-            .minFilter = extractMinFilter(sampler.min_filter),
-            .mipmapMode = extract_mipmap_mode(sampler.min_filter),
-        };
-        var new_sampler: vk.c.VkSampler = undefined;
-        try vk.check(vk.c.vkCreateSampler(device.handle, &sampler_info, null, &new_sampler));
-        try file.samplers.append(allocator, new_sampler);
+    if (data.samplers_count != 0) {
+        for (data.samplers[0..data.samplers_count]) |sampler| {
+            const sampler_info: vk.c.VkSamplerCreateInfo = .{
+                .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .maxLod = vk.c.VK_LOD_CLAMP_NONE,
+                .minLod = 0,
+                .magFilter = extractMagFilter(sampler.mag_filter),
+                .minFilter = extractMinFilter(sampler.min_filter),
+                .mipmapMode = extract_mipmap_mode(sampler.min_filter),
+            };
+            var new_sampler: vk.c.VkSampler = undefined;
+            try vk.check(vk.c.vkCreateSampler(device.handle, &sampler_info, null, &new_sampler));
+            try file.samplers.append(allocator, new_sampler);
+        }
+    } else {
+        std.log.info("Sampler count was 0", .{});
     }
 
     var images: std.ArrayList(vk.Image) = .empty;
-    for (data.images[0..data.images_count]) |image| {
-        // _ = image;
-        const img = loadImage(vma, device, image) catch TMP_IMAGES[0];
-        try images.append(allocator, img);
-        if (image.name) |name_z| {
-            try file.images.put(allocator, std.mem.span(name_z), img);
+    if (data.images_count != 0) {
+        for (data.images[0..data.images_count]) |image| {
+            // _ = image;
+            const img = loadImage(vma, device, image) catch TMP_IMAGES[0];
+            try images.append(allocator, img);
+            if (image.name) |name_z| {
+                try file.images.put(allocator, std.mem.span(name_z), img);
+            }
         }
+    } else {
+        std.log.info("image count was 0", .{});
     }
 
     file.material_data_buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -338,10 +369,9 @@ pub fn init(
             try surfaces.append(allocator, new_surface);
         }
 
-        var stack_mesh: vk.Mesh = try .init(device, surfaces, vma.handle, indices_list.items, vertices_list.items);
-        stack_mesh.name = try allocator.dupe(u8, std.mem.span(mesh.name));
-        const new_mesh = try allocator.create(vk.Mesh);
-        new_mesh.* = stack_mesh;
+        var new_mesh = try allocator.create(vk.Mesh);
+        new_mesh.* = try .init(device, surfaces, vma.handle, indices_list.items, vertices_list.items);
+        new_mesh.name = try allocator.dupe(u8, std.mem.span(mesh.name));
         new_mesh.surfaces = surfaces;
         try meshes.append(allocator, new_mesh);
         try file.meshes.put(allocator, std.mem.span(mesh.name), new_mesh);
