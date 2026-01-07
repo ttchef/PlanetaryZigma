@@ -147,7 +147,7 @@ fn getSurfaceFormat(physical_device: vk.PhysicalDevice, surface: vk.Surface) !vk
 
     var chosen_format: vk.c.VkSurfaceFormatKHR = formats[0];
     for (0..format_count) |i| {
-        if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_SRGB) {
+        if (formats[i].format == vk.c.VK_FORMAT_R8G8B8A8_UNORM) {
             chosen_format = formats[i];
             break;
         }

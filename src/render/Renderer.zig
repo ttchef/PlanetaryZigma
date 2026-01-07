@@ -44,7 +44,7 @@ _defaultSamplerNearest: vk.c.VkSampler,
 mainDrawContext: vk.Node.DrawContext = undefined,
 loaded_nodes: [16]vk.Node = undefined,
 node_count: usize = 0,
-camera: Camera = .{ .position = .{ 30, 0, -85.0 } },
+camera: Camera = .{ .position = .{ 0, 0, 0 } },
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
 allocator: std.mem.Allocator,
@@ -379,7 +379,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         allocator,
         vma,
         device,
-        "assets/objects/structure.glb",
+        "assets/objects/sci-fi.glb",
         .{ _errorCheckerboardImage, _whiteImage },
         _defaultSamplerLinear,
         &metalRoughMaterial,
@@ -426,7 +426,6 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     std.debug.print("NOW FREEING\n", .{});
     std.log.debug("", .{});
 
-    self.loaded_scenes.deinit(allocator);
     self.swapchain.deinit(self.vma, self.device);
 
     for (0..self.max_pipelines) |i|
@@ -449,7 +448,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 
     var iter = self.loaded_scenes.iterator();
     while (iter.next()) |scene| {
-        scene.value_ptr.deinit(self.allocator, self.vma);
+        scene.value_ptr.*.deinit(self.allocator, self.vma, self.device);
     }
     self.loaded_scenes.deinit(allocator);
 
@@ -603,7 +602,7 @@ pub fn draw(self: *@This(), time: f32) !void {
 
     vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
 
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
+    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
     current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -616,32 +615,8 @@ pub fn draw(self: *@This(), time: f32) !void {
         writer.updateSet(self.device, globalDescriptor);
     }
 
-    var viewport: vk.c.VkViewport = .{
-        .x = 0,
-        .y = 0,
-        .width = @floatFromInt(self.draw_image.image_extent.width),
-        .height = @floatFromInt(self.draw_image.image_extent.height),
-        .minDepth = 0,
-        .maxDepth = 1,
-    };
-
-    vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
-
-    var scissor: vk.c.VkRect2D = .{
-        .offset = .{
-            .x = 0,
-            .y = 0,
-        },
-        .extent = .{
-            .width = self.draw_image.image_extent.width,
-            .height = self.draw_image.image_extent.height,
-        },
-    };
-
-    vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
-
     // //Triangle
-    vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
+    // vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
 
     //The mesh
     //TODO: ====================================
@@ -672,88 +647,10 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
+    draw_geometry(self, self.mainDrawContext.opaque_surfaces, cmd_buffer, globalDescriptor);
+    draw_geometry(self, self.mainDrawContext.transparent_surfaces, cmd_buffer, globalDescriptor);
+
     // std.debug.print("\nsceneDATA {any}\n", .{self.scene_data});
-    for (0..self.mainDrawContext.count) |i| {
-        // std.debug.print("\nRENDER NODE\n", .{});
-        const opaque_draw = &self.mainDrawContext.opaque_surfaces.items[i];
-
-        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, opaque_draw.material_instance.pipeline.get().handle);
-
-        //TODO:CONTINUE from here.
-        vk.c.vkCmdBindDescriptorSets(
-            cmd_buffer,
-            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            opaque_draw.material_instance.pipeline.get().layout,
-            0,
-            1,
-            &globalDescriptor,
-            0,
-            null,
-        );
-        vk.c.vkCmdBindDescriptorSets(
-            cmd_buffer,
-            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            opaque_draw.material_instance.pipeline.get().layout,
-            1,
-            1,
-            &opaque_draw.material_instance.descriptor_set,
-            0,
-            null,
-        );
-
-        vk.c.vkCmdBindIndexBuffer(cmd_buffer, opaque_draw.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
-
-        // std.debug.print("world_matrix: {any}\n", .{opaque_draw.transform.toMat4x4().d});
-
-        var push_constant: vk.Mesh.GPUDrawPushConstants = .{
-            .world_matrix = opaque_draw.transform.toMat4x4().d,
-            .vertex_buffer = opaque_draw.vertex_buffer_address,
-        };
-        vk.c.vkCmdPushConstants(cmd_buffer, opaque_draw.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
-
-        vk.c.vkCmdDrawIndexed(cmd_buffer, opaque_draw.index_count, 1, opaque_draw.first_index, 0, 0);
-    }
-
-    //
-    //
-    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[3].get().handle);
-    //
-    // const image_set: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._singleImageDescriptorLayout.handle, null);
-    // {
-    //     var writer: vk.descriptor.Writer = .{};
-    //     writer.appendImage(0, self._errorCheckerboardImage.image_view, self._defaultSamplerNearest, vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    //     writer.updateSet(self.device, image_set);
-    // }
-    //
-    // vk.c.vkCmdBindDescriptorSets(
-    //     cmd_buffer,
-    //     vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-    //     self.pipelines[3].get().layout,
-    //     0,
-    //     1,
-    //     &image_set,
-    //     0,
-    //     null,
-    // );
-    //
-    // var push: vk.Mesh.GPUDrawPushConstants = .{
-    //     .vertex_buffer = self.meshes.items[0].vertex_buffer_address,
-    //     .world_matrix = projection.mul(self.scene_data.view).d,
-    // };
-    //
-    // vk.c.vkCmdPushConstants(
-    //     cmd_buffer,
-    //     self.pipelines[3].get().layout,
-    //     vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-    //     0,
-    //     @sizeOf(vk.Mesh.GPUDrawPushConstants),
-    //     &push,
-    // );
-    // vk.c.vkCmdBindIndexBuffer(cmd_buffer, self.meshes.items[0].index_buffeconstuffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
-    // vk.c.vkCmdDrawIndexed(cmd_buffer, self.meshes.items[0].indecies_count, 1, 0, 0, 0);
-    //TODO:===============================
-    //TODO: ====================================
-    //TODO: ====================================
 
     vk.c.vkCmdEndRendering(cmd_buffer);
     //DONE RENDERING VERTECIES
@@ -815,6 +712,81 @@ pub fn draw(self: *@This(), time: f32) !void {
     }
 
     self.swapchain.current_frame_inflight += 1;
+}
+
+fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObject), cmd_buffer: vk.c.VkCommandBuffer, globalDescriptor: vk.c.VkDescriptorSet) void {
+    var last_pipeline: ?*vk.Pipeline = null;
+    var last_material: ?*vk.Material.Instance = null;
+    var last_index_buffer: vk.c.VkBuffer = null;
+
+    for (render_objects.items[0..render_objects.items.len]) |render_obj| {
+        // if (render_obj.material_instance != last_material) {
+        last_material = render_obj.material_instance;
+        // if (render_obj.material_instance.pipeline == last_pipeline) {
+        last_pipeline = render_obj.material_instance.pipeline;
+        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.get().handle);
+
+        vk.c.vkCmdBindDescriptorSets(
+            cmd_buffer,
+            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            render_obj.material_instance.pipeline.get().layout,
+            0,
+            1,
+            &globalDescriptor,
+            0,
+            null,
+        );
+
+        var viewport: vk.c.VkViewport = .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(self.draw_image.image_extent.width),
+            .height = @floatFromInt(self.draw_image.image_extent.height),
+            .minDepth = 0,
+            .maxDepth = 1,
+        };
+
+        vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+        var scissor: vk.c.VkRect2D = .{
+            .offset = .{
+                .x = 0,
+                .y = 0,
+            },
+            .extent = .{
+                .width = self.draw_image.image_extent.width,
+                .height = self.draw_image.image_extent.height,
+            },
+        };
+
+        vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+        // }
+        vk.c.vkCmdBindDescriptorSets(
+            cmd_buffer,
+            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            render_obj.material_instance.pipeline.get().layout,
+            1,
+            1,
+            &render_obj.material_instance.descriptor_set,
+            0,
+            null,
+        );
+        // }
+        if (render_obj.index_buffer != last_index_buffer) {
+            last_index_buffer = render_obj.index_buffer;
+            vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+        }
+
+        // std.debug.print("world_matrix: {any}\n", .{opaque_draw.transform.toMat4x4().d});
+
+        var push_constant: vk.Mesh.GPUDrawPushConstants = .{
+            .world_matrix = render_obj.transform.toMat4x4().d,
+            .vertex_buffer = render_obj.vertex_buffer_address,
+        };
+        vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+
+        vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
+    }
 }
 
 //TODO: move logic away

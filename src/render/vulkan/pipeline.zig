@@ -102,7 +102,7 @@ pub const Pipeline = union(enum) {
                 .sType = vk.c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 .polygonMode = vk.c.VK_POLYGON_MODE_FILL,
                 .cullMode = vk.c.VK_CULL_MODE_BACK_BIT,
-                .frontFace = vk.c.VK_FRONT_FACE_CLOCKWISE,
+                .frontFace = vk.c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
                 .lineWidth = 1.0,
             },
             multisample_state: vk.c.VkPipelineMultisampleStateCreateInfo = .{

@@ -22,15 +22,19 @@ pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Tran
     const node_transform: nz.Transform3D(f32) = .fromMat4x4(top_transform.toMat4x4().mul(self.world_transform.toMat4x4()));
     if (self.mesh) |mesh| {
         for (mesh.surfaces.items[0..mesh.surfaces.items.len]) |surface| {
-            try ctx.opaque_surfaces.append(allocator, .{
+            const render_obj: RenderObject = .{
                 .index_count = @intCast(surface.index_count),
                 .first_index = @intCast(surface.index_start),
                 .index_buffer = mesh.index_buffer.buffer,
                 .material_instance = surface.material,
                 .transform = node_transform,
                 .vertex_buffer_address = mesh.vertex_buffer_address,
-            });
-            ctx.count += 1;
+            };
+            if (surface.material.pass_type == .transparent) {
+                try ctx.transparent_surfaces.append(allocator, render_obj);
+            } else {
+                try ctx.opaque_surfaces.append(allocator, render_obj);
+            }
         }
     }
 
@@ -39,7 +43,7 @@ pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Tran
     }
 }
 
-const RenderObject = struct {
+pub const RenderObject = struct {
     index_count: u32,
     first_index: u32,
     index_buffer: vk.VkBuffer,
@@ -50,10 +54,10 @@ const RenderObject = struct {
 
 pub const DrawContext = struct {
     opaque_surfaces: std.ArrayList(RenderObject) = .empty,
-    count: usize = 0,
+    transparent_surfaces: std.ArrayList(RenderObject) = .empty,
 
     pub fn clear(self: *@This()) void {
-        self.count = 0;
         self.opaque_surfaces.clearRetainingCapacity();
+        self.transparent_surfaces.clearRetainingCapacity();
     }
 };

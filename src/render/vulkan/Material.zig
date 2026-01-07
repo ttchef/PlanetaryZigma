@@ -14,7 +14,7 @@ pub const Pass = enum {
 };
 
 pub const Instance = struct {
-    pipeline: Pipeline,
+    pipeline: *Pipeline,
     descriptor_set: vk.VkDescriptorSet,
     pass_type: Pass,
 };
@@ -128,9 +128,9 @@ pub const GltfMetallicRoughness = struct {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
         if (pass == .transparent) {
-            material_data_instance.pipeline = self.transparent_pipeline;
+            material_data_instance.pipeline = &self.transparent_pipeline;
         } else {
-            material_data_instance.pipeline = self.opaque_pipeline;
+            material_data_instance.pipeline = &self.opaque_pipeline;
         }
         material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
