@@ -1,3 +1,4 @@
+const std = @import("std");
 const vk = @import("vulkan");
 const nz = @import("numz");
 const Image = @import("Image.zig");
@@ -130,6 +131,7 @@ pub const GltfMetallicRoughness = struct {
         if (pass == .transparent) {
             material_data_instance.pipeline = &self.transparent_pipeline;
         } else {
+            std.debug.print("added transparent_pipeline\n", .{});
             material_data_instance.pipeline = &self.opaque_pipeline;
         }
         material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
