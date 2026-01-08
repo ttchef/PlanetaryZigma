@@ -127,6 +127,8 @@ pub fn main() !void {
             proccessCamera(&renderer.camera, window);
             try Renderer.c.toErr(renderer_draw(&renderer, time));
             accumulated_time -= seconds_per_update;
+            // if (time >= 2 * seconds_per_update)
+            //     @panic("LOLXD");
         }
         if (renderer.resize_request) {
             const size = glfw.Window.getSize(window);

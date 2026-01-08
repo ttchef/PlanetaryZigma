@@ -59,6 +59,11 @@ draw_image: vk.Image,
 depth_image: vk.Image,
 resize_request: bool = false,
 
+//NOTE: maybe not here?
+last_pipeline: ?*vk.Pipeline = null,
+last_material: ?*vk.Material.Instance = null,
+last_index_buffer: vk.c.VkBuffer = null,
+
 pub const Config = struct {
     instance: struct {
         extensions: ?[]const [*:0]const u8 = null,
@@ -647,6 +652,10 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
+    //TODO: fix ur shit. Transparent pipelines are broken.
+    self.last_index_buffer = null;
+    self.last_material = null;
+    self.last_pipeline = null;
     draw_geometry(self, self.mainDrawContext.opaque_surfaces, cmd_buffer, globalDescriptor);
     draw_geometry(self, self.mainDrawContext.transparent_surfaces, cmd_buffer, globalDescriptor);
 
@@ -715,65 +724,63 @@ pub fn draw(self: *@This(), time: f32) !void {
 }
 
 fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObject), cmd_buffer: vk.c.VkCommandBuffer, globalDescriptor: vk.c.VkDescriptorSet) void {
-    var last_pipeline: ?*vk.Pipeline = null;
-    var last_material: ?*vk.Material.Instance = null;
-    var last_index_buffer: vk.c.VkBuffer = null;
-
+    var count: usize = 0;
     for (render_objects.items[0..render_objects.items.len]) |render_obj| {
-        // if (render_obj.material_instance != last_material) {
-        last_material = render_obj.material_instance;
-        // if (render_obj.material_instance.pipeline == last_pipeline) {
-        last_pipeline = render_obj.material_instance.pipeline;
-        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.get().handle);
+        if (render_obj.material_instance != self.last_material) {
+            self.last_material = render_obj.material_instance;
 
-        vk.c.vkCmdBindDescriptorSets(
-            cmd_buffer,
-            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            render_obj.material_instance.pipeline.get().layout,
-            0,
-            1,
-            &globalDescriptor,
-            0,
-            null,
-        );
+            if (render_obj.material_instance.pipeline != self.last_pipeline) {
+                self.last_pipeline = render_obj.material_instance.pipeline;
+                vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.get().handle);
 
-        var viewport: vk.c.VkViewport = .{
-            .x = 0,
-            .y = 0,
-            .width = @floatFromInt(self.draw_image.image_extent.width),
-            .height = @floatFromInt(self.draw_image.image_extent.height),
-            .minDepth = 0,
-            .maxDepth = 1,
-        };
+                vk.c.vkCmdBindDescriptorSets(
+                    cmd_buffer,
+                    vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    render_obj.material_instance.pipeline.get().layout,
+                    0,
+                    1,
+                    &globalDescriptor,
+                    0,
+                    null,
+                );
 
-        vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+                var viewport: vk.c.VkViewport = .{
+                    .x = 0,
+                    .y = 0,
+                    .width = @floatFromInt(self.draw_image.image_extent.width),
+                    .height = @floatFromInt(self.draw_image.image_extent.height),
+                    .minDepth = 0,
+                    .maxDepth = 1,
+                };
 
-        var scissor: vk.c.VkRect2D = .{
-            .offset = .{
-                .x = 0,
-                .y = 0,
-            },
-            .extent = .{
-                .width = self.draw_image.image_extent.width,
-                .height = self.draw_image.image_extent.height,
-            },
-        };
+                vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
 
-        vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
-        // }
-        vk.c.vkCmdBindDescriptorSets(
-            cmd_buffer,
-            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            render_obj.material_instance.pipeline.get().layout,
-            1,
-            1,
-            &render_obj.material_instance.descriptor_set,
-            0,
-            null,
-        );
-        // }
-        if (render_obj.index_buffer != last_index_buffer) {
-            last_index_buffer = render_obj.index_buffer;
+                var scissor: vk.c.VkRect2D = .{
+                    .offset = .{
+                        .x = 0,
+                        .y = 0,
+                    },
+                    .extent = .{
+                        .width = self.draw_image.image_extent.width,
+                        .height = self.draw_image.image_extent.height,
+                    },
+                };
+
+                vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+            }
+            vk.c.vkCmdBindDescriptorSets(
+                cmd_buffer,
+                vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                render_obj.material_instance.pipeline.get().layout,
+                1,
+                1,
+                &render_obj.material_instance.descriptor_set,
+                0,
+                null,
+            );
+        }
+        if (render_obj.index_buffer != self.last_index_buffer) {
+            self.last_index_buffer = render_obj.index_buffer;
             vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
         }
 
@@ -786,6 +793,8 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
         vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
         vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
+
+        count += 1;
     }
 }
 
