@@ -29,6 +29,7 @@ pub fn draw(self: *@This(), allocator: std.mem.Allocator, top_transform: nz.Tran
                 .material_instance = surface.material,
                 .transform = node_transform,
                 .vertex_buffer_address = mesh.vertex_buffer_address,
+                .bounds = surface.bounds,
             };
             if (surface.material.pass_type == .transparent) {
                 try ctx.transparent_surfaces.append(allocator, render_obj);
@@ -47,9 +48,51 @@ pub const RenderObject = struct {
     index_count: u32,
     first_index: u32,
     index_buffer: vk.VkBuffer,
-    vertex_buffer_address: vk.VkDeviceAddress,
+
     material_instance: *Material.Instance,
+    bounds: Mesh.Bounds,
     transform: nz.Transform3D(f32),
+    vertex_buffer_address: vk.VkDeviceAddress,
+
+    pub fn isVisible(self: *const @This(), view_proj: nz.Mat4x4(f32)) bool {
+        const corners: []const nz.Vec3(f32) = &.{
+            .{ 1, 1, 1 },
+            .{ 1, 1, -1 },
+            .{ 1, -1, 1 },
+            .{ 1, -1, -1 },
+            .{ -1, 1, 1 },
+            .{ -1, 1, -1 },
+            .{ -1, -1, 1 },
+            .{ -1, -1, -1 },
+        };
+
+        var matrix = view_proj.mul(self.transform.toMat4x4());
+
+        var min: nz.Vec3(f32) = .{ 1.5, 1.5, 1.5 };
+        var max: nz.Vec3(f32) = .{ -1.5, -1.5, -1.5 };
+
+        for (corners) |corner| {
+            // project each corner into clip space
+            const tmp: nz.Vec3(f32) = (self.bounds.origin + (corner * self.bounds.extents));
+            var v: nz.Vec4(f32) = matrix.mulVec4(.{ tmp[0], tmp[1], tmp[2], 1 });
+
+            // perspective correctio
+            // TODO: FIX UR DAMN MULTI CURSER!
+            v = v / v.w;
+            v.y = v.y / v.w;
+            v.z = v.z / v.w;
+
+            min = @min(.{ v, v.y, v.z }, min);
+            max = @max(.{ v, v.y, v.z }, max);
+        }
+
+        // check the clip space box is within the view
+        if (min.z > 1 or max.z < 0 or min.x > 1 or max.x < -1 or min.y > 1 or max.y < -1) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 };
 
 pub const DrawContext = struct {

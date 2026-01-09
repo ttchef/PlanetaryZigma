@@ -25,9 +25,16 @@ pub const GPUDrawPushConstants = extern struct {
     vertex_buffer: c.VkDeviceAddress,
 };
 
+pub const Bounds = struct {
+    origin: nz.Vec3(f32),
+    sphere_radius: f32,
+    extents: nz.Vec3(f32),
+};
+
 pub const GeoSurface = struct {
     index_start: i32,
     index_count: i32,
+    bounds: Bounds,
     material: *Material.Instance,
 };
 

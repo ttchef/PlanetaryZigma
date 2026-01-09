@@ -101,7 +101,7 @@ pub const GltfMetallicRoughness = struct {
         mesh_pipeline_config.enableDepthTesting(vk.VK_TRUE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
         const opaque_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
-        mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE);
+        mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
         mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
         const transparent_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
@@ -129,9 +129,9 @@ pub const GltfMetallicRoughness = struct {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
         if (pass == .transparent) {
+            std.debug.print("added transparent_pipeline\n", .{});
             material_data_instance.pipeline = &self.transparent_pipeline;
         } else {
-            std.debug.print("added transparent_pipeline\n", .{});
             material_data_instance.pipeline = &self.opaque_pipeline;
         }
         material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
