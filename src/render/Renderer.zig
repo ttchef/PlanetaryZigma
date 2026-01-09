@@ -632,10 +632,7 @@ pub fn draw(self: *@This(), time: f32) !void {
         .position = .{ 0, 0, -2 },
         .rotation = .{ 0, 0, 0 },
     };
-    // try self.loaded_nodes[0].draw(self.allocator, top_matrix, &self.mainDrawContext);
-    var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
 
-    try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
     const view = self.camera.getViewMatrix();
     // const view = nz.Mat4x4(f32).identity;
     var projection = nz.Mat4x4(f32).perspective(
@@ -652,6 +649,8 @@ pub fn draw(self: *@This(), time: f32) !void {
     self.scene_data.sunlight_color = @splat(1);
     self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
 
+    var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
+    try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
     //TODO: fix ur shit. Transparent pipelines are broken.
     self.last_index_buffer = null;
     self.last_material = null;
@@ -726,6 +725,7 @@ pub fn draw(self: *@This(), time: f32) !void {
 fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObject), cmd_buffer: vk.c.VkCommandBuffer, globalDescriptor: vk.c.VkDescriptorSet) void {
     var count: usize = 0;
     for (render_objects.items[0..render_objects.items.len]) |render_obj| {
+        if (render_obj.isVisible(.new(self.scene_data.viewproj)) == false) continue;
         if (render_obj.material_instance != self.last_material) {
             self.last_material = render_obj.material_instance;
 

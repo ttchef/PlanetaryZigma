@@ -315,12 +315,6 @@ pub fn init(
             var idx_acc = if (primitive.indices) |indices| indices.* else continue;
             var pos_acc = if (findAttributeAccessor(primitive, "POSITION")) |position| position.* else continue;
 
-            var new_surface: vk.Mesh.GeoSurface = .{
-                .index_start = @intCast(indices_list.items.len),
-                .index_count = @intCast(idx_acc.count),
-                .material = materials.items[0],
-            };
-
             try vertices_list.resize(allocator, initial_vtx + pos_acc.count);
             for (0..pos_acc.count) |i| {
                 const pos3 = readVec3F32(&pos_acc, i);
@@ -361,6 +355,24 @@ pub fn init(
                     vertices_list.items[initial_vtx + i].color = c4;
                 }
             }
+
+            var min_pos: nz.Vec3(f32) = vertices_list.items[initial_vtx].position;
+            var max_pos: nz.Vec3(f32) = vertices_list.items[initial_vtx].position;
+            for (initial_vtx..vertices_list.items.len) |i| {
+                min_pos = @min(min_pos, @as(nz.Vec3(f32), vertices_list.items[i].position));
+                max_pos = @max(max_pos, @as(nz.Vec3(f32), vertices_list.items[i].position));
+            }
+            const extent = (max_pos - min_pos) / @as(nz.Vec3(f32), .{ 2, 2, 2 });
+            var new_surface: vk.Mesh.GeoSurface = .{
+                .index_start = @intCast(indices_list.items.len),
+                .index_count = @intCast(idx_acc.count),
+                .material = materials.items[0],
+                .bounds = .{
+                    .origin = (max_pos + min_pos) / @as(nz.Vec3(f32), .{ 2, 2, 2 }),
+                    .extents = extent,
+                    .sphere_radius = nz.vec.length(extent),
+                },
+            };
 
             if (primitive.material != null) {
                 const material_idx = primitive.material - data.materials;
