@@ -21,6 +21,7 @@ pub fn main() !void {
     defer watcher.deinit();
     var renderer_init = try watcher.lookup(Renderer.c.Init, "init");
     var renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
+    var proccees_camera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -32,8 +33,8 @@ pub fn main() !void {
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
-    var spacetime: Spacetime = try .init(allocator);
-    defer spacetime.deinit(allocator);
+    // var spacetime: Spacetime = try .init(allocator);
+    // defer spacetime.deinit(allocator);
 
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
@@ -124,7 +125,7 @@ pub fn main() !void {
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
-            proccessCamera(&renderer.camera, window);
+            _ = proccees_camera(&renderer, window);
             try Renderer.c.toErr(renderer_draw(&renderer, time));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
@@ -158,53 +159,10 @@ pub fn main() !void {
             try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
             // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
+            proccees_camera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
         }
     }
     renderer.deinit(allocator);
-}
-
-pub fn proccessCamera(camera: *Renderer.Camera, window: *glfw.Window) void {
-    // ---- Mouse movement ----
-    _ = glfw.c.glfwSetCursorPosCallback(window.toC(), cursorPosCallback);
-
-    camera.yaw += delta_x / 200.0;
-    camera.pitch -= delta_y / 200.0;
-    camera.pitch = 0;
-
-    if (glfw.io.Key.left.get(window)) camera.yaw -= 0.01;
-    if (glfw.io.Key.right.get(window)) camera.yaw += 0.01;
-    // camera.yaw = 0;
-
-    camera.pitch = std.math.clamp(camera.pitch, -1.55, 1.55);
-
-    // ---- Keyboard movement ----
-    const speed: f32 = 0.1;
-
-    if (glfw.io.Key.w.get(window)) camera.velocity[2] -= speed;
-    if (glfw.io.Key.s.get(window)) camera.velocity[2] += speed;
-    if (glfw.io.Key.a.get(window)) camera.velocity[0] -= speed;
-    if (glfw.io.Key.d.get(window)) camera.velocity[0] += speed;
-    if (glfw.io.Key.q.get(window)) camera.position[1] -= 0.5;
-    if (glfw.io.Key.e.get(window)) camera.position[1] += 0.5;
-    const len = @typeInfo(@TypeOf(camera.velocity)).vector.len;
-    inline for (0..len) |i| {
-        if (camera.velocity[i] > 0) {
-            camera.velocity[i] = std.math.clamp(camera.velocity[i] - speed / 2, 0, 5);
-        } else if (camera.velocity[i] < 0) {
-            camera.velocity[i] = std.math.clamp(camera.velocity[i] + speed / 2, -5, 0);
-        }
-    }
-
-    const cameraRotation = camera.getRotationMatrix();
-    // const cameraRotation = nz.Mat4x4(f32).identity;
-    const dir4: nz.Vec4(f32) = .{
-        camera.velocity[0],
-        camera.velocity[1],
-        camera.velocity[2],
-        0.0,
-    };
-    const moved4: nz.Vec4(f32) = cameraRotation.mulVec4(dir4);
-    camera.position += .{ moved4[0], moved4[1], moved4[2] };
 }
 
 export fn cursorPosCallback(

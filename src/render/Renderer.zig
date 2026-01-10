@@ -27,7 +27,6 @@ materialResources: vk.Material.GltfMetallicRoughness.Resources,
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
-meshes: std.ArrayList(vk.Mesh) = .empty,
 graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
@@ -41,9 +40,7 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
-mainDrawContext: vk.Node.DrawContext = undefined,
-loaded_nodes: [16]vk.Node = undefined,
-node_count: usize = 0,
+mainDrawContext: vk.Node.DrawContext,
 camera: Camera = .{ .position = .{ 0, 0, 0 } },
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
@@ -423,6 +420,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .materialResources = materialResources,
         .defaultData = defaultData,
         .loaded_scenes = loaded_scenes,
+        .mainDrawContext = .{},
     };
 }
 
@@ -458,11 +456,6 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.loaded_scenes.deinit(allocator);
 
     self.globalDescriptorAllocator.deinit(self.device);
-
-    for (self.meshes.items) |mesh| {
-        mesh.deinit(self.vma.handle);
-    }
-    self.meshes.deinit(allocator);
 
     self.vma.deinit();
     self.device.deinit();
@@ -629,7 +622,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     self.mainDrawContext.clear();
     const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -2 },
+        .position = .{ 0, 0, -5 },
         .rotation = .{ 0, 0, 0 },
     };
 
@@ -784,12 +777,11 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
             vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
         }
 
-        // std.debug.print("world_matrix: {any}\n", .{opaque_draw.transform.toMat4x4().d});
-
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
             .world_matrix = render_obj.transform.toMat4x4().d,
             .vertex_buffer = render_obj.vertex_buffer_address,
         };
+
         vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
         vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
