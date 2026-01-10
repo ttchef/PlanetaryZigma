@@ -92,7 +92,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const vma: vk.Vma = try .init(instance, physical_device, device);
     const swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
 
-    const draw_image: vk.Image = try .init(
+    var draw_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -104,7 +104,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    const depth_image: vk.Image = try .init(
+    var depth_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_D32_SFLOAT,
@@ -116,7 +116,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //3 default textures, white, grey, black. 1 pixel each
     var white: u32 = nz.color.Rgba(u8).white.toU32();
-    const _whiteImage: vk.Image = try .init(
+    var _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -129,7 +129,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
     var grey: u32 = nz.color.Rgba(u8).grey.toU32();
-    const _greyImage: vk.Image = try .init(
+    var _greyImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -141,7 +141,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _greyImage.uploadDataToImage(device, vma.handle, &grey);
 
     var black: u32 = nz.color.Rgba(u8).black.toU32();
-    const _blackImage: vk.Image = try .init(
+    var _blackImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -161,7 +161,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         }
     }
 
-    const _errorCheckerboardImage: vk.Image = try .init(
+    var _errorCheckerboardImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,

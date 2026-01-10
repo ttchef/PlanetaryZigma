@@ -477,15 +477,17 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
 
-        const out_image: vk.Image = try .init(
+        var out_image: vk.Image = try .init(
             vma.handle,
             device,
             vk.c.VK_FORMAT_R8G8B8A8_UNORM,
             extent,
-            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-            false,
+            true,
         );
+
+        out_image.image_extent = extent;
         try out_image.uploadDataToImage(device, vma.handle, pixels);
         return out_image;
     } else if (image.buffer_view != null) {
@@ -500,16 +502,16 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         defer stb.stbi_image_free(pixels);
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
-
-        const out_image: vk.Image = try .init(
+        var out_image: vk.Image = try .init(
             vma.handle,
             device,
             vk.c.VK_FORMAT_R8G8B8A8_UNORM,
             extent,
-            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-            false,
+            true,
         );
+
         try out_image.uploadDataToImage(device, vma.handle, pixels);
         return out_image;
     }
