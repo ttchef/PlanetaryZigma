@@ -86,11 +86,7 @@ pub const RenderObject = struct {
         }
 
         // check the clip space box is within the view
-        if (min[2] > 1 or max[0] < 0 or min[1] > 1 or max[1] < -1 or min[0] > 1 or max[2] < -1) {
-            return false;
-        } else {
-            return true;
-        }
+        return !(min[2] > 1 or max[2] < 0 or min[0] > 1 or max[0] < -1 or min[1] > 1 or max[1] < -1);
     }
 };
 

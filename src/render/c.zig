@@ -1,6 +1,6 @@
 const std = @import("std");
 const Renderer = @import("Renderer.zig");
-const glfw = @import("glfw");
+const sdl = @import("sdl");
 
 pub const SUCCESS: u16 = 0;
 
@@ -10,7 +10,7 @@ pub fn toErr(err: u16) !void {
 
 pub const Init = *const fn (*Renderer, *const std.mem.Allocator, *const Renderer.Config) callconv(.c) u16;
 pub const Draw = *const fn (*Renderer, f32) callconv(.c) u16;
-pub const FreqUpdate = *const fn (*Renderer, *glfw.Window) callconv(.c) u16;
+pub const FreqUpdate = *const fn (*Renderer, *sdl.SDL_Window) callconv(.c) u16;
 
 pub export fn init(renderer: *Renderer, allocator: *const std.mem.Allocator, config: *const Renderer.Config) u16 {
     renderer.* = Renderer.init(allocator.*, config.*) catch |err| return @intFromError(err);
@@ -22,7 +22,7 @@ pub export fn draw(renderer: *Renderer, time: f32) u16 {
     return SUCCESS;
 }
 
-pub export fn freqUpdate(renderer: *Renderer, window: *glfw.Window) u16 {
+pub export fn freqUpdate(renderer: *Renderer, window: *sdl.SDL_Window) u16 {
     renderer.camera.proccessCamera(window);
     return SUCCESS;
 }

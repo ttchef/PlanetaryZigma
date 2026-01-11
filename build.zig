@@ -5,7 +5,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const zig_glfw = b.dependency("zig_glfw", .{ .target = target, .optimize = optimize, .vulkan = true }).module("zig_glfw");
-    const zig_opengl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
     const ecs = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
     const vulkan_header_dep = b.dependency("vulkan_headers", .{});
@@ -50,6 +49,26 @@ pub fn build(b: *std.Build) void {
     });
     stb.addIncludePath(b.dependency("stb", .{}).path("."));
 
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        //.preferred_linkage = .static,
+        //.strip = null,
+        //.sanitize_c = null,
+        //.pic = null,
+        //.lto = null,
+        //.emscripten_pthreads = false,
+    });
+    const sdl_header = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#include <SDL3/SDL.h>
+            \\#include <SDL3/SDL_vulkan.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    sdl_header.addIncludePath(sdl_dep.path("include/"));
+
     const cargo_cmd = b.addSystemCommand(&.{
         "cargo", "build", "--release",
     });
@@ -62,7 +81,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "glfw", .module = zig_glfw },
-                .{ .name = "gl", .module = zig_opengl },
+                .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
@@ -77,6 +96,7 @@ pub fn build(b: *std.Build) void {
     });
 
     renderer.root_module.linkSystemLibrary("vulkan", .{});
+    renderer.root_module.linkSystemLibrary("SDL3", .{});
 
     b.installArtifact(renderer);
 
@@ -88,7 +108,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "glfw", .module = zig_glfw },
-                .{ .name = "gl", .module = zig_opengl },
+                .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
@@ -107,6 +127,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addLibraryPath(b.path("target/release/"));
     exe.root_module.linkSystemLibrary("spacetime", .{});
     exe.root_module.linkSystemLibrary("vulkan", .{});
+    exe.root_module.linkSystemLibrary("SDL3", .{});
 
     renderer.addCSourceFile(.{
         .file = b.addWriteFiles().add("vma_impl.cpp",

@@ -17,7 +17,7 @@ pub fn init(
     image_view_mask: vk.c.VkImageAspectFlags,
     mip_mapped: bool,
 ) !@This() {
-    var img_info: vk.c.VkImageCreateInfo = .{
+    var image_info: vk.c.VkImageCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = null,
         .imageType = vk.c.VK_IMAGE_TYPE_2D,
@@ -32,7 +32,7 @@ pub fn init(
 
     const max: f32 = @floatFromInt(@max(extent.width, extent.height));
     if (mip_mapped) {
-        img_info.mipLevels = @as(u32, @intFromFloat(@floor(@log2(max)))) + 1;
+        image_info.mipLevels = @as(u32, @intFromFloat(@floor(@log2(max)))) + 1;
     }
 
     var vma_alloc_info: vk.Vma.c.VmaAllocationCreateInfo = .{
@@ -44,7 +44,7 @@ pub fn init(
     var vma_image_allocation: vk.Vma.Allocation = undefined;
     _ = vk.Vma.c.vmaCreateImage(
         vma,
-        @ptrCast(&img_info),
+        @ptrCast(&image_info),
         &vma_alloc_info,
         @ptrCast(&image),
         &vma_image_allocation,
@@ -58,7 +58,7 @@ pub fn init(
         .format = format,
         .subresourceRange = .{
             .baseMipLevel = 0,
-            .levelCount = img_info.mipLevels,
+            .levelCount = image_info.mipLevels,
             .baseArrayLayer = 0,
             .layerCount = 1,
             .aspectMask = image_view_mask,
@@ -201,54 +201,55 @@ fn generateMipmaps(self: *@This(), cmd_buffer: vk.c.VkCommandBuffer, image_size:
         };
 
         vk.c.vkCmdPipelineBarrier2(cmd_buffer, &dep_info);
-        if (mip < mip_levels - 1) {
-            var blit_info: vk.c.VkBlitImageInfo2 = .{
-                .sType = vk.c.VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+
+        if (mip >= mip_levels - 1) continue;
+
+        var blit_info: vk.c.VkBlitImageInfo2 = .{
+            .sType = vk.c.VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+            .pNext = null,
+            .pRegions = &.{
+                .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
                 .pNext = null,
-                .pRegions = &.{
-                    .sType = vk.c.VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-                    .pNext = null,
-                    .srcOffsets = .{
-                        .{},
-                        .{
-                            .x = @intCast(size.width),
-                            .y = @intCast(size.height),
-                            .z = 1,
-                        },
-                    },
-                    .dstOffsets = .{
-                        .{},
-                        .{
-                            .x = @intCast(half_size.width),
-                            .y = @intCast(half_size.height),
-                            .z = 1,
-                        },
-                    },
-                    .srcSubresource = .{
-                        .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                        .mipLevel = @intCast(mip),
-                    },
-                    .dstSubresource = .{
-                        .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                        .mipLevel = @intCast(mip + 1),
+                .srcOffsets = .{
+                    .{},
+                    .{
+                        .x = @intCast(size.width),
+                        .y = @intCast(size.height),
+                        .z = 1,
                     },
                 },
-                .dstImage = self.image,
-                .dstImageLayout = vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .srcImage = self.image,
-                .srcImageLayout = vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .filter = vk.c.VK_FILTER_LINEAR,
-                .regionCount = 1,
-            };
+                .dstOffsets = .{
+                    .{},
+                    .{
+                        .x = @intCast(half_size.width),
+                        .y = @intCast(half_size.height),
+                        .z = 1,
+                    },
+                },
+                .srcSubresource = .{
+                    .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                    .mipLevel = @intCast(mip),
+                },
+                .dstSubresource = .{
+                    .aspectMask = vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                    .mipLevel = @intCast(mip + 1),
+                },
+            },
+            .dstImage = self.image,
+            .dstImageLayout = vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcImage = self.image,
+            .srcImageLayout = vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .filter = vk.c.VK_FILTER_LINEAR,
+            .regionCount = 1,
+        };
 
-            vk.c.vkCmdBlitImage2(cmd_buffer, &blit_info);
+        vk.c.vkCmdBlitImage2(cmd_buffer, &blit_info);
 
-            size = half_size;
-        }
+        size = half_size;
     }
     // transition all mip levels into the final read_only layout
     {

@@ -1,6 +1,6 @@
 const std = @import("std");
 const nz = @import("numz");
-const glfw = @import("glfw");
+const sdl = @import("sdl");
 
 velocity: nz.Vec3(f32) = @splat(0),
 position: nz.Vec3(f32) = @splat(0),
@@ -21,6 +21,7 @@ pub fn getRotationMatrix(self: *@This()) nz.Mat4x4(f32) {
     return nz.Mat4x4(f32).fromQuaternion(yawRotation.toVec()).mul(nz.Mat4x4(f32).fromQuaternion(pitchRotation.toVec()));
 }
 
+//TODO: FIX CAMERA LOL XD
 pub fn proccessCamera(self: *@This(), window: *glfw.Window) void {
     // ---- Mouse movement ----
     // _ = glfw.c.glfwSetCursorPosCallback(window.toC(), cursorPosCallback);
@@ -64,4 +65,92 @@ pub fn proccessCamera(self: *@This(), window: *glfw.Window) void {
     };
     const moved4: nz.Vec4(f32) = camera_rotation.mulVec4(dir4);
     self.position += .{ moved4[0], moved4[1], moved4[2] };
+}
+pub fn freeCameraSystem(world: *World, delta_time: f32, pipeline: gfx.Pipeline, aspect: f32) !void {
+    var it = world.query(&[_]type{ Transform(f32), FreeCamera });
+    while (it.next()) |item| {
+        const transform = item.get(Transform(f32));
+        const camera = item.get(FreeCamera);
+
+        const pitch = &transform.rotation[0];
+        const yaw = &transform.rotation[1];
+
+        const mouse = sdl.SDL_GetMouseState(null, null);
+
+        var relative_x: f32 = undefined;
+        var relative_y: f32 = undefined;
+        _ = sdl.SDL_GetRelativeMouseState(&relative_x, &relative_y);
+
+        if (mouse == sdl.SDL_BUTTON_RIGHT) {
+            if (!sdl.SDL_HideCursor()) return error.SdlHideCursor;
+
+            yaw.* += relative_x * camera.sensitivity;
+            pitch.* += relative_y * camera.sensitivity;
+            camera.was_rotating = true;
+        } else if (camera.was_rotating) {
+            _ = sdl.SDL_GetRelativeMouseState(null, null);
+            camera.was_rotating = false;
+            if (!sdl.SDL_ShowCursor()) return error.SdlShowCursor;
+        }
+
+        pitch.* = std.math.clamp(pitch.*, -89.9, 89.9);
+
+        const keyboard = sdl.SDL_GetKeyboardState(null);
+
+        const yaw_rad = std.math.degreesToRadians(yaw.*);
+        const pitch_rad = std.math.degreesToRadians(pitch.*);
+
+        const forward = nz.normalize(nz.Vec3(f32){
+            @cos(pitch_rad) * @sin(yaw_rad),
+            -@sin(pitch_rad),
+            -@cos(pitch_rad) * @cos(yaw_rad),
+        });
+
+        const right = nz.normalize(nz.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
+
+        const up = nz.normalize(nz.cross(right, forward));
+
+        var move = nz.Vec3(f32){ 0, 0, 0 };
+        const velocity = camera.speed * delta_time;
+
+        if (keyboard[sdl.SDL_SCANCODE_W])
+            move -= nz.scale(forward, velocity);
+        if (keyboard[sdl.SDL_SCANCODE_S])
+            move += nz.scale(forward, velocity);
+        if (keyboard[sdl.SDL_SCANCODE_A])
+            move += nz.scale(right, velocity);
+        if (keyboard[sdl.SDL_SCANCODE_D])
+            move -= nz.scale(right, velocity);
+        if (keyboard[sdl.SDL_SCANCODE_SPACE])
+            move -= nz.scale(up, velocity);
+        if (keyboard[sdl.SDL_SCANCODE_LCTRL])
+            move += nz.scale(up, velocity);
+
+        if (keyboard[sdl.SDL_SCANCODE_UP])
+            camera.speed += 10;
+        if (keyboard[sdl.SDL_SCANCODE_DOWN])
+            camera.speed -= 10;
+
+        const speed_multiplier: f32 = @floatFromInt(@intFromBool(keyboard[sdl.SDL_SCANCODE_LSHIFT]));
+
+        camera.speed = std.math.clamp(camera.speed, 0, 1000);
+
+        transform.position += nz.scale(move, speed_multiplier + 1);
+
+        if (keyboard[sdl.SDL_SCANCODE_R]) {
+            yaw.* = 0;
+            pitch.* = 0;
+            transform.position = .{ 0, 0, 0 };
+        }
+
+        var view = nz.Mat4(f32).identity(1);
+        view = view.mul(nz.Mat4(f32).rotate(std.math.degreesToRadians(pitch.*), .{ 1, 0, 0 }));
+        view = view.mul(nz.Mat4(f32).rotate(std.math.degreesToRadians(yaw.*), .{ 0, 1, 0 }));
+        view = view.mul(nz.Mat4(f32).translate(transform.position));
+
+        const projection = nz.Mat4(f32).perspective(std.math.degreesToRadians(45.0), aspect, 4, 4000.0);
+
+        try pipeline.setUniform("u_projection", .{ .mat4 = .{ projection.d, false } });
+        try pipeline.setUniform("u_view", .{ .mat4 = .{ view.d, false } });
+    }
 }

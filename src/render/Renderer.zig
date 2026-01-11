@@ -12,13 +12,6 @@ comptime {
     _ = c;
 }
 
-//TODO: Find out where this should be?
-const RenderObject = struct {
-    mesh: vk.Mesh,
-    transform: nz.Mat4x4(f32),
-    material: vk.Material.Instance,
-};
-
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 defaultData: vk.Material.Instance,
 metalRoughMaterial: vk.Material.GltfMetallicRoughness,

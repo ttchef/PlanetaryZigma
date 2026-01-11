@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("glfw");
+const sdl = @import("sdl");
 const nz = @import("numz");
 const physics = @import("physics.zig");
 const ecs = @import("ecs");
@@ -16,20 +16,32 @@ var last_x: f64 = 0;
 var last_y: f64 = 0;
 var first_mouse: bool = true;
 
+pub fn sdlCheck(result: bool) !void {
+    if (result) return;
+    const err_message = sdl.SDL_GetError();
+    std.log.scoped(.sdl).err("{s}", .{err_message});
+    return error.Sdl;
+}
+
 pub fn main() !void {
     var watcher: Watcher.Game = try .init();
     defer watcher.deinit();
-    var renderer_init = try watcher.lookup(Renderer.c.Init, "init");
-    var renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
-    var proccees_camera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
+    var rendererInit = try watcher.lookup(Renderer.c.Init, "init");
+    var rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
+    var procceesCamera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
     var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = false, .safety = false }) = .init;
     defer _ = gpa.deinit();
-
     const allocator = gpa.allocator();
+
+    try sdlCheck(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
+    defer sdl.SDL_Quit();
+    const window: *sdl.SDL_Window = sdl.SDL_CreateWindow("PlanetaryZigma", 600, 600, sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE) orelse return error.SdlCreateWindow;
+    defer sdl.SDL_DestroyWindow(window);
+
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
@@ -39,38 +51,18 @@ pub fn main() !void {
     const e = world.add() catch return;
     e.set(nz.Transform3D(f32), .{}, world);
 
-    if (std.process.hasEnvVarConstant("ENABLE_VULKAN_RENDERDOC_CAPTURE")) {
-        glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_X11);
-    } else {
-        glfw.c.glfwInitHint(glfw.c.GLFW_PLATFORM, glfw.c.GLFW_PLATFORM_WAYLAND);
-    }
-
-    try glfw.init();
-    defer glfw.deinit();
-    glfw.Window.Hint.set(.{
-        .client_api = .none,
-    });
-    glfw.Window.Hint.set(.{ .resizable = true });
-    const window: *glfw.Window = try .init(.{
-        .title = "Hello, world!",
-        .size = .{ .width = 900, .height = 800 },
-    });
-    defer window.deinit();
-
     var renderer_config: Renderer.Config = .{
         .instance = .{
             .extensions = blk: {
                 var arr: [8][*:0]const u8 = undefined;
-                arr[0] = "VK_KHR_surface";
-                arr[1] = "VK_EXT_debug_utils";
-                arr[2] = "VK_KHR_wayland_surface";
+                arr[0] = "VK_EXT_debug_utils";
+                var count: usize = 1;
 
-                var count: usize = 2;
-                var glfw_ext_count: u32 = 0;
-                const glfw_exts = glfw.c.glfwGetRequiredInstanceExtensions(&glfw_ext_count);
+                var sdl_ext_count: u32 = 0;
+                const sdl_exts = sdl.SDL_Vulkan_GetInstanceExtensions(&sdl_ext_count);
 
-                if (glfw_ext_count != 0) {
-                    for (glfw_exts[0..glfw_ext_count]) |ext| {
+                if (sdl_ext_count != 0) {
+                    for (sdl_exts[0..sdl_ext_count]) |ext| {
                         arr[count] = @ptrCast(ext);
                         count += 1;
                     }
@@ -103,8 +95,8 @@ pub fn main() !void {
             .init = initVulkanSurface,
         },
         .swapchain = .{
-            .width = @intCast(window.getSize().width),
-            .heigth = @intCast(window.getSize().height),
+            .width = 600,
+            .heigth = 600,
         },
     };
 
@@ -116,9 +108,25 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
     var accumulated_time: f32 = 0;
     const seconds_per_update = 0.016;
-    while (!window.shouldClose()) {
-        glfw.io.events.poll();
-        if (glfw.io.Key.escape.get(window)) break;
+    var event: sdl.SDL_Event = undefined;
+
+    main_loop: while (true) {
+        while (sdl.SDL_PollEvent(&event)) switch (event.type) {
+            sdl.SDL_EVENT_WINDOW_CLOSE_REQUESTED => break :main_loop,
+            sdl.SDL_EVENT_WINDOW_RESIZED => {
+                try renderer.reCreateSwapchain(@intCast(event.window.data1), @intCast(event.window.data2));
+                // if (renderer.resize_request) {
+                //     const size =
+                //     glfw.Window.getSize(window);
+                //     try renderer.reCreateSwapchain(size.width, size.height);
+                //     renderer.resize_request = false;
+                // }
+            },
+            sdl.SDL_EVENT_KEY_DOWN => {
+                if (event.key.key == sdl.SDLK_ESCAPE) break :main_loop;
+            },
+            else => {},
+        };
 
         const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
@@ -131,11 +139,7 @@ pub fn main() !void {
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
         }
-        if (renderer.resize_request) {
-            const size = glfw.Window.getSize(window);
-            try renderer.reCreateSwapchain(size.width, size.height);
-            renderer.resize_request = false;
-        }
+
         //     try proccessEvents(&spacetime, &world);
 
         //     Render.update(window, delta_time);
@@ -165,27 +169,27 @@ pub fn main() !void {
     renderer.deinit(allocator);
 }
 
-export fn cursorPosCallback(
-    window: ?*glfw.c.GLFWwindow,
-    xpos: f64,
-    ypos: f64,
-) callconv(.c) void {
-    _ = window;
-    if (first_mouse) {
-        last_x = xpos;
-        last_y = ypos;
-        first_mouse = false;
-        return;
-    }
-
-    delta_x = @floatCast(xpos - last_x);
-    delta_y = @floatCast(ypos - last_y);
-
-    last_x = xpos;
-    last_y = ypos;
-
-    // store deltas somewhere global / ring buffer / input state
-}
+// export fn cursorPosCallback(
+//     window: ?*glfw.c.GLFWwindow,
+//     xpos: f64,
+//     ypos: f64,
+// ) callconv(.c) void {
+//     _ = window;
+//     if (first_mouse) {
+//         last_x = xpos;
+//         last_y = ypos;
+//         first_mouse = false;
+//         return;
+//     }
+//
+//     delta_x = @floatCast(xpos - last_x);
+//     delta_y = @floatCast(ypos - last_y);
+//
+//     last_x = xpos;
+//     last_y = ypos;
+//
+//     // store deltas somewhere global / ring buffer / input state
+// }
 
 pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
     spacetime.events.lock.lock();
