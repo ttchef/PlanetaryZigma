@@ -211,7 +211,6 @@ pub fn init(
     try if (cgltf.cgltf_load_buffers(&options, out_data.*, c_path) != cgltf.cgltf_result_success) error.GltfLoad;
     try if (cgltf.cgltf_validate(out_data.*) != cgltf.cgltf_result_success) error.CltfValidation;
     try if (out_data.? == null or out_data.*.? == null) error.CPointerData;
-    std.debug.print("images: {d}\n", .{out_data.*.*.images_count});
     var data: cgltf.cgltf_data = out_data.*.*;
 
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
@@ -241,12 +240,17 @@ pub fn init(
 
     var images: std.ArrayList(vk.Image) = .empty;
     if (data.images_count != 0) {
-        for (data.images[0..data.images_count]) |image| {
-            // _ = image;
+        for (data.images[0..data.images_count], 0..data.images_count) |image, i| {
             const img = loadImage(vma, device, image) catch TMP_IMAGES[0];
             try images.append(allocator, img);
-            if (image.name) |name_z| {
-                try file.images.put(allocator, std.mem.span(name_z), img);
+            if (image.name != null) {
+                const name = std.mem.span(image.name);
+                try file.images.put(allocator, name, img);
+            } else {
+                var buf: [32]u8 = undefined;
+                const name = try std.fmt.bufPrint(&buf, "{}", .{i});
+
+                try file.images.put(allocator, name, img);
             }
         }
     } else {
@@ -315,6 +319,17 @@ pub fn init(
             var idx_acc = if (primitive.indices) |indices| indices.* else continue;
             var pos_acc = if (findAttributeAccessor(primitive, "POSITION")) |position| position.* else continue;
 
+            var new_surface: vk.Mesh.GeoSurface = .{
+                .index_start = @intCast(indices_list.items.len),
+                .index_count = @intCast(idx_acc.count),
+                .material = materials.items[0],
+                .bounds = .{
+                    .origin = @splat(0),
+                    .extents = @splat(0),
+                    .sphere_radius = 0,
+                },
+            };
+
             try vertices_list.resize(allocator, initial_vtx + pos_acc.count);
             for (0..pos_acc.count) |i| {
                 const pos3 = readVec3F32(&pos_acc, i);
@@ -363,15 +378,10 @@ pub fn init(
                 max_pos = @max(max_pos, @as(nz.Vec3(f32), vertices_list.items[i].position));
             }
             const extent = (max_pos - min_pos) / @as(nz.Vec3(f32), .{ 2, 2, 2 });
-            var new_surface: vk.Mesh.GeoSurface = .{
-                .index_start = @intCast(indices_list.items.len),
-                .index_count = @intCast(idx_acc.count),
-                .material = materials.items[0],
-                .bounds = .{
-                    .origin = (max_pos + min_pos) / @as(nz.Vec3(f32), .{ 2, 2, 2 }),
-                    .extents = extent,
-                    .sphere_radius = nz.vec.length(extent),
-                },
+            new_surface.bounds = .{
+                .origin = (max_pos + min_pos) / @as(nz.Vec3(f32), .{ 2, 2, 2 }),
+                .extents = extent,
+                .sphere_radius = nz.vec.length(extent),
             };
 
             if (primitive.material != null) {
@@ -467,15 +477,17 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
 
-        const out_image: vk.Image = try .init(
+        var out_image: vk.Image = try .init(
             vma.handle,
             device,
             vk.c.VK_FORMAT_R8G8B8A8_UNORM,
             extent,
-            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-            false,
+            true,
         );
+
+        out_image.image_extent = extent;
         try out_image.uploadDataToImage(device, vma.handle, pixels);
         return out_image;
     } else if (image.buffer_view != null) {
@@ -490,16 +502,16 @@ pub fn loadImage(vma: vk.Vma, device: vk.Device, image: cgltf.cgltf_image) !vk.I
         defer stb.stbi_image_free(pixels);
         try if (pixels == null) error.LoadingStbi;
         const extent: vk.c.VkExtent3D = .{ .width = @intCast(width), .height = @intCast(height), .depth = 1 };
-
-        const out_image: vk.Image = try .init(
+        var out_image: vk.Image = try .init(
             vma.handle,
             device,
             vk.c.VK_FORMAT_R8G8B8A8_UNORM,
             extent,
-            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
             vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-            false,
+            true,
         );
+
         try out_image.uploadDataToImage(device, vma.handle, pixels);
         return out_image;
     }

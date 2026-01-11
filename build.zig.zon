@@ -8,10 +8,6 @@
             .url = "git+https://github.com/HaraldWik/zig-glfw#91728e2a95ee16bfcd6f88d7c2ab8b0512691420",
             .hash = "zig_glfw-0.1.0-u6zPw6nAAABYAXVxfoDm5ATLz0xOqN8R56drjMYHdurU",
         },
-        .zig_opengl = .{
-            .url = "git+https://github.com/HaraldWik/zig-opengl#8b5e8bc1cb461bdf2be79d0735595678c758eaf1",
-            .hash = "zig_opengl-0.0.0-WXQ8j4w8CADfsWyKsMbGvPa0xOuxhQ61Kil2FKzmQOW1",
-        },
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#40543c82c35c876ecef2bd997fecc9f59654c446",
             .hash = "numz-0.0.2-V-sGm1elAADqPeYSSOde6-gOLHy-Rb1nXi2yb1mL7bs1",
@@ -39,6 +35,10 @@
         .cgltf = .{
             .url = "git+https://github.com/jkuhlmann/cgltf.git",
             .hash = "N-V-__8AAEpsBAA5vmDdnUJyrMbhpss88BWHjCHd5X15vEst",
+        },
+        .sdl = .{
+            .url = "git+https://github.com/libsdl-org/SDL#ca537d651b82f28bc280685391665eb25c856e00",
+            .hash = "N-V-__8AAPWd8gKEnPWYHgaXRLb2fVuO6VrJ6W8yvIjDA8Uu",
         },
     },
     .paths = .{

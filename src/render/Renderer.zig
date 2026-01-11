@@ -12,13 +12,6 @@ comptime {
     _ = c;
 }
 
-//TODO: Find out where this should be?
-const RenderObject = struct {
-    mesh: vk.Mesh,
-    transform: nz.Mat4x4(f32),
-    material: vk.Material.Instance,
-};
-
 //TODO: WILL REMOVE (but exist temporarly for the learnding):
 defaultData: vk.Material.Instance,
 metalRoughMaterial: vk.Material.GltfMetallicRoughness,
@@ -27,7 +20,6 @@ materialResources: vk.Material.GltfMetallicRoughness.Resources,
 pipelines: [16]vk.Pipeline,
 max_pipelines: usize = 0,
 current_pipeline: usize = 0,
-meshes: std.ArrayList(vk.Mesh) = .empty,
 graphics_descriptor_layout: vk.descriptor.Layout,
 _singleImageDescriptorLayout: vk.descriptor.Layout,
 _gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
@@ -41,9 +33,7 @@ _greyImage: vk.Image,
 _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
-mainDrawContext: vk.Node.DrawContext = undefined,
-loaded_nodes: [16]vk.Node = undefined,
-node_count: usize = 0,
+mainDrawContext: vk.Node.DrawContext,
 camera: Camera = .{ .position = .{ 0, 0, 0 } },
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
@@ -95,7 +85,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const vma: vk.Vma = try .init(instance, physical_device, device);
     const swapchain: vk.Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
 
-    const draw_image: vk.Image = try .init(
+    var draw_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -107,7 +97,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    const depth_image: vk.Image = try .init(
+    var depth_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_D32_SFLOAT,
@@ -119,7 +109,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //3 default textures, white, grey, black. 1 pixel each
     var white: u32 = nz.color.Rgba(u8).white.toU32();
-    const _whiteImage: vk.Image = try .init(
+    var _whiteImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -132,7 +122,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _whiteImage.uploadDataToImage(device, vma.handle, &white);
 
     var grey: u32 = nz.color.Rgba(u8).grey.toU32();
-    const _greyImage: vk.Image = try .init(
+    var _greyImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -144,7 +134,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try _greyImage.uploadDataToImage(device, vma.handle, &grey);
 
     var black: u32 = nz.color.Rgba(u8).black.toU32();
-    const _blackImage: vk.Image = try .init(
+    var _blackImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -164,7 +154,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         }
     }
 
-    const _errorCheckerboardImage: vk.Image = try .init(
+    var _errorCheckerboardImage: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -423,6 +413,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .materialResources = materialResources,
         .defaultData = defaultData,
         .loaded_scenes = loaded_scenes,
+        .mainDrawContext = .{},
     };
 }
 
@@ -458,11 +449,6 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.loaded_scenes.deinit(allocator);
 
     self.globalDescriptorAllocator.deinit(self.device);
-
-    for (self.meshes.items) |mesh| {
-        mesh.deinit(self.vma.handle);
-    }
-    self.meshes.deinit(allocator);
 
     self.vma.deinit();
     self.device.deinit();
@@ -629,7 +615,7 @@ pub fn draw(self: *@This(), time: f32) !void {
     //TODO: ====================================
     self.mainDrawContext.clear();
     const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -2 },
+        .position = .{ 0, 0, -5 },
         .rotation = .{ 0, 0, 0 },
     };
 
@@ -784,12 +770,11 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
             vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
         }
 
-        // std.debug.print("world_matrix: {any}\n", .{opaque_draw.transform.toMat4x4().d});
-
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
             .world_matrix = render_obj.transform.toMat4x4().d,
             .vertex_buffer = render_obj.vertex_buffer_address,
         };
+
         vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
         vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);

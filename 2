@@ -81,12 +81,17 @@ pub const RenderObject = struct {
             v[1] = v[1] / v[3];
             v[2] = v[2] / v[3];
 
-            min = @min(@as(nz.Vec3(f32), .{ v[0], v[1], v[2] }), min);
+            nz
+                .min = @min(@as(nz.Vec3(f32), .{ v[0], v[1], v[2] }), min);
             max = @max(@as(nz.Vec3(f32), .{ v[0], v[1], v[2] }), max);
         }
 
         // check the clip space box is within the view
-        return !(min[2] > 1 or max[2] < 0 or min[0] > 1 or max[0] < -1 or min[1] > 1 or max[1] < -1);
+        if (min.z > 1 or max.z < 0 or min.x > 1 or max.x < -1 or min.y > 1 or max.y < -1) {
+            return false;
+        } else {
+            return true;
+        }
     }
 };
 
