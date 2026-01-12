@@ -79,7 +79,8 @@ pub const Config = struct {
 pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: vk.DebugMessenger = try .init(instance, config.instance.debug_config);
-    const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
+    // if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
+    const surface: vk.Surface =   
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const vma: vk.Vma = try .init(instance, physical_device, device);
