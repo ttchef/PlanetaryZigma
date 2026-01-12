@@ -101,7 +101,7 @@ pub fn main() !void {
     };
 
     var renderer: Renderer = undefined;
-    try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+    try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
     // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
 
     var time: f32 = 0;
@@ -133,8 +133,8 @@ pub fn main() !void {
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
-            _ = proccees_camera(&renderer, window);
-            try Renderer.c.toErr(renderer_draw(&renderer, time));
+            _ = procceesCamera(&renderer, time);
+            try Renderer.c.toErr(rendererDraw(&renderer, time));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
@@ -153,17 +153,17 @@ pub fn main() !void {
         //     //     // std.debug.print("x pos {d}\n", .{entity.get(nz.Transform3D(f32), world).?.position[0]});
         //     // }
         // renderer.deinit(allocator);
-        // try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+        // try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
         // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
         if (try watcher.listen()) {
             std.debug.print("RELOAD\n", .{});
             renderer.deinit(allocator);
             try watcher.reload();
-            renderer_init = try watcher.lookup(Renderer.c.Init, "init");
-            try Renderer.c.toErr(renderer_init(&renderer, &allocator, &renderer_config));
+            rendererInit = try watcher.lookup(Renderer.c.Init, "init");
+            try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
             // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
-            renderer_draw = try watcher.lookup(Renderer.c.Draw, "draw");
-            proccees_camera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
+            rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
+            procceesCamera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
         }
     }
     renderer.deinit(allocator);
