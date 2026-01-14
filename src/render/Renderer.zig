@@ -34,7 +34,6 @@ _errorCheckerboardImage: vk.Image,
 _defaultSamplerLinear: vk.c.VkSampler,
 _defaultSamplerNearest: vk.c.VkSampler,
 mainDrawContext: vk.Node.DrawContext,
-camera: Camera = .{ .position = .{ 0, 0, 0 } },
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
 allocator: std.mem.Allocator,
@@ -79,8 +78,9 @@ pub const Config = struct {
 pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const instance: vk.Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: vk.DebugMessenger = try .init(instance, config.instance.debug_config);
-    // if (config.surface.init != null and config.surface.data != null) .{ .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)) } else try vk.Surface.init(instance);
-    const surface: vk.Surface =   
+    const surface: vk.Surface = if (config.surface.init != null and config.surface.data != null) .{
+        .handle = @ptrCast(try config.surface.init.?(instance, config.surface.data.?)),
+    } else return error.configSurface;
     const physical_device: vk.PhysicalDevice = try .find(instance, surface);
     const device: vk.Device = try .init(physical_device, config.device.extensions);
     const vma: vk.Vma = try .init(instance, physical_device, device);
@@ -473,7 +473,7 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
     self.draw_image.image_extent.width = @intFromFloat(scaled_width);
 }
 
-pub fn draw(self: *@This(), time: f32) !void {
+pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.Transform3D(f32), time: f32) !void {
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
@@ -620,13 +620,15 @@ pub fn draw(self: *@This(), time: f32) !void {
         .rotation = .{ 0, 0, 0 },
     };
 
-    const view = self.camera.getViewMatrix();
+    const view = Camera.getViewMatrix(camera_transform);
     // const view = nz.Mat4x4(f32).identity;
+    std.debug.print("Camera: {any}\n", .{camera});
+    std.debug.print("transform: {any}\n", .{camera_transform});
     var projection = nz.Mat4x4(f32).perspective(
-        1.5,
+        camera.fov_rad,
         (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
-        0.1,
-        10000,
+        camera.near,
+        camera.far,
     );
     projection.d[5] *= -1;
     self.scene_data.proj = projection.d;
@@ -782,106 +784,4 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
 
         count += 1;
     }
-}
-
-//TODO: move logic away
-pub fn uploadMeshToGPU(self: *@This(), allocator: std.mem.Allocator, path: []const u8) !void {
-    std.debug.print("\nTRY TO ADD MESH {s}\n\n", .{path});
-
-    var attribs = tiny_obj.tinyobj_attrib_t{};
-    var shapes: [*c]tiny_obj.tinyobj_shape_t = null;
-    var num_shapes: usize = 0;
-    var materials: [*c]tiny_obj.tinyobj_material_t = null;
-    var num_materials: usize = 0;
-
-    std.debug.print("DEBUG: About to call tinyobj_parse_obj\n", .{});
-
-    const result = tiny_obj.tinyobj_parse_obj(
-        &attribs,
-        &shapes,
-        &num_shapes,
-        &materials,
-        &num_materials,
-        path.ptr,
-        Obj.tinyObjFileReader,
-        null,
-        tiny_obj.TINYOBJ_FLAG_TRIANGULATE,
-    );
-
-    std.debug.print("DEBUG: tinyobj_parse_obj returned {d}\n", .{result});
-
-    if (result != tiny_obj.TINYOBJ_SUCCESS) {
-        std.log.err("Failed to parse OBJ file: {s}, error code: {d}", .{ path, result });
-        return error.ObjParsed;
-    }
-
-    var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
-    var indecies_list: std.ArrayList(u32) = .empty;
-    defer vertices_list.deinit(allocator);
-    defer indecies_list.deinit(allocator);
-
-    var face_offset: usize = 0;
-    var face_idx: usize = 0;
-    while (face_idx < @as(usize, @intCast(attribs.num_faces))) : (face_idx += 1) {
-        const face_vertex_count: i32 = attribs.face_num_verts[face_idx];
-        if (face_vertex_count == 3) {
-            var i: usize = 0;
-            while (i < 3) : (i += 1) {
-                const index = attribs.faces[face_offset + i];
-
-                const pos_x = attribs.vertices[@as(usize, @intCast(3 * index.v_idx))];
-                const pos_y = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 1))];
-                const pos_z = attribs.vertices[@as(usize, @intCast(3 * index.v_idx + 2))];
-
-                var uv_x: f32 = 0;
-                var uv_y: f32 = 0;
-
-                if (index.vt_idx >= 0) {
-                    uv_x = attribs.texcoords[@intCast(2 * index.vt_idx)];
-                    uv_y = attribs.texcoords[@intCast(2 * index.vt_idx + 1)];
-                }
-
-                const vertex: vk.Mesh.Vertex = .{
-                    .position = .{ pos_x, pos_y, pos_z },
-                    .uv_x = uv_x,
-                    .uv_y = uv_y,
-                };
-
-                try vertices_list.append(allocator, vertex);
-                try indecies_list.append(allocator, @intCast(indecies_list.items.len));
-            }
-            face_offset += @as(usize, @intCast(face_vertex_count));
-        }
-    }
-
-    if (vertices_list.items.len > 0 and indecies_list.items.len > 0) {
-        std.debug.print("\nADDED MESH {s}\n\n", .{path});
-
-        var surface: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
-        try surface.append(allocator, .{ .index_start = 0, .index_count = @intCast(indecies_list.items.len), .material = &self.defaultData });
-
-        try self.meshes.append(allocator, try .init(
-            self.device,
-            surface,
-            self.vma.handle,
-            indecies_list.items,
-            vertices_list.items,
-        ));
-        //TODO: add sufaces?
-        self.loaded_nodes[self.node_count] = .{
-            .material = &self.defaultData,
-            .mesh = &self.meshes.items[self.meshes.items.len - 1],
-            .world_transform = .{},
-            .local_transform = .{},
-        };
-        std.debug.print("MATRIX on init: {any}\n", .{self.loaded_nodes[self.node_count].world_transform.toMat4x4()});
-        self.node_count += 1;
-    } else {
-        std.debug.print("\nNo valid mesh data found in {s}\n\n", .{path});
-    }
-
-    // Free tiny_obj_loader memory
-    tiny_obj.tinyobj_attrib_free(&attribs);
-    tiny_obj.tinyobj_shapes_free(shapes, num_shapes);
-    tiny_obj.tinyobj_materials_free(materials, num_materials);
 }

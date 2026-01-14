@@ -7,39 +7,28 @@ const ecs = @import("ecs");
 const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
 const Watcher = @import("fileWatcher/watcher.zig");
+const System = @import("System");
+const Player = System.Player;
 
-pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32) });
-
-var delta_x: f32 = 0;
-var delta_y: f32 = 0;
-var last_x: f64 = 0;
-var last_y: f64 = 0;
-var first_mouse: bool = true;
-
-pub fn sdlCheck(result: bool) !void {
-    if (result) return;
-    const err_message = sdl.SDL_GetError();
-    std.log.scoped(.sdl).err("{s}", .{err_message});
-    return error.Sdl;
-}
+pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32), Renderer.Camera, Player });
 
 pub fn main() !void {
     var watcher: Watcher.Game = try .init();
     defer watcher.deinit();
     var rendererInit = try watcher.lookup(Renderer.c.Init, "init");
     var rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
-    var procceesCamera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
-    var gpa: std.heap.GeneralPurposeAllocator(.{ .verbose_log = false, .safety = false }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = false }) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     try sdlCheck(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
     defer sdl.SDL_Quit();
-    const window: *sdl.SDL_Window = sdl.SDL_CreateWindow("PlanetaryZigma", 600, 600, sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE) orelse return error.SdlCreateWindow;
+    const window = sdl.SDL_CreateWindow("PlanetaryZigma", 600, 600, sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_RESIZABLE) orelse return error.SdlCreateWindow;
+
     defer sdl.SDL_DestroyWindow(window);
 
     var world: World = try .init(allocator, null);
@@ -48,8 +37,10 @@ pub fn main() !void {
     // var spacetime: Spacetime = try .init(allocator);
     // defer spacetime.deinit(allocator);
 
-    const e = world.add() catch return;
+    const e = try world.addEntity();
+    e.set(Player, .{}, world);
     e.set(nz.Transform3D(f32), .{}, world);
+    e.set(Renderer.Camera, .{}, world);
 
     var renderer_config: Renderer.Config = .{
         .instance = .{
@@ -133,8 +124,13 @@ pub fn main() !void {
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
-            _ = procceesCamera(&renderer, time);
-            try Renderer.c.toErr(rendererDraw(&renderer, time));
+            System.update(&world, delta_time);
+
+            var query = world.query(&.{ Player, Renderer.Camera, nz.Transform3D(f32) });
+            const entity = query.next().?;
+            const camera = entity.getPtr(Renderer.Camera, world).?;
+            const transform = entity.getPtr(nz.Transform3D(f32), world).?;
+            try Renderer.c.toErr(rendererDraw(&renderer, camera, transform, time));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
@@ -163,33 +159,10 @@ pub fn main() !void {
             try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
             // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
-            procceesCamera = try watcher.lookup(Renderer.c.FreqUpdate, "freqUpdate");
         }
     }
     renderer.deinit(allocator);
 }
-
-// export fn cursorPosCallback(
-//     window: ?*glfw.c.GLFWwindow,
-//     xpos: f64,
-//     ypos: f64,
-// ) callconv(.c) void {
-//     _ = window;
-//     if (first_mouse) {
-//         last_x = xpos;
-//         last_y = ypos;
-//         first_mouse = false;
-//         return;
-//     }
-//
-//     delta_x = @floatCast(xpos - last_x);
-//     delta_y = @floatCast(ypos - last_y);
-//
-//     last_x = xpos;
-//     last_y = ypos;
-//
-//     // store deltas somewhere global / ring buffer / input state
-// }
 
 pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
     spacetime.events.lock.lock();
@@ -204,12 +177,18 @@ pub fn proccessEvents(spacetime: *Spacetime, world: *World) !void {
         }
     }
 }
-pub extern fn glfwCreateWindowSurface(instance: Renderer.vk.c.VkInstance, user_data: *anyopaque, allocator: ?*const anyopaque, surface: *?*Renderer.vk.Surface) c_int;
 
-pub fn initVulkanSurface(instance: Renderer.vk.Instance, window: *anyopaque) !*anyopaque {
-    var surface: ?*Renderer.vk.Surface = null;
-    _ = glfwCreateWindowSurface(instance.handle, @ptrCast(window), null, &surface);
+pub fn initVulkanSurface(instance: Renderer.vk.Instance, window: *anyopaque) anyerror!*anyopaque {
+    var surface: Renderer.vk.c.VkSurfaceKHR = null;
+    _ = try sdlCheck(sdl.SDL_Vulkan_CreateSurface(@ptrCast(window), @ptrCast(instance.handle), null, @ptrCast(&surface)));
     return surface orelse return error.VulkanCreateSurface;
+}
+
+pub fn sdlCheck(result: bool) !void {
+    if (result) return;
+    const err_message = sdl.SDL_GetError();
+    std.log.scoped(.sdl).err("{s}", .{err_message});
+    return error.Sdl;
 }
 
 // pub fn getDeltaTime() !f32 {

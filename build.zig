@@ -100,6 +100,24 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(renderer);
 
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/System.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "sdl", .module = sdl_header },
+                .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+
+    system.root_module.linkSystemLibrary("SDL3", .{});
+    b.installArtifact(system);
+
     const exe = b.addExecutable(.{
         .name = "PlanetaryZigma",
         .root_module = b.createModule(.{
@@ -115,6 +133,10 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "vma", .module = vma },
                 .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "Renderer", .module = renderer.root_module },
+                .{
+                    .name = "System",
+                    .module = system.root_module,
+                },
             },
             .link_libcpp = true,
         }),
