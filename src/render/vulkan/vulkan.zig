@@ -155,13 +155,6 @@ pub const DebugMessenger = struct {
 pub const Surface = struct {
     handle: c.VkSurfaceKHR,
 
-    pub fn init(_: Instance) !@This() {
-        // TODO: Make not hard coded and allow for other windowing libraries
-
-        @panic("Not implemented use the surface sub config instead");
-        // return @ptrCast(null);
-    }
-
     pub fn deinit(self: @This(), instance: Instance) void {
         c.vkDestroySurfaceKHR(instance.handle, self.handle, null);
     }

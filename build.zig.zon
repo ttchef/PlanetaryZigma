@@ -13,8 +13,8 @@
             .hash = "numz-0.0.2-V-sGm1elAADqPeYSSOde6-gOLHy-Rb1nXi2yb1mL7bs1",
         },
         .ecs = .{
-            .url = "git+https://github.com/HaraldWik/zig-ecs#be10f1a8157d74883f9843cefb980adbd1de56e5",
-            .hash = "ecs-0.0.0-8vkflyEgAABLMBCXk3XASQW86SX5yZ5167erNJLzAwSx",
+            .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",
+            .hash = "ecs-0.0.0-8vkflw8iAAD81LYGmf2I7Kq4QR5wmyFlwfSy6SfpqGFv",
         },
         .vulkan_headers = .{
             .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
