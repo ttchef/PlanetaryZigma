@@ -3,20 +3,22 @@ const builtin = @import("builtin");
 const sdl = @import("sdl");
 const nz = @import("numz");
 const physics = @import("physics.zig");
-const ecs = @import("ecs");
+// const ecs = @import("ecs");
 const Renderer = @import("Renderer");
 const Spacetime = @import("net/Spacetime.zig");
 const Watcher = @import("fileWatcher/watcher.zig");
 const System = @import("System");
-const Player = System.Player;
-
-pub const World = ecs.World(&.{ physics.Rigidbody, nz.Transform3D(f32), Renderer.Camera, Player });
+const WorldModule = @import("World");
+const World = WorldModule.World;
 
 pub fn main() !void {
-    var watcher: Watcher.Game = try .init();
+    var watcher: Watcher.Game = try .init("librenderer{s}");
     defer watcher.deinit();
+    var system_watcher: Watcher.Game = try .init("libsystem{s}");
+    defer system_watcher.deinit();
     var rendererInit = try watcher.lookup(Renderer.c.Init, "init");
     var rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
+    var systemUpdate = try system_watcher.lookup(System.Update, "update");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -38,9 +40,9 @@ pub fn main() !void {
     // defer spacetime.deinit(allocator);
 
     const e = try world.addEntity();
-    e.set(Player, .{}, world);
+    e.set(WorldModule.Player, .{}, world);
     e.set(nz.Transform3D(f32), .{}, world);
-    e.set(Renderer.Camera, .{}, world);
+    e.set(WorldModule.Camera, .{}, world);
 
     var renderer_config: Renderer.Config = .{
         .instance = .{
@@ -95,9 +97,9 @@ pub fn main() !void {
     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
     // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
 
-    var time: f32 = 0;
+    var time: f64 = 0;
     var timer = try std.time.Timer.start();
-    var accumulated_time: f32 = 0;
+    var accumulated_time: f64 = 0;
     const seconds_per_update = 0.016;
     var event: sdl.SDL_Event = undefined;
 
@@ -119,18 +121,18 @@ pub fn main() !void {
             else => {},
         };
 
-        const delta_time = @as(f32, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
+        const delta_time = @as(f64, @floatFromInt(timer.lap())) / (1000 * 1000 * 1000);
         time += delta_time;
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
-            System.update(&world, delta_time);
+            systemUpdate(&world, seconds_per_update);
 
-            var query = world.query(&.{ Player, Renderer.Camera, nz.Transform3D(f32) });
+            var query = world.query(&.{ WorldModule.Player, WorldModule.Camera, nz.Transform3D(f32) });
             const entity = query.next().?;
-            const camera = entity.getPtr(Renderer.Camera, world).?;
+            const camera = entity.getPtr(WorldModule.Camera, world).?;
             const transform = entity.getPtr(nz.Transform3D(f32), world).?;
-            try Renderer.c.toErr(rendererDraw(&renderer, camera, transform, time));
+            try Renderer.c.toErr(rendererDraw(&renderer, camera, transform, @floatCast(time)));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
@@ -152,13 +154,18 @@ pub fn main() !void {
         // try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
         // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
         if (try watcher.listen()) {
-            std.debug.print("RELOAD\n", .{});
+            std.debug.print("RELOAD Renderer\n", .{});
             renderer.deinit(allocator);
             try watcher.reload();
             rendererInit = try watcher.lookup(Renderer.c.Init, "init");
             try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
             // try renderer.uploadMeshToGPU(allocator, "assets/objects/cube.obj");
             rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
+        }
+        if (try system_watcher.listen()) {
+            std.debug.print("RELOADED system\n", .{});
+            try system_watcher.reload();
+            systemUpdate = try system_watcher.lookup(System.Update, "update");
         }
     }
     renderer.deinit(allocator);

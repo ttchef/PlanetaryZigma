@@ -5,7 +5,7 @@ const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
 pub const c = @import("c.zig");
-pub const Camera = @import("Camera.zig");
+pub const Camera = @import("World").Camera;
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
@@ -375,7 +375,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         allocator,
         vma,
         device,
-        "assets/objects/sci-fi.glb",
+        "assets/objects/tree.glb",
         .{ _errorCheckerboardImage, _whiteImage },
         _defaultSamplerLinear,
         &metalRoughMaterial,
@@ -617,13 +617,14 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.mainDrawContext.clear();
     const top_matrix: nz.Transform3D(f32) = .{
         .position = .{ 0, 0, -5 },
-        .rotation = .{ 0, 0, 0 },
+        .rotation = .{ 0, time * 100, 0 },
+        .scale = @splat(@sin(time) * 2),
     };
 
     const view = Camera.getViewMatrix(camera_transform);
     // const view = nz.Mat4x4(f32).identity;
-    std.debug.print("Camera: {any}\n", .{camera});
-    std.debug.print("transform: {any}\n", .{camera_transform});
+    // std.debug.print("\nCamera: {any}\n", .{camera});
+    // std.debug.print("\ntransforms: {any}\n", .{camera_transform});
     var projection = nz.Mat4x4(f32).perspective(
         camera.fov_rad,
         (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
@@ -635,8 +636,17 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.scene_data.view = view.d;
     self.scene_data.viewproj = projection.mul(view).d;
     self.scene_data.ambient_color = @splat(1);
-    self.scene_data.sunlight_color = @splat(1);
-    self.scene_data.sunlight_direction = .{ 0, 1, 0.5, 1 };
+    self.scene_data.sunlight_color = .{ 1, 0, 0, 0.1 };
+    self.scene_data.sunlight_direction = .{ 0, @sin(time * 5), @cos(time * 0.5), 1 };
+
+    std.debug.print(
+        \\sunlight_dir {any}
+        \\time  {d}
+        \\
+    , .{
+        self.scene_data.sunlight_direction,
+        time,
+    });
 
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
     try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);

@@ -73,6 +73,35 @@ pub fn build(b: *std.Build) void {
         "cargo", "build", "--release",
     });
 
+    const world_module = b.createModule(.{
+        .root_source_file = b.path("src/world.zig"),
+        .optimize = optimize,
+        .target = target,
+        .imports = &.{
+            .{ .name = "numz", .module = numz },
+            .{ .name = "ecs", .module = ecs },
+        },
+    });
+
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/System.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "sdl", .module = sdl_header },
+                .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
+                .{ .name = "World", .module = world_module },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+
+    system.root_module.linkSystemLibrary("SDL3", .{});
+    b.installArtifact(system);
+
     const renderer = b.addLibrary(.{
         .name = "renderer",
         .root_module = b.createModule(.{
@@ -89,6 +118,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "tiny_obj_loader", .module = tiny_obj_loader },
                 .{ .name = "cgltf", .module = cgltf },
                 .{ .name = "stb", .module = stb.createModule() },
+                .{ .name = "World", .module = world_module },
             },
             .link_libcpp = true,
         }),
@@ -99,24 +129,6 @@ pub fn build(b: *std.Build) void {
     renderer.root_module.linkSystemLibrary("SDL3", .{});
 
     b.installArtifact(renderer);
-
-    const system = b.addLibrary(.{
-        .name = "system",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/System.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "sdl", .module = sdl_header },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
-            },
-        }),
-        .linkage = .dynamic,
-    });
-
-    system.root_module.linkSystemLibrary("SDL3", .{});
-    b.installArtifact(system);
 
     const exe = b.addExecutable(.{
         .name = "PlanetaryZigma",
@@ -133,10 +145,8 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "vma", .module = vma },
                 .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "Renderer", .module = renderer.root_module },
-                .{
-                    .name = "System",
-                    .module = system.root_module,
-                },
+                .{ .name = "System", .module = system.root_module },
+                .{ .name = "World", .module = world_module },
             },
             .link_libcpp = true,
         }),

@@ -33,8 +33,8 @@ pub const Game = struct {
     dynlib: std.DynLib,
     file_watcher: FileWatcher,
 
-    pub fn init() !@This() {
-        const lib_name: []const u8 = std.fmt.comptimePrint("librenderer{s}", .{comptime builtin.target.dynamicLibSuffix()});
+    pub fn init(comptime library_name: []const u8) !@This() {
+        const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
 
         const search_paths: []const []const u8 = &.{
             "../lib/",
