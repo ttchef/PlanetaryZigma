@@ -46,7 +46,6 @@ swapchain: vk.Swapchain,
 vma: vk.Vma,
 draw_image: vk.Image,
 depth_image: vk.Image,
-resize_request: bool = false,
 
 //NOTE: maybe not here?
 last_pipeline: ?*vk.Pipeline = null,
@@ -487,7 +486,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         &image_index,
     );
     if (aquire_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or aquire_result == vk.c.VK_SUBOPTIMAL_KHR) {
-        self.resize_request = true;
         return;
     }
     const render_semaphore: vk.c.VkSemaphore = self.swapchain.render_semaphores[image_index];
@@ -714,7 +712,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
 
     if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or present_result == vk.c.VK_SUBOPTIMAL_KHR) {
-        self.resize_request = true;
         return;
     }
 
