@@ -1,5 +1,5 @@
-const std = @import("std");
 const Renderer = @import("Renderer.zig");
+const std = @import("std");
 const sdl = @import("sdl");
 const nz = @import("numz");
 
