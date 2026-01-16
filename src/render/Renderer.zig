@@ -1,7 +1,6 @@
 const std = @import("std");
 const nz = @import("numz");
 pub const vk = @import("vulkan/vulkan.zig");
-const Obj = @import("asset/Obj.zig");
 const tiny_obj = @import("tiny_obj_loader");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
 pub const c = @import("c.zig");
@@ -200,7 +199,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     const _drawImageDescriptor = try globalDescriptorAllocator.allocate(device, _drawImageDescriptorLayoutlayout.handle, null);
 
     var imgInfo: vk.c.VkDescriptorImageInfo = .{
-        .imageView = draw_image.image_view,
+        .imageView = draw_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_GENERAL,
     };
 
@@ -466,10 +465,10 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
         @intCast(height),
     );
 
-    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.image_extent.height)));
-    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.image_extent.width)));
-    self.draw_image.image_extent.height = @intFromFloat(scaled_height);
-    self.draw_image.image_extent.width = @intFromFloat(scaled_width);
+    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.extent.height)));
+    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.extent.width)));
+    self.draw_image.extent.height = @intFromFloat(scaled_height);
+    self.draw_image.extent.width = @intFromFloat(scaled_width);
 }
 
 pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.Transform3D(f32), time: f32) !void {
@@ -500,7 +499,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     };
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    var draw_image_barrier: vk.Barrier = .init(cmd_buffer, self.draw_image.image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
+    var draw_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.draw_image.vk_image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vk.c.VK_ACCESS_SHADER_WRITE_BIT);
 
     self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
@@ -535,7 +534,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         vk.c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         vk.c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
     );
-    var depth_image_barrier: vk.Barrier = .init(cmd_buffer, self.depth_image.image, vk.c.VK_IMAGE_ASPECT_DEPTH_BIT);
+    var depth_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.depth_image.vk_image, vk.c.VK_IMAGE_ASPECT_DEPTH_BIT);
     depth_image_barrier.transition(
         vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         vk.c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | vk.c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
@@ -545,7 +544,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = null,
-        .imageView = self.draw_image.image_view,
+        .imageView = self.draw_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
         .resolveImageView = null,
@@ -560,7 +559,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     };
     var depth_attachment: vk.c.VkRenderingAttachmentInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = self.depth_image.image_view,
+        .imageView = self.depth_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -578,8 +577,8 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .renderArea = .{
             .offset = .{ .x = 0, .y = 0 },
             .extent = .{
-                .height = self.draw_image.image_extent.height,
-                .width = self.draw_image.image_extent.width,
+                .height = self.draw_image.extent.height,
+                .width = self.draw_image.extent.width,
             },
         },
         .layerCount = 1,
@@ -615,8 +614,8 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.mainDrawContext.clear();
     const top_matrix: nz.Transform3D(f32) = .{
         .position = .{ 0, 0, -5 },
-        .rotation = .{ 0, time * 100, 0 },
-        .scale = @splat(@sin(time) * 2),
+        .rotation = .{ 0, 0, 0 },
+        .scale = @splat(1),
     };
 
     const view = Camera.getViewMatrix(camera_transform);
@@ -625,7 +624,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     // std.debug.print("\ntransforms: {any}\n", .{camera_transform});
     var projection = nz.Mat4x4(f32).perspective(
         camera.fov_rad,
-        (@as(f32, @floatFromInt(self.draw_image.image_extent.width)) / @as(f32, @floatFromInt(self.draw_image.image_extent.height))),
+        (@as(f32, @floatFromInt(self.draw_image.extent.width)) / @as(f32, @floatFromInt(self.draw_image.extent.height))),
         camera.near,
         camera.far,
     );
@@ -662,15 +661,13 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
 
-    var swapchain_image_barrier: vk.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
+    var swapchain_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
-    vk.blipImageToImage(
+    self.draw_image.copyOntoImage(
         cmd_buffer,
-        self.draw_image.image,
-        self.swapchain.vk_images[image_index],
-        self.draw_image.image_extent,
-        self.swapchain.extent,
+        .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
     );
+
     // swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, , vk.c.VK_PIPELINE_STAGE_SH)
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
@@ -743,8 +740,8 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
                 var viewport: vk.c.VkViewport = .{
                     .x = 0,
                     .y = 0,
-                    .width = @floatFromInt(self.draw_image.image_extent.width),
-                    .height = @floatFromInt(self.draw_image.image_extent.height),
+                    .width = @floatFromInt(self.draw_image.extent.width),
+                    .height = @floatFromInt(self.draw_image.extent.height),
                     .minDepth = 0,
                     .maxDepth = 1,
                 };
@@ -757,8 +754,8 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
                         .y = 0,
                     },
                     .extent = .{
-                        .width = self.draw_image.image_extent.width,
-                        .height = self.draw_image.image_extent.height,
+                        .width = self.draw_image.extent.width,
+                        .height = self.draw_image.extent.height,
                     },
                 };
 

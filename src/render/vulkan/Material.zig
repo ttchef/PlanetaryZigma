@@ -26,7 +26,7 @@ pub const GltfMetallicRoughness = struct {
     descriptor_set_layout: vk.VkDescriptorSetLayout,
     writer: descriptor.Writer,
 
-    pub const Constants = struct {
+    pub const Constants = extern struct {
         color_factores: nz.Vec4(f32) = undefined,
         metal_rough_factors: nz.Vec4(f32) = undefined,
         extra: [14]nz.Vec4(f32) = undefined,
@@ -137,8 +137,8 @@ pub const GltfMetallicRoughness = struct {
         material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
         self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-        self.writer.appendImage(1, resources.color_image.image_view, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        self.writer.appendImage(2, resources.metal_rough_image.image_view, resources.metal_rough_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        self.writer.appendImage(1, resources.color_image.vk_imageview, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        self.writer.appendImage(2, resources.metal_rough_image.vk_imageview, resources.metal_rough_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         self.writer.updateSet(device, material_data_instance.descriptor_set);
         return material_data_instance;
     }

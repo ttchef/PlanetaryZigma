@@ -6,7 +6,6 @@ pub const check = @import("utils.zig").check;
 pub const Func = @import("utils.zig").Func;
 pub const LoadShader = @import("utils.zig").loadShaderModule;
 pub const imageMemBarrier = @import("utils.zig").imageMemBarrier;
-pub const blipImageToImage = @import("utils.zig").blitImageToImage;
 
 pub const Device = @import("device.zig").Logical;
 pub const PhysicalDevice = @import("device.zig").Physical;
@@ -15,7 +14,7 @@ pub const Image = @import("Image.zig");
 pub const Vma = @import("Vma.zig");
 pub const descriptor = @import("descriptor.zig");
 pub const Pipeline = @import("pipeline.zig").Pipeline;
-pub const Barrier = @import("Barrier.zig");
+pub const ImageBarrier = @import("ImageBarrier.zig");
 pub const Buffer = @import("Buffer.zig");
 pub const Mesh = @import("Mesh.zig");
 pub const Material = @import("Material.zig");
