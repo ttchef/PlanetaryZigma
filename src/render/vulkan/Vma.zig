@@ -32,13 +32,13 @@ pub fn deinit(self: @This()) void {
 pub fn copyToAllocation(
     self: @This(),
     comptime T: type,
-    data: T,
-    allocation: Allocation,
+    src_data: T,
+    dst_allocation: Allocation,
     allocation_info: *AllocationInfo,
 ) void {
-    vma.vmaGetAllocationInfo(self.handle, allocation, allocation_info);
+    vma.vmaGetAllocationInfo(self.handle, dst_allocation, allocation_info);
     @memcpy(
         @as([*]u8, @ptrCast(allocation_info.pMappedData))[0..@intCast(allocation_info.size)],
-        @as([*]const u8, @ptrCast(&data))[0..@intCast(allocation_info.size)],
+        @as([*]const u8, @ptrCast(&src_data))[0..@intCast(allocation_info.size)],
     );
 }
