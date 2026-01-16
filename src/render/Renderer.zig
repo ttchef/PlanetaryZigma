@@ -11,30 +11,28 @@ comptime {
     _ = c;
 }
 
-//TODO: WILL REMOVE (but exist temporarly for the learnding):
-defaultData: vk.Material.Instance,
-metalRoughMaterial: vk.Material.GltfMetallicRoughness,
-materialBuffer: vk.Buffer,
-materialResources: vk.Material.GltfMetallicRoughness.Resources,
-pipelines: [16]vk.Pipeline,
-max_pipelines: usize = 0,
-current_pipeline: usize = 0,
+metal_rough_material: vk.Material.GltfMetallicRoughness,
+material_buffer: vk.Buffer,
+material_resources: vk.Material.GltfMetallicRoughness.Resources,
 graphics_descriptor_layout: vk.descriptor.Layout,
-_singleImageDescriptorLayout: vk.descriptor.Layout,
-_gpuSceneDataDescriptorLayout: vk.descriptor.Layout,
-_drawImageDescitporLayour: vk.descriptor.Layout,
-globalDescriptorAllocator: vk.descriptor.Growable,
-_drawImageDescriptor: vk.c.VkDescriptorSet,
-scene_data: vk.GPUSceneData,
-_whiteImage: vk.Image,
-_blackImage: vk.Image,
-_greyImage: vk.Image,
-_errorCheckerboardImage: vk.Image,
-_defaultSamplerLinear: vk.c.VkSampler,
-_defaultSamplerNearest: vk.c.VkSampler,
-mainDrawContext: vk.Node.DrawContext,
+gpu_scene_data_descriptor_layout: vk.descriptor.Layout,
+//TODO: AssetMangager
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
+//Default values
+white_image: vk.Image,
+black_image: vk.Image,
+error_checkerboard_image: vk.Image,
+default_sampler_linear: vk.c.VkSampler,
+default_sampler_nearest: vk.c.VkSampler,
+
+//GLTF
+main_draw_context: vk.Node.DrawContext,
+
+global_descriptor_allocator: vk.descriptor.Growable,
+draw_image_descriptor_layout: vk.descriptor.Layout,
+draw_image_descriptor: vk.c.VkDescriptorSet,
+scene_data: vk.GPUSceneData,
 allocator: std.mem.Allocator,
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
@@ -96,7 +94,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    var depth_image: vk.Image = try .init(
+    const depth_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_D32_SFLOAT,
@@ -108,7 +106,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //3 default textures, white, grey, black. 1 pixel each
     var white: u32 = nz.color.Rgba(u8).white.toU32();
-    var _whiteImage: vk.Image = try .init(
+    var white_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -117,23 +115,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-
-    try _whiteImage.uploadDataToImage(device, vma.handle, &white);
-
-    var grey: u32 = nz.color.Rgba(u8).grey.toU32();
-    var _greyImage: vk.Image = try .init(
-        vma.handle,
-        device,
-        vk.c.VK_FORMAT_R8G8B8A8_UNORM,
-        .{ .width = 1, .height = 1, .depth = 1 },
-        vk.c.VK_IMAGE_USAGE_SAMPLED_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | vk.c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-        vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
-        false,
-    );
-    try _greyImage.uploadDataToImage(device, vma.handle, &grey);
+    try white_image.uploadDataToImage(device, vma.handle, &white);
 
     var black: u32 = nz.color.Rgba(u8).black.toU32();
-    var _blackImage: vk.Image = try .init(
+    var black_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -142,18 +127,17 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    try _blackImage.uploadDataToImage(device, vma.handle, &black);
+    try black_image.uploadDataToImage(device, vma.handle, &black);
 
     //checkerboard image
-    const magenta: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
+    const magenta_color: u32 = nz.color.Rgba(u8).new(255, 0, 255, 255).toU32();
     var pixels: [16 * 16]u32 = undefined;
     for (0..16) |x| {
         for (0..16) |y| {
-            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta else black;
+            pixels[y * 16 + x] = if (std.math.pow(usize, @mod(x, 2), @mod(y, 2)) == 1) magenta_color else black;
         }
     }
-
-    var _errorCheckerboardImage: vk.Image = try .init(
+    var error_checkerboard_image: vk.Image = try .init(
         vma.handle,
         device,
         vk.c.VK_FORMAT_R8G8B8A8_UNORM,
@@ -162,7 +146,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_IMAGE_ASPECT_COLOR_BIT,
         false,
     );
-    try _errorCheckerboardImage.uploadDataToImage(device, vma.handle, &pixels);
+    try error_checkerboard_image.uploadDataToImage(device, vma.handle, &pixels);
 
     var sampl: vk.c.VkSamplerCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -170,12 +154,12 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .minFilter = vk.c.VK_FILTER_NEAREST,
     };
 
-    var _defaultSamplerLinear: vk.c.VkSampler = undefined;
-    var _defaultSamplerNearest: vk.c.VkSampler = undefined;
-    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerNearest);
+    var default_sampler_linear: vk.c.VkSampler = undefined;
+    var default_sampler_nearest: vk.c.VkSampler = undefined;
+    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &default_sampler_nearest);
     sampl.magFilter = vk.c.VK_FILTER_LINEAR;
     sampl.minFilter = vk.c.VK_FILTER_LINEAR;
-    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &_defaultSamplerLinear);
+    _ = vk.c.vkCreateSampler(device.handle, &sampl, null, &default_sampler_linear);
 
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
@@ -183,9 +167,9 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .ratio = 2 },
     };
 
-    var globalDescriptorAllocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
+    var global_descriptor_allocator: vk.descriptor.Growable = try .init(allocator, device, 10, &sizes);
 
-    const _drawImageDescriptorLayoutlayout: vk.descriptor.Layout = try .init(
+    const draw_image_descriptor_layout: vk.descriptor.Layout = try .init(
         device,
         &[_]vk.c.VkDescriptorSetLayoutBinding{
             .{
@@ -196,22 +180,22 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             },
         },
     );
-    const _drawImageDescriptor = try globalDescriptorAllocator.allocate(device, _drawImageDescriptorLayoutlayout.handle, null);
+    const draw_image_descriptor = try global_descriptor_allocator.allocate(device, draw_image_descriptor_layout.handle, null);
 
-    var imgInfo: vk.c.VkDescriptorImageInfo = .{
+    var img_info: vk.c.VkDescriptorImageInfo = .{
         .imageView = draw_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_GENERAL,
     };
 
-    const drawImageWrite: vk.c.VkWriteDescriptorSet = .{
+    const draw_image_write: vk.c.VkWriteDescriptorSet = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstBinding = 0,
-        .dstSet = _drawImageDescriptor,
+        .dstSet = draw_image_descriptor,
         .descriptorCount = 1,
         .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        .pImageInfo = &imgInfo,
+        .pImageInfo = &img_info,
     };
-    vk.c.vkUpdateDescriptorSets(device.handle, 1, &drawImageWrite, 0, null);
+    vk.c.vkUpdateDescriptorSets(device.handle, 1, &draw_image_write, 0, null);
 
     const graphics_descriptor_layout: vk.descriptor.Layout = try .init(
         device,
@@ -237,103 +221,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         },
     );
 
-    const _singleImageDescriptorLayout: vk.descriptor.Layout = try .init(
-        device,
-        &[_]vk.c.VkDescriptorSetLayoutBinding{
-            .{
-                .binding = 0,
-                .descriptorCount = 1,
-                .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .stageFlags = vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            },
-        },
-    );
-
-    const shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient.comp.spv");
-    const gradient_color: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/gradient_color.comp.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, shader, null);
-    defer vk.c.vkDestroyShaderModule(device.handle, gradient_color, null);
-
-    var pipelines: [16]vk.Pipeline = undefined;
-    var config_comp1: vk.Pipeline.Compute.Config = .{
-        .descriptor_set_layouts = &.{_drawImageDescriptorLayoutlayout.handle},
-        .shader = .{
-            .module = shader,
-        },
-    };
-
-    pipelines[0] = try .initCompute(device, &config_comp1);
-    pipelines[0].compute.data.data1 = .{ 1, 0, 0, 1 };
-    pipelines[0].compute.data.data2 = .{ 0, 0, 1, 1 };
-
-    var config_comp2: vk.Pipeline.Compute.Config = .{
-        .descriptor_set_layouts = &.{_drawImageDescriptorLayoutlayout.handle},
-        .shader = .{
-            .module = gradient_color,
-        },
-    };
-
-    pipelines[1] = try .initCompute(device, &config_comp2);
-    pipelines[1].compute.data.data2 = .{ 0.1, 0.2, 0.4, 0.97 };
-
-    const frag: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.frag.spv");
-    const vert: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle.vert.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, vert, null);
-    defer vk.c.vkDestroyShaderModule(device.handle, frag, null);
-
-    var state: []const vk.c.VkDynamicState = &.{ vk.c.VK_DYNAMIC_STATE_VIEWPORT, vk.c.VK_DYNAMIC_STATE_SCISSOR };
-    var config_graphics: vk.Pipeline.Graphics.Config = .{
-        .vertex_shaders = .{
-            .module = vert,
-        },
-        .fragment_shaders = .{
-            .module = frag,
-        },
-        .descriptor_set_layouts = &.{graphics_descriptor_layout.handle},
-        .push_constants = &.{},
-    };
-    config_graphics.viewport_state.scissorCount = 1;
-    config_graphics.viewport_state.viewportCount = 1;
-    config_graphics.dynamic_state.dynamicStateCount = 2;
-    config_graphics.dynamic_state.pDynamicStates = &state[0];
-    config_graphics.render_info.colorAttachmentCount = 1;
-    config_graphics.render_info.pColorAttachmentFormats = &draw_image.format;
-    config_graphics.render_info.depthAttachmentFormat = depth_image.format;
-    config_graphics.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-    pipelines[2] = try .initGraphics(device, &config_graphics);
-
-    const frag_shader_triangle: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/tex_image.frag.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, frag_shader_triangle, null);
-
-    const vert_shader_triangle: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/colored_triangle_mesh.vert.spv");
-    defer vk.c.vkDestroyShaderModule(device.handle, vert_shader_triangle, null);
-
-    var config_mesh: vk.Pipeline.Graphics.Config = .{
-        .fragment_shaders = .{
-            .module = frag_shader_triangle,
-        },
-        .vertex_shaders = .{
-            .module = vert_shader_triangle,
-        },
-        .descriptor_set_layouts = &.{_singleImageDescriptorLayout.handle},
-        .push_constants = &.{.{
-            .offset = 0,
-            .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
-        }},
-    };
-    config_mesh.viewport_state.scissorCount = 1;
-    config_mesh.viewport_state.viewportCount = 1;
-    config_mesh.dynamic_state.dynamicStateCount = 2;
-    config_mesh.dynamic_state.pDynamicStates = &[_]c_uint{
-        vk.c.VK_DYNAMIC_STATE_VIEWPORT,
-        vk.c.VK_DYNAMIC_STATE_SCISSOR,
-    };
-    config_mesh.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_GREATER_OR_EQUAL);
-    config_mesh.render_info.depthAttachmentFormat = depth_image.format;
-    pipelines[3] = try .initGraphics(device, &config_mesh);
-
     var metalRoughMaterial: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
     var materialBuffer = try vk.Buffer.init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -352,30 +239,30 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &materialBuffer.info,
     );
 
-    const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
-        .color_image = _whiteImage,
-        .color_sampler = _defaultSamplerLinear,
-        .metal_rough_image = _whiteImage,
-        .metal_rough_sampler = _defaultSamplerLinear,
-        .data_buffer = materialBuffer.buffer,
-        .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
-    };
-
-    const defaultData = try metalRoughMaterial.writeMaterial(
-        device,
-        vk.Material.Pass.main_color,
-        materialResources,
-        &globalDescriptorAllocator,
-    );
+    // const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
+    //     .color_image = white_image,
+    //     .color_sampler = default_sampler_linear,
+    //     .metal_rough_image = white_image,
+    //     .metal_rough_sampler = default_sampler_linear,
+    //     .data_buffer = materialBuffer.buffer,
+    //     .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
+    // };
+    //
+    // const defaultData = try metalRoughMaterial.writeMaterial(
+    //     device,
+    //     vk.Material.Pass.main_color,
+    //     materialResources,
+    //     &global_descriptor_allocator,
+    // );
 
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
         allocator,
         vma,
         device,
-        "assets/objects/tree.glb",
-        .{ _errorCheckerboardImage, _whiteImage },
-        _defaultSamplerLinear,
+        "assets/objects/mecha.glb",
+        .{ error_checkerboard_image, white_image },
+        default_sampler_linear,
         &metalRoughMaterial,
     );
     try loaded_scenes.put(allocator, "structure", strcture_file);
@@ -388,31 +275,25 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .physical_device = physical_device,
         .device = device,
         .swapchain = swapchain,
-        .pipelines = pipelines,
-        .current_pipeline = 0,
-        .max_pipelines = 4,
         .vma = vma,
         .draw_image = draw_image,
         .depth_image = depth_image,
-        ._gpuSceneDataDescriptorLayout = descriptor_gpu_scene_data,
-        ._singleImageDescriptorLayout = _singleImageDescriptorLayout,
+        .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
-        ._drawImageDescitporLayour = _drawImageDescriptorLayoutlayout,
+        .draw_image_descriptor_layout = draw_image_descriptor_layout,
         .scene_data = std.mem.zeroes(vk.GPUSceneData),
-        ._whiteImage = _whiteImage,
-        ._blackImage = _blackImage,
-        ._greyImage = _greyImage,
-        ._errorCheckerboardImage = _errorCheckerboardImage,
-        ._defaultSamplerLinear = _defaultSamplerLinear,
-        ._defaultSamplerNearest = _defaultSamplerNearest,
-        .globalDescriptorAllocator = globalDescriptorAllocator,
-        ._drawImageDescriptor = _drawImageDescriptor,
-        .metalRoughMaterial = metalRoughMaterial,
-        .materialBuffer = materialBuffer,
-        .materialResources = materialResources,
-        .defaultData = defaultData,
+        .white_image = white_image,
+        .black_image = black_image,
+        .error_checkerboard_image = error_checkerboard_image,
+        .default_sampler_linear = default_sampler_linear,
+        .default_sampler_nearest = default_sampler_nearest,
+        .global_descriptor_allocator = global_descriptor_allocator,
+        .draw_image_descriptor = draw_image_descriptor,
+        .metal_rough_material = metalRoughMaterial,
+        .material_buffer = materialBuffer,
+        .material_resources = materialResources,
         .loaded_scenes = loaded_scenes,
-        .mainDrawContext = .{},
+        .main_draw_context = .{},
     };
 }
 
@@ -427,19 +308,18 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vma, self.device);
     self.depth_image.deinit(self.vma, self.device);
-    self._blackImage.deinit(self.vma, self.device);
-    self._greyImage.deinit(self.vma, self.device);
-    self._whiteImage.deinit(self.vma, self.device);
-    self._errorCheckerboardImage.deinit(self.vma, self.device);
+    self.black_image.deinit(self.vma, self.device);
+    self.grey_image.deinit(self.vma, self.device);
+    self.white_image.deinit(self.vma, self.device);
+    self.error_checkerboard_image.deinit(self.vma, self.device);
 
-    vk.c.vkDestroySampler(self.device.handle, self._defaultSamplerLinear, null);
-    vk.c.vkDestroySampler(self.device.handle, self._defaultSamplerNearest, null);
-    self._gpuSceneDataDescriptorLayout.deinit(self.device);
+    vk.c.vkDestroySampler(self.device.handle, self.default_sampler_linear, null);
+    vk.c.vkDestroySampler(self.device.handle, self.default_sampler_nearest, null);
+    self.gpu_scene_data_descriptor_layout.deinit(self.device);
     self.graphics_descriptor_layout.deinit(self.device);
-    self._singleImageDescriptorLayout.deinit(self.device);
-    self._drawImageDescitporLayour.deinit(self.device);
-    self.metalRoughMaterial.deinit(self.device);
-    self.materialBuffer.deinit(self.vma.handle);
+    self.draw_image_descriptor_layout.deinit(self.device);
+    self.metal_rough_material.deinit(self.device);
+    self.material_buffer.deinit(self.vma.handle);
 
     var iter = self.loaded_scenes.iterator();
     while (iter.next()) |scene| {
@@ -447,7 +327,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     }
     self.loaded_scenes.deinit(allocator);
 
-    self.globalDescriptorAllocator.deinit(self.device);
+    self.global_descriptor_allocator.deinit(self.device);
 
     self.vma.deinit();
     self.device.deinit();
@@ -515,7 +395,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         pipeline.get().layout,
         0,
         1,
-        &self._drawImageDescriptor,
+        &self.draw_image_descriptor,
         0,
         null,
     );
@@ -595,23 +475,15 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
 
     current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-    //TODO: try removing the vma get info
     self.vma.copyToAllocation(vk.GPUSceneData, self.scene_data, current_frame.gpu_scene.vma_allocation, &current_frame.gpu_scene.info);
-    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self._gpuSceneDataDescriptorLayout.handle, null);
+    const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self.gpu_scene_data_descriptor_layout.handle, null);
     {
         var writer: vk.descriptor.Writer = .{};
         writer.appendBuffer(0, current_frame.gpu_scene.buffer, @sizeOf(vk.GPUSceneData), 0, vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         writer.updateSet(self.device, globalDescriptor);
     }
 
-    // //Triangle
-    // vk.c.vkCmdDraw(cmd_buffer, 3, 1, 0, 0);
-
-    //The mesh
-    //TODO: ====================================
-    //TODO: ====================================
-    //TODO: ====================================
-    self.mainDrawContext.clear();
+    self.main_draw_context.clear();
     const top_matrix: nz.Transform3D(f32) = .{
         .position = .{ 0, 0, -5 },
         .rotation = .{ 0, 0, 0 },
@@ -636,23 +508,23 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.scene_data.sunlight_color = .{ 1, 0, 0, 0.1 };
     self.scene_data.sunlight_direction = .{ 0, @sin(time * 5), @cos(time * 0.5), 1 };
 
-    std.debug.print(
-        \\sunlight_dir {any}
-        \\time  {d}
-        \\
-    , .{
-        self.scene_data.sunlight_direction,
-        time,
-    });
+    // std.debug.print(
+    //     \\sunlight_dir {any}
+    //     \\time  {d}
+    //     \\
+    // , .{
+    //     self.scene_data.sunlight_direction,
+    //     time,
+    // });
 
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
-    try structure_scene.draw(self.allocator, top_matrix, &self.mainDrawContext);
+    try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
     //TODO: fix ur shit. Transparent pipelines are broken.
     self.last_index_buffer = null;
     self.last_material = null;
     self.last_pipeline = null;
-    draw_geometry(self, self.mainDrawContext.opaque_surfaces, cmd_buffer, globalDescriptor);
-    draw_geometry(self, self.mainDrawContext.transparent_surfaces, cmd_buffer, globalDescriptor);
+    draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+    draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
 
     // std.debug.print("\nsceneDATA {any}\n", .{self.scene_data});
 

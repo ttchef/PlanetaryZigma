@@ -287,7 +287,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device:
         image.value_ptr.deinit(vma, device);
     }
 
-    for (self.samplers.items[0..self.samplers.items.len]) |sampler| {
+    for (self.samplers.items) |sampler| {
         vk.c.vkDestroySampler(device.handle, sampler, null);
     }
 

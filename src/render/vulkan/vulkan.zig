@@ -20,7 +20,6 @@ pub const Mesh = @import("Mesh.zig");
 pub const Material = @import("Material.zig");
 pub const Node = @import("Node.zig");
 
-//TODO: WILL REMOVE (but exist temporarly for the learnding):
 pub const GPUSceneData = extern struct {
     view: [16]f32,
     proj: [16]f32,
