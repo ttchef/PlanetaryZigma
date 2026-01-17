@@ -47,6 +47,7 @@ pub fn init(
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
     };
 
+    std.log.info("materials_count, {d}", .{data.materials_count});
     file.descriptor_pool = try .init(allocator, device, @intCast(data.materials_count), &sizes);
     if (data.samplers_count != 0) {
         for (data.samplers[0..data.samplers_count]) |sampler| {

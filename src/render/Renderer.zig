@@ -11,11 +11,6 @@ comptime {
     _ = c;
 }
 
-metal_rough_material: vk.Material.GltfMetallicRoughness,
-material_buffer: vk.Buffer,
-material_resources: vk.Material.GltfMetallicRoughness.Resources,
-graphics_descriptor_layout: vk.descriptor.Layout,
-gpu_scene_data_descriptor_layout: vk.descriptor.Layout,
 //TODO: AssetMangager
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 
@@ -28,7 +23,13 @@ default_sampler_nearest: vk.c.VkSampler,
 
 //GLTF
 main_draw_context: vk.Node.DrawContext,
+material_buffer: vk.Buffer,
+metal_rough_material: vk.Material.GltfMetallicRoughness,
+default_data: vk.Material.Instance,
+material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
+graphics_descriptor_layout: vk.descriptor.Layout,
+gpu_scene_data_descriptor_layout: vk.descriptor.Layout,
 global_descriptor_allocator: vk.descriptor.Growable,
 draw_image_descriptor_layout: vk.descriptor.Layout,
 draw_image_descriptor: vk.c.VkDescriptorSet,
@@ -238,22 +239,21 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         materialBuffer.vma_allocation,
         &materialBuffer.info,
     );
+    const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
+        .color_image = white_image,
+        .color_sampler = default_sampler_linear,
+        .metal_rough_image = white_image,
+        .metal_rough_sampler = default_sampler_linear,
+        .data_buffer = materialBuffer.buffer,
+        .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
+    };
 
-    // const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
-    //     .color_image = white_image,
-    //     .color_sampler = default_sampler_linear,
-    //     .metal_rough_image = white_image,
-    //     .metal_rough_sampler = default_sampler_linear,
-    //     .data_buffer = materialBuffer.buffer,
-    //     .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
-    // };
-    //
-    // const defaultData = try metalRoughMaterial.writeMaterial(
-    //     device,
-    //     vk.Material.Pass.main_color,
-    //     materialResources,
-    //     &global_descriptor_allocator,
-    // );
+    const defaultData = try metalRoughMaterial.writeMaterial(
+        device,
+        vk.Material.Pass.main_color,
+        materialResources,
+        &global_descriptor_allocator,
+    );
 
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
@@ -289,11 +289,12 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .default_sampler_nearest = default_sampler_nearest,
         .global_descriptor_allocator = global_descriptor_allocator,
         .draw_image_descriptor = draw_image_descriptor,
-        .metal_rough_material = metalRoughMaterial,
         .material_buffer = materialBuffer,
-        .material_resources = materialResources,
         .loaded_scenes = loaded_scenes,
         .main_draw_context = .{},
+        .metal_rough_material = metalRoughMaterial,
+        .default_data = defaultData,
+        .material_resources = materialResources,
     };
 }
 
@@ -304,17 +305,15 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 
     self.swapchain.deinit(self.vma, self.device);
 
-    for (0..self.max_pipelines) |i|
-        self.pipelines[i].deinit(self.device);
     self.draw_image.deinit(self.vma, self.device);
     self.depth_image.deinit(self.vma, self.device);
     self.black_image.deinit(self.vma, self.device);
-    self.grey_image.deinit(self.vma, self.device);
     self.white_image.deinit(self.vma, self.device);
     self.error_checkerboard_image.deinit(self.vma, self.device);
 
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_linear, null);
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_nearest, null);
+
     self.gpu_scene_data_descriptor_layout.deinit(self.device);
     self.graphics_descriptor_layout.deinit(self.device);
     self.draw_image_descriptor_layout.deinit(self.device);
@@ -380,34 +379,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     try vk.check(vk.c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
     var draw_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.draw_image.vk_image, vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
-    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_GENERAL, vk.c.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vk.c.VK_ACCESS_SHADER_WRITE_BIT);
-
-    self.current_pipeline = @mod(@as(usize, @intFromFloat(time)), 2);
-    // std.debug.print("time converted {d} time {d}\r", .{ self.current_pipeline, time });
-
-    const pipeline: vk.Pipeline = self.pipelines[self.current_pipeline];
-
-    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.get().handle);
-
-    vk.c.vkCmdBindDescriptorSets(
-        cmd_buffer,
-        vk.c.VK_PIPELINE_BIND_POINT_COMPUTE,
-        pipeline.get().layout,
-        0,
-        1,
-        &self.draw_image_descriptor,
-        0,
-        null,
-    );
-
-    vk.c.vkCmdPushConstants(cmd_buffer, pipeline.get().layout, vk.c.VK_SHADER_STAGE_COMPUTE_BIT, 0, @sizeOf(vk.Pipeline.Compute.PushConstant), &pipeline.compute.data);
-
-    vk.c.vkCmdDispatch(
-        cmd_buffer,
-        @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.width)) / 16)),
-        @intFromFloat(@ceil(@as(f32, @floatFromInt(self.swapchain.extent.height)) / 16)),
-        1,
-    );
 
     draw_image_barrier.transition(
         vk.c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -420,7 +391,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         vk.c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | vk.c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
         vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | vk.c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
     );
-    //START DRAWING VERTECIES
     var color_attachment: vk.c.VkRenderingAttachmentInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = null,
@@ -470,8 +440,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     };
 
     vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
-
-    // vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipelines[2].get().handle);
 
     current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -526,10 +494,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
 
-    // std.debug.print("\nsceneDATA {any}\n", .{self.scene_data});
-
     vk.c.vkCmdEndRendering(cmd_buffer);
-    //DONE RENDERING VERTECIES
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
 
@@ -540,7 +505,6 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
     );
 
-    // swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, , vk.c.VK_PIPELINE_STAGE_SH)
     swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
     try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
 
@@ -596,6 +560,7 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
 
             if (render_obj.material_instance.pipeline != self.last_pipeline) {
                 self.last_pipeline = render_obj.material_instance.pipeline;
+
                 vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.get().handle);
 
                 vk.c.vkCmdBindDescriptorSets(
