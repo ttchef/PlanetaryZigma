@@ -45,6 +45,9 @@ vma: vk.Vma,
 draw_image: vk.Image,
 depth_image: vk.Image,
 
+//TODO: Remove
+planet: Planet,
+
 //NOTE: maybe not here?
 last_pipeline: ?*vk.Pipeline = null,
 last_material: ?*vk.Material.Instance = null,
@@ -70,6 +73,88 @@ pub const Config = struct {
         width: u32 = 0,
         heigth: u32 = 0,
     },
+};
+
+const Planet = struct {
+    mesh: vk.Mesh,
+    material: *vk.Material.Instance,
+
+    pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
+        var vertices: [8]vk.Mesh.Vertex = .{
+            .{ .position = .{ 0, 0, 0 } },
+            .{ .position = .{ 1, 0, 0 } },
+            .{ .position = .{ 1, 1, 0 } },
+            .{ .position = .{ 0, 1, 0 } },
+            .{ .position = .{ 0, 0, -1 } },
+            .{ .position = .{ 1, 0, -1 } },
+            .{ .position = .{ 1, 1, -1 } },
+            .{ .position = .{ 0, 1, -1 } },
+        };
+        for (&vertices) |*vert| {
+            vert.normal = .{ 1, 0, 0 };
+            vert.color = .{ 1, 1, 1, 1 };
+            vert.uv_x = 0;
+            vert.uv_y = 0;
+        }
+
+        var indices = [_]u32{
+            // Front
+            0, 1, 2,
+            0, 2, 3,
+
+            // Back
+            5, 4, 7,
+            5, 7, 6,
+
+            // Left
+            4, 0, 3,
+            4, 3, 7,
+
+            // Right
+            1, 5, 6,
+            1, 6, 2,
+
+            // Top
+            3, 2, 6,
+            3, 6, 7,
+
+            // Bottom
+            4, 5, 1,
+            4, 1, 0,
+        };
+
+        const planet_material = try allocator.create(vk.Material.Instance);
+        planet_material.* = material;
+        var surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
+        try surfaces.append(
+            allocator,
+            .{
+                .index_start = 0,
+                .index_count = indices.len,
+                .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+                .material = planet_material,
+            },
+        );
+        // defer surfaces.deinit(allocator);
+
+        return .{
+            .mesh = try .init(
+                allocator,
+                vma.handle,
+                "planet",
+                device,
+                surfaces,
+                &indices,
+                &vertices,
+            ),
+            .material = planet_material,
+        };
+    }
+
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma) void {
+        self.mesh.deinit(allocator, vma.handle);
+        allocator.destroy(self.material);
+    }
 };
 
 pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
@@ -107,6 +192,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     //3 default textures, white, grey, black. 1 pixel each
     var white: u32 = nz.color.Rgba(u8).white.toU32();
+    //new(255, 0, 255, 255).toU32();
     var white_image: vk.Image = try .init(
         vma.handle,
         device,
@@ -255,12 +341,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
+    const planet: Planet = try .init(allocator, vma, device, defaultData);
+
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
         allocator,
         vma,
         device,
-        "assets/objects/mecha.glb",
+        "assets/objects/tree.glb",
         .{ error_checkerboard_image, white_image },
         default_sampler_linear,
         &metalRoughMaterial,
@@ -268,6 +356,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try loaded_scenes.put(allocator, "structure", strcture_file);
 
     return .{
+        .planet = planet,
         .allocator = allocator,
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -310,6 +399,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.black_image.deinit(self.vma, self.device);
     self.white_image.deinit(self.vma, self.device);
     self.error_checkerboard_image.deinit(self.vma, self.device);
+
+    self.planet.deinit(allocator, self.vma);
 
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_linear, null);
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_nearest, null);
@@ -493,6 +584,57 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.last_pipeline = null;
     draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+
+    //NOTE: PLANET
+    vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.planet.material.pipeline.get().handle);
+    vk.c.vkCmdBindDescriptorSets(
+        cmd_buffer,
+        vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        self.planet.material.pipeline.get().layout,
+        0,
+        1,
+        &globalDescriptor,
+        0,
+        null,
+    );
+    vk.c.vkCmdBindDescriptorSets(
+        cmd_buffer,
+        vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        self.planet.material.pipeline.get().layout,
+        1,
+        1,
+        &self.planet.material.descriptor_set,
+        0,
+        null,
+    );
+    vk.c.vkCmdBindIndexBuffer(
+        cmd_buffer,
+        self.planet.mesh.index_buffer.buffer,
+        0,
+        vk.c.VK_INDEX_TYPE_UINT32,
+    );
+    var push_constant: vk.Mesh.GPUDrawPushConstants = .{
+        .world_matrix = nz.Mat4x4(f32).identity.d,
+        .vertex_buffer = self.planet.mesh.vertex_buffer_address,
+    };
+    vk.c.vkCmdPushConstants(
+        cmd_buffer,
+        self.planet.material.pipeline.get().layout,
+        vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        @sizeOf(vk.Mesh.GPUDrawPushConstants),
+        &push_constant,
+    );
+    vk.c.vkCmdDrawIndexed(
+        cmd_buffer,
+        @intCast(self.planet.mesh.surfaces.items[0].index_count),
+        1,
+        @intCast(self.planet.mesh.surfaces.items[0].index_start),
+        0,
+        0,
+    );
+
+    //TODO: PLANET GEN END,
 
     vk.c.vkCmdEndRendering(cmd_buffer);
 

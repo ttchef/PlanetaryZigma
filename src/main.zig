@@ -21,7 +21,7 @@ pub fn main() !void {
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = false }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 

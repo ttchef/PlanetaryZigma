@@ -10,7 +10,7 @@ surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,
 vertex_buffer: Buffer,
 vertex_buffer_address: c.VkDeviceAddress,
-name: []const u8 = "default",
+name: []const u8,
 
 pub const Vertex = extern struct {
     position: [3]f32 = @splat(0),
@@ -38,7 +38,7 @@ pub const GeoSurface = struct {
     material: *Material.Instance,
 };
 
-pub fn init(device: Device, geo_surfaces: std.ArrayListUnmanaged(GeoSurface), vma_allocator: Vma.Allocator, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, name: []const u8, device: Device, geo_surfaces: std.ArrayList(GeoSurface), indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
@@ -105,10 +105,12 @@ pub fn init(device: Device, geo_surfaces: std.ArrayListUnmanaged(GeoSurface), vm
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
         .surfaces = geo_surfaces,
+        .name = try allocator.dupe(u8, name),
     };
 }
 
-pub fn deinit(self: @This(), vma_allocator: Vma.Allocator) void {
+pub fn deinit(self: @This(), allocator: std.mem.Allocator, vma_allocator: Vma.Allocator) void {
     self.index_buffer.deinit(vma_allocator);
     self.vertex_buffer.deinit(vma_allocator);
+    allocator.free(self.name);
 }
