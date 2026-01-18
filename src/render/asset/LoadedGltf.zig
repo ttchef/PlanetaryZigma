@@ -47,6 +47,7 @@ pub fn init(
         .{ .desciptor_type = vk.c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .ratio = 1 },
     };
 
+    std.log.info("materials_count, {d}", .{data.materials_count});
     file.descriptor_pool = try .init(allocator, device, @intCast(data.materials_count), &sizes);
     if (data.samplers_count != 0) {
         for (data.samplers[0..data.samplers_count]) |sampler| {
@@ -219,15 +220,14 @@ pub fn init(
             try surfaces.append(allocator, new_surface);
         }
 
-        var new_mesh = try allocator.create(vk.Mesh);
-        new_mesh.* = try .init(device, surfaces, vma.handle, indices_list.items, vertices_list.items);
-        new_mesh.name = try allocator.dupe(u8, std.mem.span(mesh.name));
-        new_mesh.surfaces = surfaces;
+        const new_mesh = try allocator.create(vk.Mesh);
+        new_mesh.* = try .init(allocator, vma.handle, std.mem.span(mesh.name), device, surfaces, indices_list.items, vertices_list.items);
         try meshes.append(allocator, new_mesh);
-        try file.meshes.put(allocator, std.mem.span(mesh.name), new_mesh);
+        try file.meshes.put(allocator, new_mesh.name, new_mesh);
     }
 
     var nodes: std.ArrayList(*vk.Node) = try .initCapacity(allocator, data.nodes_count);
+    defer nodes.deinit(allocator);
     for (data.nodes[0..data.nodes_count]) |node| {
         var new_node = try allocator.create(vk.Node);
         new_node.* = .{};
@@ -278,7 +278,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device:
 
     var mesh_it = self.meshes.iterator();
     while (mesh_it.next()) |mesh| {
-        mesh.value_ptr.*.deinit(vma.handle);
+        mesh.value_ptr.*.deinit(allocator, vma.handle);
     }
 
     var images_it = self.images.iterator();
@@ -286,6 +286,11 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device:
         if (image.value_ptr.vk_image == self.default_image.vk_image) continue;
         image.value_ptr.deinit(vma, device);
     }
+
+    // var nodes_it = self.nodes.iterator();
+    // while (nodes_it.next()) |node| {
+    //     allocator.destroy(node.value_ptr);
+    // }
 
     for (self.samplers.items) |sampler| {
         vk.c.vkDestroySampler(device.handle, sampler, null);

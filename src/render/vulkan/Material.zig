@@ -100,6 +100,7 @@ pub const GltfMetallicRoughness = struct {
         mesh_pipeline_config.render_info.depthAttachmentFormat = depth_image.format;
         mesh_pipeline_config.enableDepthTesting(vk.VK_TRUE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
         const opaque_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
+        std.debug.print("Create PipelinePtr: {*}\n", .{&opaque_pipeline});
 
         mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
         mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
