@@ -68,6 +68,7 @@ pub fn init(
     }
 
     var images: std.ArrayList(vk.Image) = .empty;
+    defer images.deinit(allocator);
     if (data.images_count != 0) {
         for (data.images[0..data.images_count], 0..data.images_count) |image, i| {
             const img = loadImage(vma, device, image) catch default_images[0];
@@ -92,6 +93,7 @@ pub fn init(
     var ptr: [*]vk.Material.GltfMetallicRoughness.Constants = @ptrCast(@alignCast(file.material_data_buffer.info.pMappedData));
     var scene_material_constants = ptr[0..data.materials_count];
     var materials: std.ArrayList(*vk.Material.Instance) = .empty;
+    defer materials.deinit(allocator);
     for (data.materials[0..data.materials_count]) |material| {
         const constant: vk.Material.GltfMetallicRoughness.Constants = .{
             .color_factores = material.pbr_metallic_roughness.base_color_factor,
@@ -135,6 +137,7 @@ pub fn init(
     }
 
     var meshes: std.ArrayList(*vk.Mesh) = .empty;
+    defer meshes.deinit(allocator);
     var indices_list: std.ArrayList(u32) = .empty;
     var vertices_list: std.ArrayList(vk.Mesh.Vertex) = .empty;
     defer indices_list.deinit(allocator);
@@ -144,6 +147,7 @@ pub fn init(
         vertices_list.clearAndFree(allocator);
 
         var surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
+        defer surfaces.deinit(allocator);
         for (mesh.primitives[0..mesh.primitives_count]) |*primitive| {
             const initial_vtx = vertices_list.items.len;
             var idx_acc = if (primitive.indices) |indices| indices.* else continue;
@@ -221,7 +225,7 @@ pub fn init(
         }
 
         const new_mesh = try allocator.create(vk.Mesh);
-        new_mesh.* = try .init(allocator, vma.handle, std.mem.span(mesh.name), device, surfaces, indices_list.items, vertices_list.items);
+        new_mesh.* = try .init(allocator, vma.handle, std.mem.span(mesh.name), device, surfaces.items, indices_list.items, vertices_list.items);
         try meshes.append(allocator, new_mesh);
         try file.meshes.put(allocator, new_mesh.name, new_mesh);
     }
@@ -279,6 +283,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device:
     var mesh_it = self.meshes.iterator();
     while (mesh_it.next()) |mesh| {
         mesh.value_ptr.*.deinit(allocator, vma.handle);
+        allocator.destroy(mesh.value_ptr.*);
     }
 
     var images_it = self.images.iterator();
@@ -287,10 +292,16 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma, device:
         image.value_ptr.deinit(vma, device);
     }
 
-    // var nodes_it = self.nodes.iterator();
-    // while (nodes_it.next()) |node| {
-    //     allocator.destroy(node.value_ptr);
-    // }
+    var node_it = self.nodes.iterator();
+    while (node_it.next()) |node| {
+        node.value_ptr.*.children.deinit(allocator);
+        allocator.destroy(node.value_ptr.*);
+    }
+
+    var material_it = self.materials.iterator();
+    while (material_it.next()) |material| {
+        allocator.destroy(material.value_ptr.*);
+    }
 
     for (self.samplers.items) |sampler| {
         vk.c.vkDestroySampler(device.handle, sampler, null);

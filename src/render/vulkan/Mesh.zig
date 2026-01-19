@@ -38,7 +38,7 @@ pub const GeoSurface = struct {
     material: *Material.Instance,
 };
 
-pub fn init(allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, name: []const u8, device: Device, geo_surfaces: std.ArrayList(GeoSurface), indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, name: []const u8, device: Device, geo_surfaces: []const GeoSurface, indices: []u32, vertices: []Vertex) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
@@ -100,17 +100,21 @@ pub fn init(allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, name: []
 
     staging.deinit(vma_allocator);
 
+    var allocated_surfaces: std.ArrayList(GeoSurface) = try .initCapacity(allocator, geo_surfaces.len);
+    allocated_surfaces.appendSliceAssumeCapacity(geo_surfaces);
+
     return .{
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         .vertex_buffer_address = vertex_buffer_address,
-        .surfaces = geo_surfaces,
+        .surfaces = allocated_surfaces,
         .name = try allocator.dupe(u8, name),
     };
 }
 
-pub fn deinit(self: @This(), allocator: std.mem.Allocator, vma_allocator: Vma.Allocator) void {
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma_allocator: Vma.Allocator) void {
     self.index_buffer.deinit(vma_allocator);
     self.vertex_buffer.deinit(vma_allocator);
     allocator.free(self.name);
+    self.surfaces.deinit(allocator);
 }
