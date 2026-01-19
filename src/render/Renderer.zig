@@ -78,8 +78,18 @@ pub const Config = struct {
 const Planet = struct {
     mesh: vk.Mesh,
     material: *vk.Material.Instance,
+    surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
+
+        // for (0..16)|x|{
+        //     for (0..16) |y|{
+        //         for (0..16) |z| {
+        //
+        //         }
+        //     }
+        // }
+
         var vertices: [8]vk.Mesh.Vertex = .{
             .{ .position = .{ 0, 0, 0 } },
             .{ .position = .{ 1, 0, 0 } },
@@ -125,28 +135,24 @@ const Planet = struct {
 
         const planet_material = try allocator.create(vk.Material.Instance);
         planet_material.* = material;
-        var surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty;
-        try surfaces.append(
+
+        const mesh: vk.Mesh = try .init(
             allocator,
-            .{
+            vma.handle,
+            "planet",
+            device,
+            &.{.{
                 .index_start = 0,
                 .index_count = indices.len,
                 .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
                 .material = planet_material,
-            },
+            }},
+            &indices,
+            &vertices,
         );
-        // defer surfaces.deinit(allocator);
 
         return .{
-            .mesh = try .init(
-                allocator,
-                vma.handle,
-                "planet",
-                device,
-                surfaces,
-                &indices,
-                &vertices,
-            ),
+            .mesh = mesh,
             .material = planet_material,
         };
     }
@@ -416,6 +422,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
         scene.value_ptr.*.deinit(self.allocator, self.vma, self.device);
     }
     self.loaded_scenes.deinit(allocator);
+    self.main_draw_context.deinit(allocator);
 
     self.global_descriptor_allocator.deinit(self.device);
 

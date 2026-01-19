@@ -98,4 +98,9 @@ pub const DrawContext = struct {
         self.opaque_surfaces.clearRetainingCapacity();
         self.transparent_surfaces.clearRetainingCapacity();
     }
+
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        self.opaque_surfaces.deinit(allocator);
+        self.transparent_surfaces.deinit(allocator);
+    }
 };
