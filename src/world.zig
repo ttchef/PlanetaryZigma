@@ -29,6 +29,6 @@ pub const Camera = struct {
         const pitch_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(transform.rotation[0], .{ 1, 0, 0 });
         const yaw_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(transform.rotation[1], .{ 0, -1, 0 });
 
-        return nz.Mat4x4(f32).fromQuaternion(yaw_rotation.toVec()).mul(nz.Mat4x4(f32).fromQuaternion(pitch_rotation.toVec()));
+        return yaw_rotation.mul(pitch_rotation).toMat4x4();
     }
 };

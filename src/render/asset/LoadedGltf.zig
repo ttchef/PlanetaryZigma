@@ -249,7 +249,7 @@ pub fn init(
             new_node.local_transform = .fromMat4x4(local_matrix);
         } else {
             const tl: nz.Mat4x4(f32) = .translate(node.translation);
-            const rot: nz.Mat4x4(f32) = .fromQuaternion(node.rotation);
+            const rot: nz.Mat4x4(f32) = nz.quat.Hamiltonian(f32).fromVec(node.rotation).toMat4x4();
             const scale: nz.Mat4x4(f32) = .scale(node.scale);
             new_node.local_transform = .fromMat4x4(scale.mul(rot).mul(tl));
         }
