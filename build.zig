@@ -26,8 +26,6 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     vma.addIncludePath(vulkan_header_dep.path("include/"));
 
- 
-
     const cgltf_dep = b.dependency("cgltf", .{});
     const cgltf = b.addTranslateC(.{
         .root_source_file = cgltf_dep.path("cgltf.h"),
@@ -161,14 +159,6 @@ pub fn build(b: *std.Build) void {
             \\#include "vk_mem_alloc.h"
         ),
         .flags = &.{"-std=c++14"},
-    });
-
-    renderer.addCSourceFile(.{
-        .file = b.addWriteFiles().add("tiny_obj_loader_impl.c",
-            \\#define TINYOBJ_LOADER_C_IMPLEMENTATION
-            \\#include "tinyobj_loader_c.h"
-        ),
-        .flags = &.{"-std=c99"},
     });
 
     renderer.addCSourceFile(.{
