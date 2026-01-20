@@ -81,57 +81,67 @@ const Planet = struct {
     surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
+        const size: usize = 16;
+        // const position: nz.Vec3(f32) = @splat(0);
+        // const voxel_size: u32 = 1;
+        var vertices: std.ArrayList(vk.Mesh.Vertex) = .empty;
+        defer vertices.deinit(allocator);
+        var indices: std.ArrayList(u32) = .empty;
+        defer indices.deinit(allocator);
+        var vert_count: u32 = 0;
+        for (0..size) |x| {
+            for (0..size) |y| {
+                for (0..size) |z| {
+                    const b_x: f32 = @floatFromInt(x);
+                    const b_y: f32 = @floatFromInt(y);
+                    const b_z: f32 = @floatFromInt(z);
+                    var block_vertices = [_]vk.Mesh.Vertex{
+                        .{ .position = .{ b_x + 0, b_y + 0, b_z + 0 } },
+                        .{ .position = .{ b_x + 1, b_y + 0, b_z + 0 } },
+                        .{ .position = .{ b_x + 1, b_y + 1, b_z + 0 } },
+                        .{ .position = .{ b_x + 0, b_y + 1, b_z + 0 } },
+                        .{ .position = .{ b_x + 0, b_y + 0, b_z + -1 } },
+                        .{ .position = .{ b_x + 1, b_y + 0, b_z + -1 } },
+                        .{ .position = .{ b_x + 1, b_y + 1, b_z + -1 } },
+                        .{ .position = .{ b_x + 0, b_y + 1, b_z + -1 } },
+                    };
+                    for (&block_vertices) |*vert| {
+                        vert.normal = .{ 1, 0, 0 };
+                        vert.color = .{ @mod(vert.position[0], 2), 1, 1, 1 };
+                        vert.uv_x = 0;
+                        vert.uv_y = 0;
+                    }
+                    const block_indices = [_]u32{
+                        // Front
+                        0 + vert_count, 1 + vert_count, 2 + vert_count,
+                        0 + vert_count, 2 + vert_count, 3 + vert_count,
 
-        // for (0..16)|x|{
-        //     for (0..16) |y|{
-        //         for (0..16) |z| {
-        //
-        //         }
-        //     }
-        // }
+                        // Back
+                        5 + vert_count, 4 + vert_count, 7 + vert_count,
+                        5 + vert_count, 7 + vert_count, 6 + vert_count,
 
-        var vertices: [8]vk.Mesh.Vertex = .{
-            .{ .position = .{ 0, 0, 0 } },
-            .{ .position = .{ 1, 0, 0 } },
-            .{ .position = .{ 1, 1, 0 } },
-            .{ .position = .{ 0, 1, 0 } },
-            .{ .position = .{ 0, 0, -1 } },
-            .{ .position = .{ 1, 0, -1 } },
-            .{ .position = .{ 1, 1, -1 } },
-            .{ .position = .{ 0, 1, -1 } },
-        };
-        for (&vertices) |*vert| {
-            vert.normal = .{ 1, 0, 0 };
-            vert.color = .{ 1, 1, 1, 1 };
-            vert.uv_x = 0;
-            vert.uv_y = 0;
+                        // Left
+                        4 + vert_count, 0 + vert_count, 3 + vert_count,
+                        4 + vert_count, 3 + vert_count, 7 + vert_count,
+
+                        // Right
+                        1 + vert_count, 5 + vert_count, 6 + vert_count,
+                        1 + vert_count, 6 + vert_count, 2 + vert_count,
+
+                        // Top
+                        3 + vert_count, 2 + vert_count, 6 + vert_count,
+                        3 + vert_count, 6 + vert_count, 7 + vert_count,
+
+                        // Bottom
+                        4 + vert_count, 5 + vert_count, 1 + vert_count,
+                        4 + vert_count, 1 + vert_count, 0 + vert_count,
+                    };
+                    vert_count += 8;
+                    try vertices.appendSlice(allocator, &block_vertices);
+                    try indices.appendSlice(allocator, &block_indices);
+                }
+            }
         }
-
-        var indices = [_]u32{
-            // Front
-            0, 1, 2,
-            0, 2, 3,
-
-            // Back
-            5, 4, 7,
-            5, 7, 6,
-
-            // Left
-            4, 0, 3,
-            4, 3, 7,
-
-            // Right
-            1, 5, 6,
-            1, 6, 2,
-
-            // Top
-            3, 2, 6,
-            3, 6, 7,
-
-            // Bottom
-            4, 5, 1,
-            4, 1, 0,
-        };
 
         const planet_material = try allocator.create(vk.Material.Instance);
         planet_material.* = material;
@@ -143,12 +153,12 @@ const Planet = struct {
             device,
             &.{.{
                 .index_start = 0,
-                .index_count = indices.len,
+                .index_count = @intCast(indices.items.len),
                 .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
                 .material = planet_material,
             }},
-            &indices,
-            &vertices,
+            indices.items,
+            vertices.items,
         );
 
         return .{
@@ -314,11 +324,11 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         },
     );
 
-    var metalRoughMaterial: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
-    var materialBuffer = try vk.Buffer.init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    var metal_rough_material: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(device, descriptor_gpu_scene_data, draw_image, depth_image);
+    var material_buffer: vk.Buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     // Initialize the uniform data with proper values BEFORE copying
-    const sceneUniformData: vk.Material.GltfMetallicRoughness.Constants = .{
+    const scene_uniform_data: vk.Material.GltfMetallicRoughness.Constants = .{
         .color_factores = .{ 1, 1, 1, 1 },
         .metal_rough_factors = .{ 1, 0.5, 0, 0 },
         .extra = std.mem.zeroes([14]nz.Vec4(f32)),
@@ -327,27 +337,27 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     // Copy the initialized data to GPU memory
     vma.copyToAllocation(
         vk.Material.GltfMetallicRoughness.Constants,
-        sceneUniformData,
-        materialBuffer.vma_allocation,
-        &materialBuffer.info,
+        scene_uniform_data,
+        material_buffer.vma_allocation,
+        &material_buffer.info,
     );
-    const materialResources: vk.Material.GltfMetallicRoughness.Resources = .{
+    const material_resources: vk.Material.GltfMetallicRoughness.Resources = .{
         .color_image = white_image,
         .color_sampler = default_sampler_linear,
         .metal_rough_image = white_image,
         .metal_rough_sampler = default_sampler_linear,
-        .data_buffer = materialBuffer.buffer,
+        .data_buffer = material_buffer.buffer,
         .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
     };
 
-    const defaultData = try metalRoughMaterial.writeMaterial(
+    const default_data = try metal_rough_material.writeMaterial(
         device,
         vk.Material.Pass.main_color,
-        materialResources,
+        material_resources,
         &global_descriptor_allocator,
     );
 
-    const planet: Planet = try .init(allocator, vma, device, defaultData);
+    const planet: Planet = try .init(allocator, vma, device, default_data);
 
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
@@ -357,7 +367,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         "assets/objects/tree.glb",
         .{ error_checkerboard_image, white_image },
         default_sampler_linear,
-        &metalRoughMaterial,
+        &metal_rough_material,
     );
     try loaded_scenes.put(allocator, "structure", strcture_file);
 
@@ -384,12 +394,12 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .default_sampler_nearest = default_sampler_nearest,
         .global_descriptor_allocator = global_descriptor_allocator,
         .draw_image_descriptor = draw_image_descriptor,
-        .material_buffer = materialBuffer,
+        .material_buffer = material_buffer,
         .loaded_scenes = loaded_scenes,
         .main_draw_context = .{},
-        .metal_rough_material = metalRoughMaterial,
-        .default_data = defaultData,
-        .material_resources = materialResources,
+        .metal_rough_material = metal_rough_material,
+        .default_data = default_data,
+        .material_resources = material_resources,
     };
 }
 
@@ -497,11 +507,11 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .resolveMode = vk.c.VK_RESOLVE_MODE_NONE,
         .resolveImageView = null,
         .resolveImageLayout = vk.c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .color = .{
-                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                .float32 = .{ 0.0, 0.0, 1.0, 1.0 },
             },
         },
     };
@@ -510,15 +520,16 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .imageView = self.depth_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .clearValue = .{
             .depthStencil = .{
-                .depth = 0,
+                .depth = 1,
+                .stencil = 0,
             },
         },
     };
 
-    var renderInfo: vk.c.VkRenderingInfo = .{
+    var render_info: vk.c.VkRenderingInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = null,
         .flags = 0,
@@ -537,7 +548,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .pStencilAttachment = null,
     };
 
-    vk.c.vkCmdBeginRendering(cmd_buffer, &renderInfo);
+    vk.c.vkCmdBeginRendering(cmd_buffer, &render_info);
 
     current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -551,13 +562,14 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
 
     self.main_draw_context.clear();
     const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -5 },
-        .rotation = .{ 0, 0, 0 },
-        .scale = @splat(1),
+        .position = @splat(@sin(time) - 2.0),
+        .rotation = @splat(@cos(time) * 100),
+        .scale = @splat(@abs(4 * @sin(time))),
     };
 
-    const view = Camera.getViewMatrix(camera_transform);
+    const view = getViewMatrix(camera_transform);
     // const view = nz.Mat4x4(f32).identity;
+    // _ = camera_transform;
     // std.debug.print("\nCamera: {any}\n", .{camera});
     // std.debug.print("\ntransforms: {any}\n", .{camera_transform});
     var projection = nz.Mat4x4(f32).perspective(
@@ -774,4 +786,19 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
 
         count += 1;
     }
+}
+
+pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+    // const forward = nz.vec.forwardFromEuler(transform.rotation);
+    // return nz.Mat4x4(f32).lookAt(transform.position, transform.position + forward, .{ 0, 1, 0 });
+    var camera_translation = nz.Mat4x4(f32).translate(transform.position);
+    const camera_rotation = getRotationMatrix(transform);
+    return (camera_translation.mul(camera_rotation)).inverse();
+}
+
+pub fn getRotationMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+    const pitch_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(transform.rotation[0], .{ 1, 0, 0 });
+    const yaw_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(transform.rotation[1], .{ 0, -1, 0 });
+
+    return yaw_rotation.mul(pitch_rotation).toMat4x4().inverse();
 }

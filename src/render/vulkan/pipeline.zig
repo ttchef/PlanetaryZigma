@@ -132,13 +132,14 @@ pub const Pipeline = union(enum) {
             base_pipeline_index: i32 = -1,
 
             pub fn enableDepthTesting(self: *@This(), depth_write_enable: u32, op: vk.c.VkCompareOp) void {
-                self.depth_stencil_state.depthTestEnable = vk.c.VK_TRUE;
-                self.depth_stencil_state.depthWriteEnable = depth_write_enable;
+                _ = depth_write_enable;
+                self.depth_stencil_state.depthTestEnable = 1;
+                self.depth_stencil_state.depthWriteEnable = 1;
                 self.depth_stencil_state.depthCompareOp = op;
                 self.depth_stencil_state.depthBoundsTestEnable = vk.c.VK_FALSE;
                 self.depth_stencil_state.stencilTestEnable = vk.c.VK_FALSE;
-                self.depth_stencil_state.minDepthBounds = 0;
-                self.depth_stencil_state.maxDepthBounds = 1;
+                self.depth_stencil_state.minDepthBounds = 0.0;
+                self.depth_stencil_state.maxDepthBounds = 1.0;
             }
             pub fn setBlendingDestinationColorBlendFactor(self: *@This(), color_blend_factor: vk.c.VkBlendFactor) void {
                 self.color_blend_attachment.colorWriteMask = vk.c.VK_COLOR_COMPONENT_R_BIT | vk.c.VK_COLOR_COMPONENT_G_BIT | vk.c.VK_COLOR_COMPONENT_B_BIT | vk.c.VK_COLOR_COMPONENT_A_BIT;
