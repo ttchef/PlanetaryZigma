@@ -26,12 +26,7 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     vma.addIncludePath(vulkan_header_dep.path("include/"));
 
-    const tiny_obj_loader_dep = b.dependency("tiny_obj_loader", .{});
-    const tiny_obj_loader = b.addTranslateC(.{
-        .root_source_file = tiny_obj_loader_dep.path("tinyobj_loader_c.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
+ 
 
     const cgltf_dep = b.dependency("cgltf", .{});
     const cgltf = b.addTranslateC(.{
@@ -115,7 +110,6 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "vma", .module = vma },
-                .{ .name = "tiny_obj_loader", .module = tiny_obj_loader },
                 .{ .name = "cgltf", .module = cgltf },
                 .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "World", .module = world_module },
@@ -194,7 +188,6 @@ pub fn build(b: *std.Build) void {
 
     renderer.addIncludePath(vma_dep.path("include/"));
     renderer.addIncludePath(vulkan_header_dep.path("include/"));
-    renderer.addIncludePath(tiny_obj_loader_dep.path("."));
     renderer.addIncludePath(cgltf_dep.path("."));
     renderer.addIncludePath(stb_dep.path("."));
 

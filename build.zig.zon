@@ -9,8 +9,8 @@
             .hash = "zig_glfw-0.1.0-u6zPw6nAAABYAXVxfoDm5ATLz0xOqN8R56drjMYHdurU",
         },
         .numz = .{
-            .url = "git+https://github.com/HaraldWik/numz#40543c82c35c876ecef2bd997fecc9f59654c446",
-            .hash = "numz-0.0.2-V-sGm1elAADqPeYSSOde6-gOLHy-Rb1nXi2yb1mL7bs1",
+            .url = "git+https://github.com/HaraldWik/numz#7b9510d696ac33a692c8cb4a3e5984248477d468",
+            .hash = "numz-0.0.2-V-sGmzqvAABNQqvCl4BGWU5gc-nSfI-zplgJu_73Do9H",
         },
         .ecs = .{
             .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",
@@ -28,12 +28,9 @@
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
-        .tiny_obj_loader = .{
-            .url = "git+https://github.com/syoyo/tinyobjloader-c.git",
-            .hash = "N-V-__8AAKWmBQDq9z-2g3I1U-0lcQNLp3GjkIX3CScXeOiN",
-        },
+
         .cgltf = .{
-            .url = "git+https://github.com/jkuhlmann/cgltf.git",
+            .url = "git+https://github.com/jkuhlmann/cgltf.git#a46a1116f672896ee9233a940b663a10c91b681e",
             .hash = "N-V-__8AAEpsBAA5vmDdnUJyrMbhpss88BWHjCHd5X15vEst",
         },
         .sdl = .{
