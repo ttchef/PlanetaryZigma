@@ -132,9 +132,8 @@ pub const Pipeline = union(enum) {
             base_pipeline_index: i32 = -1,
 
             pub fn enableDepthTesting(self: *@This(), depth_write_enable: u32, op: vk.c.VkCompareOp) void {
-                _ = depth_write_enable;
-                self.depth_stencil_state.depthTestEnable = 1;
-                self.depth_stencil_state.depthWriteEnable = 1;
+                self.depth_stencil_state.depthTestEnable = vk.c.VK_TRUE;
+                self.depth_stencil_state.depthWriteEnable = depth_write_enable;
                 self.depth_stencil_state.depthCompareOp = op;
                 self.depth_stencil_state.depthBoundsTestEnable = vk.c.VK_FALSE;
                 self.depth_stencil_state.stencilTestEnable = vk.c.VK_FALSE;

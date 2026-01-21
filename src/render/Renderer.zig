@@ -82,6 +82,7 @@ const Planet = struct {
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
         const size: usize = 16;
+        // const radius: u32 = 4;
         // const position: nz.Vec3(f32) = @splat(0);
         // const voxel_size: u32 = 1;
         var vertices: std.ArrayList(vk.Mesh.Vertex) = .empty;
@@ -107,7 +108,7 @@ const Planet = struct {
                     };
                     for (&block_vertices) |*vert| {
                         vert.normal = .{ 1, 0, 0 };
-                        vert.color = .{ @mod(vert.position[0], 2), 1, 1, 1 };
+                        vert.color = .{ @mod(vert.position[0], 2), 1, @mod(vert.position[1], 2), 1 };
                         vert.uv_x = 0;
                         vert.uv_y = 0;
                     }
@@ -136,9 +137,13 @@ const Planet = struct {
                         4 + vert_count, 5 + vert_count, 1 + vert_count,
                         4 + vert_count, 1 + vert_count, 0 + vert_count,
                     };
-                    vert_count += 8;
-                    try vertices.appendSlice(allocator, &block_vertices);
-                    try indices.appendSlice(allocator, &block_indices);
+                    const pos_block: nz.Vec3(f32) = .{ b_x, b_y, b_z };
+                    const pos_planet: nz.Vec3(f32) = @splat(size / 2);
+                    if (@abs(nz.vec.distance(pos_planet, pos_block)) < size / 2) {
+                        vert_count += 8;
+                        try vertices.appendSlice(allocator, &block_vertices);
+                        try indices.appendSlice(allocator, &block_indices);
+                    }
                 }
             }
         }
@@ -511,7 +516,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .color = .{
-                .float32 = .{ 0.0, 0.0, 1.0, 1.0 },
+                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
             },
         },
     };
@@ -520,7 +525,7 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         .imageView = self.depth_image.vk_imageview,
         .imageLayout = vk.c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp = vk.c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .storeOp = vk.c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .depthStencil = .{
                 .depth = 1,
@@ -562,29 +567,27 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
 
     self.main_draw_context.clear();
     const top_matrix: nz.Transform3D(f32) = .{
-        .position = @splat(@sin(time) - 2.0),
-        .rotation = @splat(@cos(time) * 100),
-        .scale = @splat(@abs(4 * @sin(time))),
+        .position = .{ 0, 0, -2 },
+        .rotation = @splat(0),
+        .scale = @splat(-1),
     };
 
     const view = getViewMatrix(camera_transform);
     // const view = nz.Mat4x4(f32).identity;
     // _ = camera_transform;
-    // std.debug.print("\nCamera: {any}\n", .{camera});
-    // std.debug.print("\ntransforms: {any}\n", .{camera_transform});
-    var projection = nz.Mat4x4(f32).perspective(
+    var projection = perspective(
         camera.fov_rad,
         (@as(f32, @floatFromInt(self.draw_image.extent.width)) / @as(f32, @floatFromInt(self.draw_image.extent.height))),
         camera.near,
         camera.far,
     );
-    projection.d[5] *= -1;
+    // projection.d[5] *= -1;
     self.scene_data.proj = projection.d;
     self.scene_data.view = view.d;
     self.scene_data.viewproj = projection.mul(view).d;
     self.scene_data.ambient_color = @splat(1);
-    self.scene_data.sunlight_color = .{ 1, 0, 0, 0.1 };
-    self.scene_data.sunlight_direction = .{ 0, @sin(time * 5), @cos(time * 0.5), 1 };
+    self.scene_data.sunlight_color = .{ 0, 0, 0, 1 };
+    self.scene_data.sunlight_direction = .{ @sin(time * 3), 0, 0, 1 };
 
     // std.debug.print(
     //     \\sunlight_dir {any}
@@ -616,6 +619,29 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
         0,
         null,
     );
+    var viewport: vk.c.VkViewport = .{
+        .x = 0,
+        .y = 0,
+        .width = @floatFromInt(self.draw_image.extent.width),
+        .height = @floatFromInt(self.draw_image.extent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+
+    vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+    var scissor: vk.c.VkRect2D = .{
+        .offset = .{
+            .x = 0,
+            .y = 0,
+        },
+        .extent = .{
+            .width = self.draw_image.extent.width,
+            .height = self.draw_image.extent.height,
+        },
+    };
+
+    vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
     vk.c.vkCmdBindDescriptorSets(
         cmd_buffer,
         vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -801,4 +827,13 @@ pub fn getRotationMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
     const yaw_rotation: nz.quat.Hamiltonian(f32) = .angleAxis(transform.rotation[1], .{ 0, -1, 0 });
 
     return yaw_rotation.mul(pitch_rotation).toMat4x4().inverse();
+}
+pub fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+    const f = 1.0 / std.math.tan(fovy_rad / 2.0);
+    return .new(.{
+        f / aspect, 0, 0, 0,
+        0, -f, 0, 0, // flip Y for Vulkan
+        0, 0, far / (near - far),          -1, // <- note near-far here
+        0, 0, (far * near) / (near - far), 0,
+    });
 }
