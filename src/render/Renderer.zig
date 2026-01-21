@@ -82,6 +82,7 @@ const Planet = struct {
 
     pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
         const size: usize = 16;
+        // const radius: u32 = 4;
         // const position: nz.Vec3(f32) = @splat(0);
         // const voxel_size: u32 = 1;
         var vertices: std.ArrayList(vk.Mesh.Vertex) = .empty;
@@ -107,7 +108,7 @@ const Planet = struct {
                     };
                     for (&block_vertices) |*vert| {
                         vert.normal = .{ 1, 0, 0 };
-                        vert.color = .{ @mod(vert.position[0], 2), 1, 1, 1 };
+                        vert.color = .{ @mod(vert.position[0], 2), 1, @mod(vert.position[1], 2), 1 };
                         vert.uv_x = 0;
                         vert.uv_y = 0;
                     }
@@ -136,9 +137,13 @@ const Planet = struct {
                         4 + vert_count, 5 + vert_count, 1 + vert_count,
                         4 + vert_count, 1 + vert_count, 0 + vert_count,
                     };
-                    vert_count += 8;
-                    try vertices.appendSlice(allocator, &block_vertices);
-                    try indices.appendSlice(allocator, &block_indices);
+                    const pos_block: nz.Vec3(f32) = .{ b_x, b_y, b_z };
+                    const pos_planet: nz.Vec3(f32) = @splat(size / 2);
+                    if (@abs(nz.vec.distance(pos_planet, pos_block)) < size / 2) {
+                        vert_count += 8;
+                        try vertices.appendSlice(allocator, &block_vertices);
+                        try indices.appendSlice(allocator, &block_indices);
+                    }
                 }
             }
         }

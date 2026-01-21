@@ -104,7 +104,7 @@ pub const GltfMetallicRoughness = struct {
         const opaque_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
         mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-        // mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_GREATER_OR_EQUAL);
+        mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_LESS);
         const transparent_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
 
         return .{
