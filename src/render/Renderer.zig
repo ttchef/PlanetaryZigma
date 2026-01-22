@@ -5,6 +5,7 @@ const tiny_obj = @import("tiny_obj_loader");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
 pub const c = @import("c.zig");
 pub const Camera = @import("World").Camera;
+const Planet = @import("Planet.zig");
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
@@ -73,109 +74,6 @@ pub const Config = struct {
         width: u32 = 0,
         heigth: u32 = 0,
     },
-};
-
-const Planet = struct {
-    mesh: vk.Mesh,
-    material: *vk.Material.Instance,
-    surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
-
-    pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
-        const size: usize = 16;
-        // const radius: u32 = 4;
-        // const position: nz.Vec3(f32) = @splat(0);
-        // const voxel_size: u32 = 1;
-        var vertices: std.ArrayList(vk.Mesh.Vertex) = .empty;
-        defer vertices.deinit(allocator);
-        var indices: std.ArrayList(u32) = .empty;
-        defer indices.deinit(allocator);
-        var vert_count: u32 = 0;
-        for (0..size) |x| {
-            for (0..size) |y| {
-                for (0..size) |z| {
-                    const b_x: f32 = @floatFromInt(x);
-                    const b_y: f32 = @floatFromInt(y);
-                    const b_z: f32 = @floatFromInt(z);
-                    var block_vertices = [_]vk.Mesh.Vertex{
-                        .{ .position = .{ b_x + 0, b_y + 0, b_z + 0 } },
-                        .{ .position = .{ b_x + 1, b_y + 0, b_z + 0 } },
-                        .{ .position = .{ b_x + 1, b_y + 1, b_z + 0 } },
-                        .{ .position = .{ b_x + 0, b_y + 1, b_z + 0 } },
-                        .{ .position = .{ b_x + 0, b_y + 0, b_z + -1 } },
-                        .{ .position = .{ b_x + 1, b_y + 0, b_z + -1 } },
-                        .{ .position = .{ b_x + 1, b_y + 1, b_z + -1 } },
-                        .{ .position = .{ b_x + 0, b_y + 1, b_z + -1 } },
-                    };
-                    for (&block_vertices) |*vert| {
-                        vert.normal = .{ 1, 0, 0 };
-                        vert.color = .{ @mod(vert.position[0], 2), 1, @mod(vert.position[1], 2), 1 };
-                        vert.uv_x = 0;
-                        vert.uv_y = 0;
-                    }
-                    const block_indices = [_]u32{
-                        // Front
-                        0 + vert_count, 1 + vert_count, 2 + vert_count,
-                        0 + vert_count, 2 + vert_count, 3 + vert_count,
-
-                        // Back
-                        5 + vert_count, 4 + vert_count, 7 + vert_count,
-                        5 + vert_count, 7 + vert_count, 6 + vert_count,
-
-                        // Left
-                        4 + vert_count, 0 + vert_count, 3 + vert_count,
-                        4 + vert_count, 3 + vert_count, 7 + vert_count,
-
-                        // Right
-                        1 + vert_count, 5 + vert_count, 6 + vert_count,
-                        1 + vert_count, 6 + vert_count, 2 + vert_count,
-
-                        // Top
-                        3 + vert_count, 2 + vert_count, 6 + vert_count,
-                        3 + vert_count, 6 + vert_count, 7 + vert_count,
-
-                        // Bottom
-                        4 + vert_count, 5 + vert_count, 1 + vert_count,
-                        4 + vert_count, 1 + vert_count, 0 + vert_count,
-                    };
-                    const pos_block: nz.Vec3(f32) = .{ b_x, b_y, b_z };
-                    const pos_planet: nz.Vec3(f32) = @splat(size / 2);
-                    if (@abs(nz.vec.distance(pos_planet, pos_block)) < size / 2) {
-                        vert_count += 8;
-                        try vertices.appendSlice(allocator, &block_vertices);
-                        try indices.appendSlice(allocator, &block_indices);
-                    }
-                }
-            }
-        }
-
-        const planet_material = try allocator.create(vk.Material.Instance);
-        planet_material.* = material;
-
-        const mesh: vk.Mesh = try .init(
-            allocator,
-            vma.handle,
-            "planet",
-            device,
-            &.{.{
-                .index_start = 0,
-                .index_count = @intCast(indices.items.len),
-                .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-                .material = planet_material,
-            }},
-            indices.items,
-            vertices.items,
-        );
-
-        return .{
-            .mesh = mesh,
-            .material = planet_material,
-        };
-    }
-
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma) void {
-        self.mesh.deinit(allocator, vma.handle);
-        allocator.destroy(self.material);
-    }
 };
 
 pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
