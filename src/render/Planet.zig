@@ -9,7 +9,8 @@ surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
 pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
     const size: usize = 128;
     const radius: f32 = (size / 2);
-    var points: [size + 1][size + 1][size + 1]f32 = undefined;
+    var points = try allocator.alloc(f32, (size + 1) * (size + 1) * (size + 1));
+    defer allocator.free(points);
     const pos_planet: nz.Vec3(f32) = @splat(radius + @as(f32, 0.5));
 
     for (0..size + 1) |x| {
@@ -29,7 +30,7 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, materi
                 } else if (radius > distance) {
                     point = radius - distance;
                 } else point = distance - radius;
-                points[x][y][z] = point;
+                points[getIndex(size, x, y, z)] = point;
             }
         }
     }
@@ -48,7 +49,7 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, materi
                 var cube: [8]f32 = undefined;
                 for (0..8) |i| {
                     const corner = cube_pos + cube_corners[i];
-                    cube[i] = points[@intFromFloat(corner[0])][@intFromFloat(corner[1])][@intFromFloat(corner[2])];
+                    cube[i] = points[getIndex(size, @intFromFloat(corner[0]), @intFromFloat(corner[1]), @intFromFloat(corner[2]))];
                 }
                 try marchCube(allocator, cube_pos, cube, &vertices, &indices);
             }
@@ -123,6 +124,10 @@ fn marchCube(
             edge_index += 1;
         }
     }
+}
+
+fn getIndex(size: u32, x: usize, y: usize, z: usize) usize {
+    return (x + y * size + z * size * size);
 }
 
 const cube_corners = [_]nz.Vec3(f32){
