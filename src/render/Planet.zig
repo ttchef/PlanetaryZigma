@@ -6,21 +6,22 @@ mesh: vk.Mesh,
 material: *vk.Material.Instance,
 surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
 
-pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, material: vk.Material.Instance) !@This() {
-    const size: usize = 128;
-    const radius: f32 = (size / 2);
-    var points = try allocator.alloc(f32, (size + 1) * (size + 1) * (size + 1));
+//if size < 3, size = 3. It beaks other ways.
+pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, center_pos: nz.Vec3(f32), size: u32, material: vk.Material.Instance) !@This() {
+    const clamped_size = @max(size, 3);
+    const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
+    var points = try allocator.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
     defer allocator.free(points);
-    const pos_planet: nz.Vec3(f32) = @splat(radius + @as(f32, 0.5));
+    // const pos_planet: nz.Vec3(f32) = @splat(radius + @as(f32, 0.5));
 
-    for (0..size + 1) |x| {
-        for (0..size + 1) |y| {
-            for (0..size + 1) |z| {
-                const b_x: f32 = @floatFromInt(x);
-                const b_y: f32 = @floatFromInt(y);
-                const b_z: f32 = @floatFromInt(z);
+    for (0..clamped_size + 1) |x| {
+        for (0..clamped_size + 1) |y| {
+            for (0..clamped_size + 1) |z| {
+                const b_x: f32 = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
+                const b_y: f32 = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
+                const b_z: f32 = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
                 const pos_point: nz.Vec3(f32) = .{ b_x, b_y, b_z };
-                const distance: f32 = @abs(nz.vec.distance(pos_planet, pos_point));
+                const distance: f32 = @abs(nz.vec.distance(center_pos, pos_point));
                 var point: f32 = 0;
 
                 if (radius <= distance - 0.5) {
@@ -30,7 +31,7 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, materi
                 } else if (radius > distance) {
                     point = radius - distance;
                 } else point = distance - radius;
-                points[getIndex(size, x, y, z)] = point;
+                points[getIndex(clamped_size, x, y, z)] = point;
             }
         }
     }
@@ -39,18 +40,23 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, materi
     defer vertices.deinit(allocator);
     var indices: std.ArrayList(u32) = .empty;
     defer indices.deinit(allocator);
-    for (0..size) |x| {
-        for (0..size) |y| {
-            for (0..size) |z| {
-                const b_x: f32 = @floatFromInt(x);
-                const b_y: f32 = @floatFromInt(y);
-                const b_z: f32 = @floatFromInt(z);
-                const cube_pos: nz.Vec3(f32) = .{ b_x, b_y, b_z };
+    for (0..clamped_size) |x| {
+        for (0..clamped_size) |y| {
+            for (0..clamped_size) |z| {
+                var b_x: f32 = @floatFromInt(x);
+                var b_y: f32 = @floatFromInt(y);
+                var b_z: f32 = @floatFromInt(z);
+                var cube_pos: nz.Vec3(f32) = .{ b_x, b_y, b_z };
                 var cube: [8]f32 = undefined;
                 for (0..8) |i| {
                     const corner = cube_pos + cube_corners[i];
-                    cube[i] = points[getIndex(size, @intFromFloat(corner[0]), @intFromFloat(corner[1]), @intFromFloat(corner[2]))];
+                    cube[i] = points[getIndex(clamped_size, @intFromFloat(corner[0]), @intFromFloat(corner[1]), @intFromFloat(corner[2]))];
                 }
+
+                b_x = @as(f32, @floatFromInt(x)) + center_pos[0] - radius + 0.5;
+                b_y = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
+                b_z = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
+                cube_pos = .{ b_x, b_y, b_z };
                 try marchCube(allocator, cube_pos, cube, &vertices, &indices);
             }
         }
@@ -102,7 +108,6 @@ fn marchCube(
             config_index |= @as(u32, 1) << @intCast(i);
     }
     if (config_index == 0 or config_index == 255) return;
-    std.debug.print("conf: {d}\n", .{config_index});
     var edge_index: u32 = 0;
     for (0..5) |_| {
         for (0..3) |_| {

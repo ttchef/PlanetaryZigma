@@ -260,7 +260,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
-    const planet: Planet = try .init(allocator, vma, device, default_data);
+    const planet: Planet = try .init(allocator, vma, device, .{ 0, 0, -2 }, 10, default_data);
 
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
@@ -484,8 +484,8 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     self.scene_data.view = view.d;
     self.scene_data.viewproj = projection.mul(view).d;
     self.scene_data.ambient_color = @splat(1);
-    self.scene_data.sunlight_color = .{ 0, 0, 0, 1 };
-    self.scene_data.sunlight_direction = .{ @sin(time * 3), 0, 0, 1 };
+    self.scene_data.sunlight_color = .{ 0, 0, 0, 0 };
+    self.scene_data.sunlight_direction = .{ @sin(time), 0, 0, 1 };
 
     // std.debug.print(
     //     \\sunlight_dir {any}

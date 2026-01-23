@@ -4,7 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zig_glfw = b.dependency("zig_glfw", .{ .target = target, .optimize = optimize, .vulkan = true }).module("zig_glfw");
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
     const ecs = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
     const vulkan_header_dep = b.dependency("vulkan_headers", .{});
@@ -33,6 +32,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).createModule();
     cgltf.addIncludePath(cgltf_dep.path("."));
+
+    // const cjolt_dep = b.dependency("cjolt", .{});
+    // const cjolt = b.addTranslateC(.{
+    //     .root_source_file = cjolt_dep.path("include/joltc.h"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // }).createModule();
+    // cjolt.addIncludePath(cjolt_dep.path("include/"));
+    const zphysics = b.dependency("zphysics", .{
+        .use_double_precision = false,
+        .enable_cross_platform_determinism = true,
+    });
 
     const stb_dep = b.dependency("stb", .{});
     const stb = b.addTranslateC(.{
@@ -87,6 +98,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
                 .{ .name = "World", .module = world_module },
+                // .{ .name = "cjolt", .module = cjolt },
             },
         }),
         .linkage = .dynamic,
@@ -102,7 +114,6 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "glfw", .module = zig_glfw },
                 .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
@@ -129,7 +140,6 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .imports = &.{
-                .{ .name = "glfw", .module = zig_glfw },
                 .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
@@ -143,7 +153,8 @@ pub fn build(b: *std.Build) void {
             .link_libcpp = true,
         }),
     });
-
+    exe.root_module.addImport("zphysics", zphysics.module("root"));
+    exe.linkLibrary(zphysics.artifact("joltc"));
     exe.step.dependOn(&cargo_cmd.step);
 
     exe.root_module.linkSystemLibrary("unwind", .{});
