@@ -4,10 +4,6 @@
     .fingerprint = 0x9145da0722fc95d5,
     .minimum_zig_version = "0.16.0-dev.1484+d0ba6642b",
     .dependencies = .{
-        .zig_glfw = .{
-            .url = "git+https://github.com/HaraldWik/zig-glfw#91728e2a95ee16bfcd6f88d7c2ab8b0512691420",
-            .hash = "zig_glfw-0.1.0-u6zPw6nAAABYAXVxfoDm5ATLz0xOqN8R56drjMYHdurU",
-        },
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#7b9510d696ac33a692c8cb4a3e5984248477d468",
             .hash = "numz-0.0.2-V-sGmzqvAABNQqvCl4BGWU5gc-nSfI-zplgJu_73Do9H",
@@ -28,7 +24,6 @@
             .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
             .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
         },
-
         .cgltf = .{
             .url = "git+https://github.com/jkuhlmann/cgltf.git#a46a1116f672896ee9233a940b663a10c91b681e",
             .hash = "N-V-__8AAEpsBAA5vmDdnUJyrMbhpss88BWHjCHd5X15vEst",
@@ -36,6 +31,10 @@
         .sdl = .{
             .url = "git+https://github.com/libsdl-org/SDL#ca537d651b82f28bc280685391665eb25c856e00",
             .hash = "N-V-__8AAPWd8gKEnPWYHgaXRLb2fVuO6VrJ6W8yvIjDA8Uu",
+        },
+        .zphysics = .{
+            .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
+            .hash = "zphysics-0.2.0-dev-nZDEAI_fQgAEgTR_PnmxLaBEeYAqOi4GD644fPnJ9THh",
         },
     },
     .paths = .{

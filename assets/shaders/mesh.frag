@@ -12,6 +12,7 @@ void main() {
 	float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.1f);
 
   vec4 tex = texture(colorTex, inUV);
+  // vec3 colorRed = vec3(1,0,0);
 	vec3 color = inColor * tex.xyz;
 	vec3 ambient = color * sceneData.ambientColor.xyz;
 
