@@ -38,7 +38,15 @@ pub const GeoSurface = struct {
     material: *Material.Instance,
 };
 
-pub fn init(allocator: std.mem.Allocator, vma_allocator: Vma.Allocator, name: []const u8, device: Device, geo_surfaces: []const GeoSurface, indices: []u32, vertices: []Vertex) !@This() {
+pub fn init(
+    allocator: std.mem.Allocator,
+    vma_allocator: Vma.Allocator,
+    name: []const u8,
+    device: Device,
+    geo_surfaces: []const GeoSurface,
+    indices: []u32,
+    vertices: []Vertex,
+) !@This() {
     const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 

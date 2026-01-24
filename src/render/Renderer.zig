@@ -728,6 +728,28 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
     }
 }
 
+pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !u32 {
+    const mesh = try vk.Mesh.init(
+        self.allocator,
+        self.vma,
+        name,
+        self.device,
+        &.{.{
+            .index_start = 0,
+            .index_count = @intCast(indices.items.len),
+            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+            .material = self.default_data,
+        }},
+        indices,
+        verices,
+    );
+    self.meshes.append(
+        self.allocator,
+        mesh,
+    );
+    return (self.meshes.items.len - 1);
+}
+
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
     // const forward = nz.vec.forwardFromEuler(transform.rotation);
     // return nz.Mat4x4(f32).lookAt(transform.position, transform.position + forward, .{ 0, 1, 0 });
