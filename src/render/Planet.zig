@@ -4,7 +4,6 @@ const nz = @import("numz");
 
 mesh: vk.Mesh,
 material: *vk.Material.Instance,
-surfaces: std.ArrayList(vk.Mesh.GeoSurface) = .empty,
 
 //if size < 3, size = 3. It beaks other ways.
 pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, center_pos: nz.Vec3(f32), size: u32, material: vk.Material.Instance) !@This() {

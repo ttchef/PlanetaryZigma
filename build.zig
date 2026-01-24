@@ -33,13 +33,6 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     cgltf.addIncludePath(cgltf_dep.path("."));
 
-    // const cjolt_dep = b.dependency("cjolt", .{});
-    // const cjolt = b.addTranslateC(.{
-    //     .root_source_file = cjolt_dep.path("include/joltc.h"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).createModule();
-    // cjolt.addIncludePath(cjolt_dep.path("include/"));
     const zphysics = b.dependency("zphysics", .{
         .use_double_precision = false,
         .enable_cross_platform_determinism = true,
@@ -103,7 +96,8 @@ pub fn build(b: *std.Build) void {
         }),
         .linkage = .dynamic,
     });
-
+    system.root_module.addImport("zphysics", zphysics.module("root"));
+    system.linkLibrary(zphysics.artifact("joltc"));
     system.root_module.linkSystemLibrary("SDL3", .{});
     b.installArtifact(system);
 
