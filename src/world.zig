@@ -5,7 +5,9 @@ pub const World = ecs.World(&.{
     nz.Transform3D(f32),
     Camera,
     Player,
+    Model,
 });
+
 pub const Player = struct {
     local: bool = false,
 };
@@ -18,4 +20,8 @@ pub const Camera = struct {
     speed: f32 = 10,
     sensitivity: f32 = 0.5,
     was_rotating: bool = false,
+};
+
+pub const Model = struct {
+    model: union(enum) { gltf: u32, mesh: u32 },
 };

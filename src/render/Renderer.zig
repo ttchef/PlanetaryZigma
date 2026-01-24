@@ -1,19 +1,20 @@
 const std = @import("std");
 const nz = @import("numz");
-pub const vk = @import("vulkan/vulkan.zig");
-const tiny_obj = @import("tiny_obj_loader");
+const WorldModule = @import("World");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
-pub const c = @import("c.zig");
-pub const Camera = @import("World").Camera;
 const Planet = @import("Planet.zig");
+pub const vk = @import("vulkan/vulkan.zig");
+pub const Camera = @import("World").Camera;
+pub const c = @import("c.zig");
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
 comptime {
     _ = c;
 }
 
-//TODO: AssetMangager
+//models
 loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
+meshes: std.ArrayList(vk.Mesh) = .empty,
 
 //Default values
 white_image: vk.Image,
@@ -21,6 +22,12 @@ black_image: vk.Image,
 error_checkerboard_image: vk.Image,
 default_sampler_linear: vk.c.VkSampler,
 default_sampler_nearest: vk.c.VkSampler,
+graphics_descriptor_layout: vk.descriptor.Layout,
+gpu_scene_data_descriptor_layout: vk.descriptor.Layout,
+global_descriptor_allocator: vk.descriptor.Growable,
+draw_image_descriptor_layout: vk.descriptor.Layout,
+draw_image_descriptor: vk.c.VkDescriptorSet,
+scene_data: vk.GPUSceneData,
 
 //GLTF
 main_draw_context: vk.Node.DrawContext,
@@ -29,12 +36,7 @@ metal_rough_material: vk.Material.GltfMetallicRoughness,
 default_data: vk.Material.Instance,
 material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
-graphics_descriptor_layout: vk.descriptor.Layout,
-gpu_scene_data_descriptor_layout: vk.descriptor.Layout,
-global_descriptor_allocator: vk.descriptor.Growable,
-draw_image_descriptor_layout: vk.descriptor.Layout,
-draw_image_descriptor: vk.c.VkDescriptorSet,
-scene_data: vk.GPUSceneData,
+//Vulkan Render Specific
 allocator: std.mem.Allocator,
 instance: vk.Instance,
 debug_messenger: vk.DebugMessenger,
@@ -244,6 +246,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         material_buffer.vma_allocation,
         &material_buffer.info,
     );
+
     const material_resources: vk.Material.GltfMetallicRoughness.Resources = .{
         .color_image = white_image,
         .color_sampler = default_sampler_linear,
@@ -260,7 +263,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
-    const planet: Planet = try .init(allocator, vma, device, .{ 0, 0, -2 }, 10, default_data);
+    const planet: Planet = try .init(allocator, vma, device, .{ 0, 0, -2 }, 60, default_data);
 
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
@@ -361,7 +364,12 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
     self.draw_image.extent.width = @intFromFloat(scaled_width);
 }
 
-pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.Transform3D(f32), time: f32) !void {
+pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
+    var query = world.query(&.{ WorldModule.Player, WorldModule.Camera, nz.Transform3D(f32) });
+    const entity = query.next().?;
+    const camera = entity.getPtr(WorldModule.Camera, world).?;
+    const camera_transform = entity.getPtr(nz.Transform3D(f32), world).?;
+
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try vk.check(vk.c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
@@ -495,6 +503,14 @@ pub fn draw(self: *@This(), camera: *const Camera, camera_transform: *const nz.T
     //     self.scene_data.sunlight_direction,
     //     time,
     // });
+    var draw_query = world.query(&.{WorldModule.Model});
+    while (draw_query.next()) |entry| {
+        const model = entry.get(WorldModule.Model, world).?;
+        switch (model.model) {
+            .gltf => std.debug.print("GLTF!!!\n", .{}),
+            .mesh => std.debug.print("MESH!!!\n", .{}),
+        }
+    }
 
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
     try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
@@ -710,6 +726,28 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
 
         count += 1;
     }
+}
+
+pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !u32 {
+    const mesh = try vk.Mesh.init(
+        self.allocator,
+        self.vma,
+        name,
+        self.device,
+        &.{.{
+            .index_start = 0,
+            .index_count = @intCast(indices.items.len),
+            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+            .material = self.default_data,
+        }},
+        indices,
+        verices,
+    );
+    self.meshes.append(
+        self.allocator,
+        mesh,
+    );
+    return (self.meshes.items.len - 1);
 }
 
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {

@@ -33,11 +33,6 @@ pub fn main() !void {
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
-    const e = try world.addEntity();
-    e.set(WorldModule.Player, .{}, world);
-    e.set(nz.Transform3D(f32), .{}, world);
-    e.set(WorldModule.Camera, .{}, world);
-
     var renderer_config: Renderer.Config = .{
         .instance = .{
             .extensions = blk: {
@@ -90,6 +85,9 @@ pub fn main() !void {
     var renderer: Renderer = undefined;
     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
 
+    try System.init(allocator, &world);
+    System.deinit();
+
     var time: f64 = 0;
     var timer = try std.time.Timer.start();
     var accumulated_time: f64 = 0;
@@ -114,12 +112,7 @@ pub fn main() !void {
 
         if (accumulated_time >= seconds_per_update) {
             systemUpdate(&world, seconds_per_update);
-
-            var query = world.query(&.{ WorldModule.Player, WorldModule.Camera, nz.Transform3D(f32) });
-            const entity = query.next().?;
-            const camera = entity.getPtr(WorldModule.Camera, world).?;
-            const transform = entity.getPtr(nz.Transform3D(f32), world).?;
-            try Renderer.c.toErr(rendererDraw(&renderer, camera, transform, @floatCast(time)));
+            try Renderer.c.toErr(rendererDraw(&renderer, &world, @floatCast(time)));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
