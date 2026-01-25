@@ -80,28 +80,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const system = b.addLibrary(.{
-        .name = "system",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/System.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "sdl", .module = sdl_header },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
-                .{ .name = "World", .module = world_module },
-                // .{ .name = "cjolt", .module = cjolt },
-            },
-        }),
-        .linkage = .dynamic,
-    });
-    system.root_module.addImport("zphysics", zphysics.module("root"));
-    system.linkLibrary(zphysics.artifact("joltc"));
-    system.root_module.linkSystemLibrary("SDL3", .{});
-    b.installArtifact(system);
-
-    const renderer = b.addLibrary(.{
+       const renderer = b.addLibrary(.{
         .name = "renderer",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/render/Renderer.zig"),
@@ -126,6 +105,30 @@ pub fn build(b: *std.Build) void {
     renderer.root_module.linkSystemLibrary("SDL3", .{});
 
     b.installArtifact(renderer);
+
+
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/System.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "sdl", .module = sdl_header },
+                .{ .name = "numz", .module = numz },
+                .{ .name = "ecs", .module = ecs },
+                .{ .name = "World", .module = world_module },
+                .{ .name = "Renderer", .module = renderer.root_module },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+    system.root_module.addImport("zphysics", zphysics.module("root"));
+    system.linkLibrary(zphysics.artifact("joltc"));
+    system.root_module.linkSystemLibrary("SDL3", .{});
+    b.installArtifact(system);
+
+
 
     const exe = b.addExecutable(.{
         .name = "PlanetaryZigma",

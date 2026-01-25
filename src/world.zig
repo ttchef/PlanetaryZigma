@@ -23,5 +23,5 @@ pub const Camera = struct {
 };
 
 pub const Model = struct {
-    model: union(enum) { gltf: u32, mesh: u32 },
+    model: union(enum) { gltf: usize, mesh: usize },
 };
