@@ -12,7 +12,7 @@ comptime {
 }
 
 //models
-loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
+loaded_scenes: std.ArrayList(LoadedGltf) = .empty,
 meshes: std.ArrayList(vk.Mesh) = .empty,
 
 //Default values
@@ -259,17 +259,9 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
-    var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
-    const strcture_file = try LoadedGltf.init(
-        allocator,
-        vma,
-        device,
-        "assets/objects/tree.glb",
-        .{ error_checkerboard_image, white_image },
-        default_sampler_linear,
-        &metal_rough_material,
-    );
-    try loaded_scenes.put(allocator, "structure", strcture_file);
+    std.debug.print("Pipeline handle {*}\n", .{&metal_rough_material});
+    std.debug.print("Pipeline handle {*}\n", .{&metal_rough_material.opaque_pipeline});
+    std.debug.print("Pipeline handle {*}\n", .{metal_rough_material.opaque_pipeline.get().handle});
 
     return .{
         .allocator = allocator,
@@ -294,7 +286,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .global_descriptor_allocator = global_descriptor_allocator,
         .draw_image_descriptor = draw_image_descriptor,
         .material_buffer = material_buffer,
-        .loaded_scenes = loaded_scenes,
         .main_draw_context = .{},
         .metal_rough_material = metal_rough_material,
         .default_data = default_data,
@@ -324,17 +315,16 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.metal_rough_material.deinit(self.device);
     self.material_buffer.deinit(self.vma.handle);
 
-    var iter = self.loaded_scenes.iterator();
-    while (iter.next()) |scene| {
-        scene.value_ptr.*.deinit(self.allocator, self.vma, self.device);
+    for (self.loaded_scenes.items) |*scene| {
+        scene.deinit(self.allocator, self.vma, self.device);
     }
     self.loaded_scenes.deinit(allocator);
-    self.main_draw_context.deinit(allocator);
-
     for (self.meshes.items) |*mesh| {
         mesh.deinit(allocator, self.vma.handle);
     }
     self.meshes.deinit(allocator);
+
+    self.main_draw_context.deinit(allocator);
     self.global_descriptor_allocator.deinit(self.device);
 
     self.vma.deinit();
@@ -466,13 +456,6 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
         writer.updateSet(self.device, globalDescriptor);
     }
 
-    self.main_draw_context.clear();
-    const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -2 },
-        .rotation = @splat(0),
-        .scale = @splat(-1),
-    };
-
     const view = getViewMatrix(camera_transform);
     // const view = nz.Mat4x4(f32).identity;
     // _ = camera_transform;
@@ -500,49 +483,49 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     // });
     //
     //
-    var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
-    try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
-    //TODO: fix ur shit. Transparent pipelines are broken.
-    self.last_index_buffer = null;
-    self.last_material = null;
-    self.last_pipeline = null;
-    draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-    draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+
+    const top_matrix: nz.Transform3D(f32) = .{
+        .position = .{ 0, 0, -2 },
+        .rotation = @splat(0),
+        .scale = @splat(-1),
+    };
+
     var draw_query = world.query(&.{WorldModule.Model});
     while (draw_query.next()) |entry| {
+        self.main_draw_context.clear();
         const model = entry.get(WorldModule.Model, world).?;
+        self.last_index_buffer = null;
+        self.last_material = null;
+        self.last_pipeline = null;
         switch (model.model) {
-            .mesh => {
-                var mesh = self.meshes.items[model.model.mesh];
+            .mesh => |handle| {
+                std.debug.print("MESH-Handle: {d}\n", .{handle});
+                std.debug.print("Pipeline handle {*}\n", .{&self.metal_rough_material});
+                std.debug.print("Pipeline handle {*}\n", .{&self.metal_rough_material.opaque_pipeline});
+                std.debug.print("Pipeline handle {*}\n", .{self.metal_rough_material.opaque_pipeline.get().handle});
+
+                var mesh = self.meshes.items[handle];
+                std.debug.print("PAAAAAAA {any}\n", .{mesh.surfaces.items[0].material});
                 var mesh_node: vk.Node = .{
                     .material = mesh.surfaces.items[0].material,
                     .mesh = &mesh,
                     .local_transform = .fromMat4x4(.identity),
                     .world_transform = .fromMat4x4(.identity),
                 };
-                self.main_draw_context.clear();
                 try mesh_node.draw(self.allocator, top_matrix, &self.main_draw_context);
-                draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+                std.debug.print("Name: {any}\n", .{mesh_node.material});
             },
-            else => {},
-            // .gltf => std.debug.print("GLTF!!!\n", .{}),
-            // .mesh => std.debug.print("MESH!!!\n", .{}),
+            .gltf => |handle| {
+                std.debug.print("GLTF-Handle: {d}\n", .{handle});
+                // if (true) continue;
+                var structure_scene = self.loaded_scenes.items[handle];
+                try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
+                //TODO: fix ur shit. Transparent pipelines are broken.
+            },
         }
+        draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
-
-    //
-    // var render_obj: std.ArrayList(vk.Node.RenderObject) = .empty;
-    // // defer render_obj.deinit(self.allocator);
-    // try render_obj.append(self.allocator, .{
-    //     .index_count = @intCast(self.planet.mesh.surfaces.items[0].index_count),
-    //     .first_index = @intCast(self.planet.mesh.surfaces.items[0].index_start),
-    //     .bounds = self.planet.mesh.surfaces.items[0].bounds,
-    //     .index_buffer = self.planet.mesh.vertex_buffer.buffer,
-    //     .material_instance = self.planet.material,
-    //     .transform = nz.Transform3D(f32).fromMat4x4(.identity),
-    //     .vertex_buffer_address = self.planet.mesh.vertex_buffer_address,
-    // });
-    // std.debug.print("render_obj: {any}\n", .{render_obj});
 
     vk.c.vkCmdEndRendering(cmd_buffer);
 
@@ -694,7 +677,7 @@ fn draw_geometry(
             if (render_obj.material_instance.pipeline != self.last_pipeline) {
                 self.last_pipeline = render_obj.material_instance.pipeline;
 
-                vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.get().handle);
+                vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, render_obj.material_instance.pipeline.getGraphics().handle);
 
                 vk.c.vkCmdBindDescriptorSets(
                     cmd_buffer,
@@ -759,6 +742,34 @@ fn draw_geometry(
 }
 
 pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !usize {
+    var material_buffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    const scene_uniform_data: vk.Material.GltfMetallicRoughness.Constants = .{
+        .color_factores = .{ 1, 1, 1, 1 },
+        .metal_rough_factors = .{ 1, 0.5, 0, 0 },
+        .extra = std.mem.zeroes([14]nz.Vec4(f32)),
+    };
+
+    // Copy the initialized data to GPU memory
+    self.vma.copyToAllocation(
+        vk.Material.GltfMetallicRoughness.Constants,
+        scene_uniform_data,
+        material_buffer.vma_allocation,
+        &material_buffer.info,
+    );
+
+    const material_resources: vk.Material.GltfMetallicRoughness.Resources = .{
+        .color_image = self.white_image,
+        .color_sampler = self.default_sampler_linear,
+        .metal_rough_image = self.white_image,
+        .metal_rough_sampler = self.default_sampler_linear,
+        .data_buffer = material_buffer.buffer,
+        .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
+    };
+
+    const mat_instance = try self.allocator.create(vk.Material.Instance);
+    mat_instance.* = try self.metal_rough_material.writeMaterial(self.device, .main_color, material_resources, &self.global_descriptor_allocator);
+
+    std.debug.print("\n mesh create: 1111 {any}\n", .{&self.default_data});
     const mesh = try vk.Mesh.init(
         self.allocator,
         self.vma.handle,
@@ -777,7 +788,23 @@ pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []v
         self.allocator,
         mesh,
     );
+
+    std.debug.print("\n mesh create: {any}\n", .{self.meshes.items[0].surfaces.items[0].material});
     return (self.meshes.items.len - 1);
+}
+
+pub fn loadGltf(self: *@This(), path: []const u8) !usize {
+    const strcture_file = try LoadedGltf.init(
+        self.allocator,
+        self.vma,
+        self.device,
+        path,
+        .{ self.error_checkerboard_image, self.white_image },
+        self.default_sampler_linear,
+        &self.metal_rough_material,
+    );
+    try self.loaded_scenes.append(self.allocator, strcture_file);
+    return self.loaded_scenes.items.len - 1;
 }
 
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {

@@ -126,7 +126,7 @@ pub const GltfMetallicRoughness = struct {
         device: Device,
         pass: Pass,
         resources: Resources,
-        pDescriptorAllocator: *descriptor.Growable,
+        descriptor_allocator: *descriptor.Growable,
     ) !Instance {
         var material_data_instance: Instance = undefined;
         material_data_instance.pass_type = pass;
@@ -136,7 +136,7 @@ pub const GltfMetallicRoughness = struct {
         } else {
             material_data_instance.pipeline = &self.opaque_pipeline;
         }
-        material_data_instance.descriptor_set = try pDescriptorAllocator.allocate(device, self.descriptor_set_layout, null);
+        material_data_instance.descriptor_set = try descriptor_allocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();
         self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         self.writer.appendImage(1, resources.color_image.vk_imageview, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);

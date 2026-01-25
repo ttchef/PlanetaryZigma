@@ -16,6 +16,11 @@ pub fn init(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !v
     entity_player.set(WorldModule.Player, .{}, world);
     entity_player.set(nz.Transform3D(f32), .{}, world);
     entity_player.set(WorldModule.Camera, .{}, world);
+    var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, -10 }, 10);
+    defer planet_mesh2.deinit(allocator);
+    const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
+    const entity_mesh2 = try world.addEntity();
+    entity_mesh2.set(WorldModule.Model, .{ .model = .{ .mesh = box2 } }, world);
 
     var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     defer planet_mesh.deinit(allocator);
@@ -24,7 +29,12 @@ pub fn init(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !v
     entity_mesh.set(WorldModule.Model, .{ .model = .{ .mesh = box } }, world);
 
     const entity_gltf = try world.addEntity();
-    entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = 0 } }, world);
+    const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
+    entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
+
+    const entity_gltf2 = try world.addEntity();
+    const gltf_handle2 = try renderer.loadGltf("assets/objects/mecha.glb");
+    entity_gltf2.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
 
     try zphy.init(allocator, .{});
 }
