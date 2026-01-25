@@ -2,7 +2,6 @@ const std = @import("std");
 const nz = @import("numz");
 const WorldModule = @import("World");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
-const Planet = @import("Planet.zig");
 pub const vk = @import("vulkan/vulkan.zig");
 pub const Camera = @import("World").Camera;
 pub const c = @import("c.zig");
@@ -47,9 +46,6 @@ swapchain: vk.Swapchain,
 vma: vk.Vma,
 draw_image: vk.Image,
 depth_image: vk.Image,
-
-//TODO: Remove
-planet: Planet,
 
 //NOTE: maybe not here?
 last_pipeline: ?*vk.Pipeline = null,
@@ -263,8 +259,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
-    const planet: Planet = try .init(allocator, vma, device, .{ 0, 0, -2 }, 60, default_data);
-
     var loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty;
     const strcture_file = try LoadedGltf.init(
         allocator,
@@ -278,7 +272,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     try loaded_scenes.put(allocator, "structure", strcture_file);
 
     return .{
-        .planet = planet,
         .allocator = allocator,
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -322,8 +315,6 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.white_image.deinit(self.vma, self.device);
     self.error_checkerboard_image.deinit(self.vma, self.device);
 
-    self.planet.deinit(allocator, self.vma);
-
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_linear, null);
     vk.c.vkDestroySampler(self.device.handle, self.default_sampler_nearest, null);
 
@@ -340,6 +331,10 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.loaded_scenes.deinit(allocator);
     self.main_draw_context.deinit(allocator);
 
+    for (self.meshes.items) |*mesh| {
+        mesh.deinit(allocator, self.vma.handle);
+    }
+    self.meshes.deinit(allocator);
     self.global_descriptor_allocator.deinit(self.device);
 
     self.vma.deinit();
@@ -503,15 +498,8 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     //     self.scene_data.sunlight_direction,
     //     time,
     // });
-    var draw_query = world.query(&.{WorldModule.Model});
-    while (draw_query.next()) |entry| {
-        const model = entry.get(WorldModule.Model, world).?;
-        switch (model.model) {
-            .gltf => std.debug.print("GLTF!!!\n", .{}),
-            .mesh => std.debug.print("MESH!!!\n", .{}),
-        }
-    }
-
+    //
+    //
     var structure_scene = self.loaded_scenes.get("structure") orelse @panic("DID NOT FIND STRUCTURE");
     try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
     //TODO: fix ur shit. Transparent pipelines are broken.
@@ -520,8 +508,106 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     self.last_pipeline = null;
     draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+    var draw_query = world.query(&.{WorldModule.Model});
+    while (draw_query.next()) |entry| {
+        const model = entry.get(WorldModule.Model, world).?;
+        switch (model.model) {
+            .mesh => {
+                var mesh = self.meshes.items[model.model.mesh];
+                var mesh_node: vk.Node = .{
+                    .material = mesh.surfaces.items[0].material,
+                    .mesh = &mesh,
+                    .local_transform = .fromMat4x4(.identity),
+                    .world_transform = .fromMat4x4(.identity),
+                };
+                self.main_draw_context.clear();
+                try mesh_node.draw(self.allocator, top_matrix, &self.main_draw_context);
+                draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+            },
+            else => {},
+            // .gltf => std.debug.print("GLTF!!!\n", .{}),
+            // .mesh => std.debug.print("MESH!!!\n", .{}),
+        }
+    }
 
-    //NOTE: PLANET
+    //
+    // var render_obj: std.ArrayList(vk.Node.RenderObject) = .empty;
+    // // defer render_obj.deinit(self.allocator);
+    // try render_obj.append(self.allocator, .{
+    //     .index_count = @intCast(self.planet.mesh.surfaces.items[0].index_count),
+    //     .first_index = @intCast(self.planet.mesh.surfaces.items[0].index_start),
+    //     .bounds = self.planet.mesh.surfaces.items[0].bounds,
+    //     .index_buffer = self.planet.mesh.vertex_buffer.buffer,
+    //     .material_instance = self.planet.material,
+    //     .transform = nz.Transform3D(f32).fromMat4x4(.identity),
+    //     .vertex_buffer_address = self.planet.mesh.vertex_buffer_address,
+    // });
+    // std.debug.print("render_obj: {any}\n", .{render_obj});
+
+    vk.c.vkCmdEndRendering(cmd_buffer);
+
+    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
+
+    var swapchain_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
+    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
+    self.draw_image.copyOntoImage(
+        cmd_buffer,
+        .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
+    );
+
+    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
+    try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
+
+    var submit_info: vk.c.VkSubmitInfo2 = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount = 1,
+        .pWaitSemaphoreInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = current_frame.swapchain_semaphore,
+            .stageMask = vk.c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
+            .value = 0,
+        },
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = render_semaphore,
+            .stageMask = vk.c.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+            .value = 0,
+        },
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &.{
+            .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = cmd_buffer,
+        },
+    };
+
+    try vk.check(vk.c.vkQueueSubmit2(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
+
+    var present_info: vk.c.VkPresentInfoKHR = .{
+        .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pSwapchains = &self.swapchain.swapchain,
+        .swapchainCount = 1,
+        .pWaitSemaphores = &render_semaphore,
+        .waitSemaphoreCount = 1,
+        .pImageIndices = &image_index,
+    };
+
+    const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
+
+    if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or present_result == vk.c.VK_SUBOPTIMAL_KHR) {
+        return;
+    }
+
+    self.swapchain.current_frame_inflight += 1;
+}
+
+fn draw_planet(
+    self: *@This(),
+    node: vk.Node,
+    cmd_buffer: vk.c.VkCommandBuffer,
+    globalDescriptor: vk.c.VkDescriptorSet,
+) void {
+    _ = node;
     vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.planet.material.pipeline.get().handle);
     vk.c.vkCmdBindDescriptorSets(
         cmd_buffer,
@@ -592,68 +678,14 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
         0,
         0,
     );
-
-    //TODO: PLANET GEN END,
-
-    vk.c.vkCmdEndRendering(cmd_buffer);
-
-    draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
-
-    var swapchain_image_barrier: vk.ImageBarrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], vk.c.VK_IMAGE_ASPECT_COLOR_BIT);
-    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_WRITE_BIT);
-    self.draw_image.copyOntoImage(
-        cmd_buffer,
-        .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
-    );
-
-    swapchain_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, vk.c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
-    try vk.check(vk.c.vkEndCommandBuffer(cmd_buffer));
-
-    var submit_info: vk.c.VkSubmitInfo2 = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount = 1,
-        .pWaitSemaphoreInfos = &.{
-            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = current_frame.swapchain_semaphore,
-            .stageMask = vk.c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR,
-            .value = 0,
-        },
-        .signalSemaphoreInfoCount = 1,
-        .pSignalSemaphoreInfos = &.{
-            .sType = vk.c.VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = render_semaphore,
-            .stageMask = vk.c.VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-            .value = 0,
-        },
-        .commandBufferInfoCount = 1,
-        .pCommandBufferInfos = &.{
-            .sType = vk.c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-            .commandBuffer = cmd_buffer,
-        },
-    };
-
-    try vk.check(vk.c.vkQueueSubmit2(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
-
-    var present_info: vk.c.VkPresentInfoKHR = .{
-        .sType = vk.c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pSwapchains = &self.swapchain.swapchain,
-        .swapchainCount = 1,
-        .pWaitSemaphores = &render_semaphore,
-        .waitSemaphoreCount = 1,
-        .pImageIndices = &image_index,
-    };
-
-    const present_result = vk.c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
-
-    if (present_result == vk.c.VK_ERROR_OUT_OF_DATE_KHR or present_result == vk.c.VK_SUBOPTIMAL_KHR) {
-        return;
-    }
-
-    self.swapchain.current_frame_inflight += 1;
 }
 
-fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObject), cmd_buffer: vk.c.VkCommandBuffer, globalDescriptor: vk.c.VkDescriptorSet) void {
-    var count: usize = 0;
+fn draw_geometry(
+    self: *@This(),
+    render_objects: std.ArrayList(vk.Node.RenderObject),
+    cmd_buffer: vk.c.VkCommandBuffer,
+    globalDescriptor: vk.c.VkDescriptorSet,
+) void {
     for (render_objects.items[0..render_objects.items.len]) |render_obj| {
         if (render_obj.isVisible(.new(self.scene_data.viewproj)) == false) continue;
         if (render_obj.material_instance != self.last_material) {
@@ -723,27 +755,25 @@ fn draw_geometry(self: *@This(), render_objects: std.ArrayList(vk.Node.RenderObj
         vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
 
         vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
-
-        count += 1;
     }
 }
 
-pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !u32 {
+pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !usize {
     const mesh = try vk.Mesh.init(
         self.allocator,
-        self.vma,
+        self.vma.handle,
         name,
         self.device,
         &.{.{
             .index_start = 0,
-            .index_count = @intCast(indices.items.len),
+            .index_count = @intCast(indices.len),
             .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = self.default_data,
+            .material = &self.default_data,
         }},
         indices,
         verices,
     );
-    self.meshes.append(
+    try self.meshes.append(
         self.allocator,
         mesh,
     );

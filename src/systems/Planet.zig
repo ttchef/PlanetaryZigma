@@ -1,17 +1,20 @@
-const vk = @import("vulkan/vulkan.zig");
 const std = @import("std");
 const nz = @import("numz");
+const Vertex = @import("Renderer").vk.Mesh.Vertex;
 
-mesh: vk.Mesh,
-material: *vk.Material.Instance,
+vertices: std.ArrayList(Vertex),
+indices: std.ArrayList(u32),
 
 //if size < 3, size = 3. It beaks other ways.
-pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, center_pos: nz.Vec3(f32), size: u32, material: vk.Material.Instance) !@This() {
+pub fn init(
+    allocator: std.mem.Allocator,
+    center_pos: nz.Vec3(f32),
+    size: u32,
+) !@This() {
     const clamped_size = @max(size, 3);
     const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
     var points = try allocator.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
     defer allocator.free(points);
-    // const pos_planet: nz.Vec3(f32) = @splat(radius + @as(f32, 0.5));
 
     for (0..clamped_size + 1) |x| {
         for (0..clamped_size + 1) |y| {
@@ -35,10 +38,8 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, center
         }
     }
 
-    var vertices: std.ArrayList(vk.Mesh.Vertex) = .empty;
-    defer vertices.deinit(allocator);
-    var indices: std.ArrayList(u32) = .empty;
-    defer indices.deinit(allocator);
+    var gen_vertices: std.ArrayList(Vertex) = .empty;
+    var gen_indices: std.ArrayList(u32) = .empty;
     for (0..clamped_size) |x| {
         for (0..clamped_size) |y| {
             for (0..clamped_size) |z| {
@@ -56,49 +57,30 @@ pub fn init(allocator: std.mem.Allocator, vma: vk.Vma, device: vk.Device, center
                 b_y = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
                 b_z = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
                 cube_pos = .{ b_x, b_y, b_z };
-                try marchCube(allocator, cube_pos, cube, &vertices, &indices);
+                try marchCube(allocator, cube_pos, cube, &gen_vertices, &gen_indices);
             }
         }
     }
 
     //The triangles are genereated in the wrong order. I rather do a reverse, than creating a while new pipeline.
-    std.mem.reverse(u32, indices.items);
-
-    const planet_material = try allocator.create(vk.Material.Instance);
-    planet_material.* = material;
-
-    const mesh: vk.Mesh = try .init(
-        allocator,
-        vma.handle,
-        "planet",
-        device,
-        &.{.{
-            .index_start = 0,
-            .index_count = @intCast(indices.items.len),
-            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = planet_material,
-        }},
-        indices.items,
-        vertices.items,
-    );
+    std.mem.reverse(u32, gen_indices.items);
 
     return .{
-        .mesh = mesh,
-        .material = planet_material,
+        .indices = gen_indices,
+        .vertices = gen_vertices,
     };
 }
-
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: vk.Vma) void {
-    self.mesh.deinit(allocator, vma.handle);
-    allocator.destroy(self.material);
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+    self.vertices.deinit(allocator);
+    self.indices.deinit(allocator);
 }
 
 fn marchCube(
     allocator: std.mem.Allocator,
     postion: nz.Vec3(f32),
     corners: [8]f32,
-    vertices: *std.ArrayList(vk.Mesh.Vertex),
-    indices: *std.ArrayList(u32),
+    gen_vertices: *std.ArrayList(Vertex),
+    gen_indices: *std.ArrayList(u32),
 ) !void {
     var config_index: u32 = 0;
     const terrain_surface: f32 = 0.5;
@@ -116,7 +98,7 @@ fn marchCube(
             const vert2 = postion + edge_table[@intFromFloat(index)][1];
             const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
 
-            try vertices.append(
+            try gen_vertices.append(
                 allocator,
                 .{
                     .position = (vert1 + vert2) / devision,
@@ -124,7 +106,7 @@ fn marchCube(
                     .normal = .{ 1, 0, 0 },
                 },
             );
-            try indices.append(allocator, @intCast(vertices.items.len - 1));
+            try gen_indices.append(allocator, @intCast(gen_vertices.items.len - 1));
             edge_index += 1;
         }
     }

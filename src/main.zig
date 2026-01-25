@@ -85,7 +85,7 @@ pub fn main() !void {
     var renderer: Renderer = undefined;
     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
 
-    try System.init(allocator, &world);
+    try System.init(allocator, &world, &renderer);
     System.deinit();
 
     var time: f64 = 0;
