@@ -35,10 +35,10 @@ pub fn init(
 
     const c_path = try allocator.dupeZ(u8, file_path); // adds trailing 0
     defer allocator.free(c_path);
-    try if (cgltf.cgltf_parse_file(&options, c_path, out_data) != cgltf.cgltf_result_success) error.GltfParse;
-    try if (cgltf.cgltf_load_buffers(&options, out_data.*, c_path) != cgltf.cgltf_result_success) error.GltfLoad;
-    try if (cgltf.cgltf_validate(out_data.*) != cgltf.cgltf_result_success) error.CltfValidation;
-    try if (out_data.? == null or out_data.*.? == null) error.CPointerData;
+    if (cgltf.cgltf_parse_file(&options, c_path, out_data) != cgltf.cgltf_result_success) return error.GltfParse;
+    if (cgltf.cgltf_load_buffers(&options, out_data.*, c_path) != cgltf.cgltf_result_success) return error.GltfLoad;
+    if (cgltf.cgltf_validate(out_data.*) != cgltf.cgltf_result_success) return error.CltfValidation;
+    if (out_data.? == null or out_data.*.? == null) return error.CPointerData;
     var data: cgltf.cgltf_data = out_data.*.*;
 
     var sizes = [_]vk.descriptor.Growable.PoolSizeRatio{

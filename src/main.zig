@@ -86,8 +86,7 @@ pub fn main() !void {
     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
 
     try System.init(allocator, &world, &renderer);
-    System.deinit();
-
+    defer System.deinit();
     var time: f64 = 0;
     var timer = try std.time.Timer.start();
     var accumulated_time: f64 = 0;

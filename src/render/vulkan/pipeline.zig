@@ -231,18 +231,4 @@ pub const Pipeline = union(enum) {
             inline else => |pipeline| .{ .handle = pipeline.handle, .layout = pipeline.layout },
         };
     }
-
-    pub fn getGraphics(self: *const Pipeline) *const Graphics {
-        return switch (self.*) {
-            .graphics => |*p| p,
-            else => @panic("Pipeline is not graphics"),
-        };
-    }
-
-    pub fn getCompute(self: *const Pipeline) *const Compute {
-        return switch (self.*) {
-            .compute => |*p| p,
-            else => @panic("Pipeline is not compute"),
-        };
-    }
 };

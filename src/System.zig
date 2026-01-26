@@ -33,7 +33,7 @@ pub fn init(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !v
     entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
 
     const entity_gltf2 = try world.addEntity();
-    const gltf_handle2 = try renderer.loadGltf("assets/objects/mecha.glb");
+    const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");
     entity_gltf2.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
 
     try zphy.init(allocator, .{});
@@ -43,5 +43,5 @@ pub fn deinit() void {
 }
 
 export fn update(world: *World, delta_time: f32) void {
-    player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panic xd,\n\n");
+    player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
 }
