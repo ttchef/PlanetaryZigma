@@ -15,14 +15,14 @@ pub const Pass = enum {
 };
 
 pub const Instance = struct {
-    pipeline: *Pipeline,
+    pipeline: *const Pipeline,
     descriptor_set: vk.VkDescriptorSet,
     pass_type: Pass,
 };
 
 pub const GltfMetallicRoughness = struct {
-    opaque_pipeline: Pipeline,
-    transparent_pipeline: Pipeline,
+    opaque_pipeline: *const Pipeline,
+    transparent_pipeline: *const Pipeline,
     descriptor_set_layout: vk.VkDescriptorSetLayout,
     writer: descriptor.Writer,
 
@@ -41,7 +41,7 @@ pub const GltfMetallicRoughness = struct {
         data_buffer_offset: vk.VkDeviceSize,
     };
 
-    pub fn initBuildPipelines(device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
+    pub fn initBuildPipelines(allocator: std.mem.Allocator, device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
         const mesh_frag_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
         const mesh_vertex_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
         defer vk.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
@@ -101,11 +101,13 @@ pub const GltfMetallicRoughness = struct {
         mesh_pipeline_config.enableDepthTesting(vk.VK_TRUE, vk.VK_COMPARE_OP_LESS);
 
         // mesh_pipeline_config.rasterization_state.polygonMode = vk.VK_POLYGON_MODE_LINE;
-        const opaque_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
+        const opaque_pipeline = try allocator.create(Pipeline);
+        opaque_pipeline.* = try .initGraphics(device, &mesh_pipeline_config);
 
         mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
         mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_LESS);
-        const transparent_pipeline: Pipeline = try .initGraphics(device, &mesh_pipeline_config);
+        const transparent_pipeline = try allocator.create(Pipeline);
+        transparent_pipeline.* = try .initGraphics(device, &mesh_pipeline_config);
 
         return .{
             .opaque_pipeline = opaque_pipeline,
@@ -115,9 +117,11 @@ pub const GltfMetallicRoughness = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), device: Device) void {
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: Device) void {
         self.opaque_pipeline.deinit(device);
         self.transparent_pipeline.deinit(device);
+        allocator.destroy(self.opaque_pipeline);
+        allocator.destroy(self.transparent_pipeline);
         vk.vkDestroyDescriptorSetLayout(device.handle, self.descriptor_set_layout, null);
     }
 
@@ -132,9 +136,9 @@ pub const GltfMetallicRoughness = struct {
         material_data_instance.pass_type = pass;
         if (pass == .transparent) {
             std.debug.print("added transparent_pipeline\n", .{});
-            material_data_instance.pipeline = &self.transparent_pipeline;
+            material_data_instance.pipeline = self.transparent_pipeline;
         } else {
-            material_data_instance.pipeline = &self.opaque_pipeline;
+            material_data_instance.pipeline = self.opaque_pipeline;
         }
         material_data_instance.descriptor_set = try descriptor_allocator.allocate(device, self.descriptor_set_layout, null);
         self.writer.clear();

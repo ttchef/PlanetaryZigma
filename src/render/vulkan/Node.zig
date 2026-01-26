@@ -6,7 +6,7 @@ const Material = @import("Material.zig");
 
 parent: ?*@This() = null,
 mesh: ?*Mesh = null,
-material: *Material.Instance = undefined,
+material: *const Material.Instance = undefined,
 children: std.ArrayList(*@This()) = .empty,
 local_transform: nz.Transform3D(f32) = undefined,
 world_transform: nz.Transform3D(f32) = undefined,
@@ -49,7 +49,7 @@ pub const RenderObject = struct {
     first_index: u32,
     index_buffer: vk.VkBuffer,
 
-    material_instance: *Material.Instance,
+    material_instance: *const Material.Instance,
     bounds: Mesh.Bounds,
     transform: nz.Transform3D(f32),
     vertex_buffer_address: vk.VkDeviceAddress,
