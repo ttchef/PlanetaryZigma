@@ -5,7 +5,6 @@ broad_phase_layer_interface: *BroadPhaseLayerInterface,
 object_layer_pair_filter: *ObjectLayerPairFilter,
 object_vs_broad_phase_layer_filter: *ObjectVsBroadPhaseLayerFilter,
 contact_listener: *ContactListener,
-// global_state: zphy.GlobalState,
 var loaded: bool = false;
 
 const object_layers = struct {
@@ -140,9 +139,6 @@ const ContactListener = extern struct {
     }
 };
 pub fn init(allocator: std.mem.Allocator) !*@This() {
-    // const global_state = zphy.preReload();
-    // zphy.postReload(allocator, global_state);
-
     try zphy.init(allocator, .{});
     const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
@@ -172,28 +168,28 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
 
     {
         const body_interface = physics_system.getBodyInterfaceMut();
-        //
-        // const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
-        // defer floor_shape_settings.asShapeSettings().release();
-        //
-        // const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
-        // defer floor_shape.release();
-        //
-        // _ = try body_interface.createAndAddBody(.{
-        //     .position = .{ 0.0, -1.0, 0.0, 1.0 },
-        //     .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
-        //     .shape = floor_shape,
-        //     .motion_type = .static,
-        //     .object_layer = object_layers.non_moving,
-        // }, .activate);
-        //
+
+        const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
+        defer floor_shape_settings.asShapeSettings().release();
+
+        const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
+        defer floor_shape.release();
+
+        _ = try body_interface.createAndAddBody(.{
+            .position = .{ 0.0, -1.0, 0.0, 1.0 },
+            .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
+            .shape = floor_shape,
+            .motion_type = .static,
+            .object_layer = object_layers.non_moving,
+        }, .activate);
+
         const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 0.5, 0.5, 0.5 });
         defer box_shape_settings.asShapeSettings().release();
         const box_shape = try box_shape_settings.asShapeSettings().createShape();
         defer box_shape.release();
 
         var i: u32 = 0;
-        while (i < 1) : (i += 1) {
+        while (i < 16) : (i += 1) {
             const fi = @as(f32, @floatFromInt(i));
             _ = try body_interface.createAndAddBody(.{
                 .position = .{ 0.0, 8.0 + fi * 1.2, 8.0, 1.0 },
@@ -210,10 +206,8 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
     }
 
     const system = try allocator.create(@This());
-    // std.debug.print("PTR-1 {*}\n", .{});
     system.* = .{
         .contact_listener = contact_listener,
-        // .global_state = global_state,
         .physics_system = physics_system,
         .broad_phase_layer_interface = broad_phase_layer_interface,
         .object_layer_pair_filter = object_layer_pair_filter,
@@ -231,19 +225,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     zphy.deinit();
 }
 
-// pub fn updateGlobal(self: *@This(), allocator: std.mem.Allocator) void {
-//     zphy.postReload(allocator, self.global_state);
-// }
-//
 pub fn update(self: *@This(), allocator: std.mem.Allocator, delta_time: f32) void {
     _ = allocator;
-    // std.debug.print("PTR {*}\n", .{self.global_state.job_system});
-    std.debug.print("UPDATE layer={*} \n board_phase={*}\n", .{
-        self.object_layer_pair_filter,
-        self.object_vs_broad_phase_layer_filter,
-    });
 
     self.physics_system.update(delta_time, .{}) catch unreachable;
-    // _ = self.physics_system.getBodiesUnsafe();
-    // std.debug.print("PTR XDDDD {d}\n", .{delta_time});
 }
