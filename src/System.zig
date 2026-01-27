@@ -1,17 +1,38 @@
-const zphy = @import("zphysics");
 const std = @import("std");
 const nz = @import("numz");
 const player = @import("systems/player.zig");
 const Planet = @import("systems/Planet.zig");
+pub const Physics = @import("systems/physics.zig");
 const WorldModule = @import("World");
 const World = WorldModule.World;
 const Renderer = @import("Renderer");
 
-pub const Update = *const fn (*World, f32) callconv(.c) void;
-// pub const InitSystems = *const fn (std.mem.Allocator) callconv(.c) u32;
-// pub const DeinitSystems = *const fn (std.mem.Allocator) callconv(.c) u32;
+physics_system: *Physics = undefined,
+allocator: *std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
+pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
+pub const InitSystems = *const fn (*std.mem.Allocator, *@This(), *World, *Renderer) callconv(.c) u32;
+pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
+
+export fn initSystems(allocator: *std.mem.Allocator, systems: *@This(), world: *World, renderer: *Renderer) u32 {
+    initEcs(allocator.*, world, renderer) catch |err| return @intFromError(err);
+    systems.* = .{
+        .physics_system = Physics.init(allocator.*) catch |err| return @intFromError(err),
+        .allocator = allocator,
+    };
+    return 0;
+}
+export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
+    self.physics_system.deinit(allocator.*);
+    allocator.destroy(self.physics_system);
+}
+
+export fn update(self: *@This(), world: *World, delta_time: f32) void {
+    self.physics_system.update(self.allocator.*, delta_time);
+    player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
+}
+
+fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
     const entity_player = try world.addEntity();
     entity_player.set(WorldModule.Player, .{}, world);
     entity_player.set(nz.Transform3D(f32), .{}, world);
@@ -35,13 +56,4 @@ pub fn init(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !v
     const entity_gltf2 = try world.addEntity();
     const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");
     entity_gltf2.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
-
-    try zphy.init(allocator, .{});
-}
-pub fn deinit() void {
-    zphy.deinit();
-}
-
-export fn update(world: *World, delta_time: f32) void {
-    player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
 }
