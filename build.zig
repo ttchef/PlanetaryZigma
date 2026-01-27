@@ -36,7 +36,6 @@ pub fn build(b: *std.Build) void {
     const zphysics = b.dependency("zphysics", .{
         .use_double_precision = false,
         .enable_cross_platform_determinism = true,
-        .shared = true,
     });
 
     const stb_dep = b.dependency("stb", .{});
