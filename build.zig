@@ -36,6 +36,7 @@ pub fn build(b: *std.Build) void {
     const zphysics = b.dependency("zphysics", .{
         .use_double_precision = false,
         .enable_cross_platform_determinism = true,
+        .shared = true,
     });
 
     const stb_dep = b.dependency("stb", .{});
@@ -80,7 +81,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-       const renderer = b.addLibrary(.{
+    const renderer = b.addLibrary(.{
         .name = "renderer",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/render/Renderer.zig"),
@@ -106,7 +107,6 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(renderer);
 
-
     const system = b.addLibrary(.{
         .name = "system",
         .root_module = b.createModule(.{
@@ -128,8 +128,6 @@ pub fn build(b: *std.Build) void {
     system.root_module.linkSystemLibrary("SDL3", .{});
     b.installArtifact(system);
 
-
-
     const exe = b.addExecutable(.{
         .name = "PlanetaryZigma",
         .root_module = b.createModule(.{
@@ -150,8 +148,8 @@ pub fn build(b: *std.Build) void {
             .link_libcpp = true,
         }),
     });
-    exe.root_module.addImport("zphysics", zphysics.module("root"));
-    exe.linkLibrary(zphysics.artifact("joltc"));
+    // exe.root_module.addImport("zphysics", zphysics.module("root"));
+    // exe.linkLibrary(zphysics.artifact("joltc"));
     exe.step.dependOn(&cargo_cmd.step);
 
     exe.root_module.linkSystemLibrary("unwind", .{});
