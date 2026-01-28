@@ -482,16 +482,17 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     //
     //
 
-    const top_matrix: nz.Transform3D(f32) = .{
-        .position = .{ 0, 0, -2 },
-        .rotation = @splat(0),
-        .scale = @splat(-1),
-    };
+    // const top_matrix: nz.Transform3D(f32) = .{
+    //     .position = .{ 0, 0, -2 },
+    //     .rotation = @splat(0),
+    //     .scale = @splat(-1),
+    // };
 
-    var draw_query = world.query(&.{WorldModule.Model});
+    var draw_query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
     while (draw_query.next()) |entry| {
         self.main_draw_context.clear();
         const model = entry.get(WorldModule.Model, world).?;
+        const transform = entry.get(nz.Transform3D(f32), world).?;
         self.last_index_buffer = null;
         self.last_material = null;
         self.last_pipeline = null;
@@ -504,11 +505,11 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
                     .local_transform = .fromMat4x4(.identity),
                     .world_transform = .fromMat4x4(.identity),
                 };
-                try mesh_node.draw(self.allocator, top_matrix, &self.main_draw_context);
+                try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
             },
             .gltf => |handle| {
                 var structure_scene = self.loaded_scenes.items[handle];
-                try structure_scene.draw(self.allocator, top_matrix, &self.main_draw_context);
+                try structure_scene.draw(self.allocator, transform, &self.main_draw_context);
                 //TODO: fix ur shit. Transparent pipelines are broken.
             },
         }

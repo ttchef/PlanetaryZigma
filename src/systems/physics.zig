@@ -1,11 +1,13 @@
 const std = @import("std");
-const zphy = @import("zphysics");
+const nz = @import("numz");
+pub const zphy = @import("zphysics");
+const WorldModule = @import("World");
 physics_system: *zphy.PhysicsSystem,
 broad_phase_layer_interface: *BroadPhaseLayerInterface,
 object_layer_pair_filter: *ObjectLayerPairFilter,
 object_vs_broad_phase_layer_filter: *ObjectVsBroadPhaseLayerFilter,
 contact_listener: *ContactListener,
-var loaded: bool = false;
+global_state: zphy.GlobalState = undefined,
 
 const object_layers = struct {
     const non_moving: zphy.ObjectLayer = 0;
@@ -183,13 +185,13 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
             .object_layer = object_layers.non_moving,
         }, .activate);
 
-        const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 0.5, 0.5, 0.5 });
+        const box_shape_settings = try zphy.SphereShapeSettings.create(5);
         defer box_shape_settings.asShapeSettings().release();
         const box_shape = try box_shape_settings.asShapeSettings().createShape();
         defer box_shape.release();
 
         var i: u32 = 0;
-        while (i < 16) : (i += 1) {
+        while (i < 4) : (i += 1) {
             const fi = @as(f32, @floatFromInt(i));
             _ = try body_interface.createAndAddBody(.{
                 .position = .{ 0.0, 8.0 + fi * 1.2, 8.0, 1.0 },
@@ -225,8 +227,51 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     zphy.deinit();
 }
 
-pub fn update(self: *@This(), allocator: std.mem.Allocator, delta_time: f32) void {
-    _ = allocator;
+pub fn reload(self: *@This(), allocator: std.mem.Allocator, pre_reload: bool) void {
+    std.debug.print("THE ALLOC: {any}\n", .{allocator});
+    if (pre_reload) self.global_state = zphy.preReload() else zphy.postReload(allocator, self.global_state);
+}
 
+pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
+    std.debug.print("UPDATE\n", .{});
     self.physics_system.update(delta_time, .{}) catch unreachable;
+
+    var query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
+
+    const bodies = self.physics_system.getBodiesUnsafe();
+    for (bodies) |body| {
+        // std.debug.print("[0]UPDATE\n", .{});
+        if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
+        // std.debug.print("[1]UPDATE\n", .{});
+        var entry = query.next();
+        const transform = entry.?.getPtr(nz.Transform3D(f32), world).?;
+
+        const position: nz.Vec3(f32) = .{
+            @as(f32, @floatCast(body.position[0])),
+            @as(f32, @floatCast(body.position[1])),
+            @as(f32, @floatCast(body.position[2])),
+        };
+        var rotation: nz.quat.Hamiltonian(f32) = .{
+            .w = body.rotation[0],
+            .x = body.rotation[1],
+            .y = body.rotation[2],
+            .z = body.rotation[3],
+        };
+        const new_matrix = rotation.toMat4x4().mul(.translate(position));
+        transform.* = .fromMat4x4(new_matrix);
+
+        // const mem = gctx.uniformsAllocate(DrawUniforms, 1);
+        // mem.slice[0] = .{
+        //     .object_to_world = zm.transpose(object_to_world),
+        //     .basecolor_roughness = .{ 0.1, 0.5, 0.05, 0.5 },
+        // };
+        // pass.setBindGroup(1, uniform_bg, &.{mem.offset});
+        // pass.drawIndexed(
+        //     demo.meshes.items[mesh_cube].num_indices,
+        //     1,
+        //     demo.meshes.items[mesh_cube].index_offset,
+        //     demo.meshes.items[mesh_cube].vertex_offset,
+        //     0,
+        // );
+    }
 }
