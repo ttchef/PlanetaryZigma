@@ -13,6 +13,12 @@ allocator: *std.mem.Allocator,
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
 pub const InitSystems = *const fn (*std.mem.Allocator, *@This(), *World, *Renderer) callconv(.c) u32;
 pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
+pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, bool) callconv(.c) void;
+
+export fn reload(self: *@This(), allocator: *std.mem.Allocator, pre_reload: bool) void {
+    std.debug.print("PTR: {*}\n", .{allocator});
+    self.physics_system.reload(allocator.*, pre_reload);
+}
 
 export fn initSystems(allocator: *std.mem.Allocator, systems: *@This(), world: *World, renderer: *Renderer) u32 {
     initEcs(allocator.*, world, renderer) catch |err| return @intFromError(err);
@@ -28,7 +34,7 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
 }
 
 export fn update(self: *@This(), world: *World, delta_time: f32) void {
-    self.physics_system.update(self.allocator.*, delta_time);
+    self.physics_system.update(world, delta_time);
     player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
 }
 
@@ -42,18 +48,22 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
     entity_mesh2.set(WorldModule.Model, .{ .model = .{ .mesh = box2 } }, world);
+    entity_mesh2.set(nz.Transform3D(f32), .{}, world);
 
     var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     defer planet_mesh.deinit(allocator);
     const box: usize = try renderer.createMesh("planet", planet_mesh.indices.items, planet_mesh.vertices.items);
     const entity_mesh = try world.addEntity();
     entity_mesh.set(WorldModule.Model, .{ .model = .{ .mesh = box } }, world);
+    entity_mesh.set(nz.Transform3D(f32), .{}, world);
 
     const entity_gltf = try world.addEntity();
     const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
     entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
+    entity_gltf.set(nz.Transform3D(f32), .{}, world);
 
     const entity_gltf2 = try world.addEntity();
     const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");
     entity_gltf2.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
+    entity_gltf2.set(nz.Transform3D(f32), .{}, world);
 }

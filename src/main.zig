@@ -13,15 +13,15 @@ pub fn main() !void {
     defer watcher.deinit();
     var system_watcher: Watcher.Game = try .init("libsystem{s}");
     defer system_watcher.deinit();
-    var rendererInit = try watcher.lookup(Renderer.c.Init, "init");
-    var rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
+    const rendererInit = try watcher.lookup(Renderer.c.Init, "init");
+    const rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
-    var gpa: std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }) = .init;
-    // var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
-    // defer _ = gpa.deinit();
+    // var gpa: std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true, .safety = true }) = .init;
+    defer _ = gpa.deinit();
     var allocator = gpa.allocator();
 
     try sdlCheck(sdl.SDL_Init(sdl.SDL_INIT_VIDEO));
@@ -90,8 +90,9 @@ pub fn main() !void {
     // var systemUpdate = try system_watcher.lookup(System.Update, "update");
 
     const init_fn = try system_watcher.lookup(System.InitSystems, "initSystems");
-    const update_fn = try system_watcher.lookup(System.UpdateSystems, "update");
+    var update_fn = try system_watcher.lookup(System.UpdateSystems, "update");
     const deinit_fn = try system_watcher.lookup(System.DeinitSystems, "deinit");
+    var reload_fn = try system_watcher.lookup(System.ReloadSystems, "reload");
     if (init_fn(&allocator, &systems, &world, &renderer) != 0) @panic("XD");
 
     defer deinit_fn(&systems, &allocator);
@@ -128,17 +129,20 @@ pub fn main() !void {
             //     @panic("LOLXD");
         }
 
-        if (try watcher.listen()) {
-            renderer.deinit(allocator);
-            try watcher.reload();
-            rendererInit = try watcher.lookup(Renderer.c.Init, "init");
-            try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
-            rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
-        }
-        // if (try system_watcher.listen()) {
-        //     try system_watcher.reload();
-        //     systemUpdate = try system_watcher.lookup(System.Update, "update");
+        // if (try watcher.listen()) {
+        //     renderer.deinit(allocator);
+        //     try watcher.reload();
+        //     rendererInit = try watcher.lookup(Renderer.c.Init, "init");
+        //     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
+        //     rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
         // }
+        if (try system_watcher.listen()) {
+            reload_fn(&systems, &allocator, true);
+            try system_watcher.reload();
+            update_fn = try system_watcher.lookup(System.UpdateSystems, "update");
+            reload_fn = try system_watcher.lookup(System.ReloadSystems, "reload");
+            reload_fn(&systems, &allocator, false);
+        }
     }
     renderer.deinit(allocator);
 }
