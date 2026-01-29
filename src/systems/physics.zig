@@ -140,7 +140,7 @@ const ContactListener = extern struct {
         _ = sub_shape_id_pair;
     }
 };
-pub fn init(allocator: std.mem.Allocator) !*@This() {
+pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
     try zphy.init(allocator, .{});
     const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
@@ -151,10 +151,6 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
     const contact_listener = try allocator.create(ContactListener);
     contact_listener.* = .{};
 
-    std.debug.print("UPDATE layer={*} \n board_phase={*}\n", .{
-        object_layer_pair_filter,
-        object_vs_broad_phase_layer_filter,
-    });
     // Create physics system
     const physics_system = try zphy.PhysicsSystem.create(
         @as(*const zphy.BroadPhaseLayerInterface, @ptrCast(@alignCast(broad_phase_layer_interface))),
@@ -168,44 +164,46 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
         },
     );
 
-    {
-        const body_interface = physics_system.getBodyInterfaceMut();
+    physics_system.setGravity(.{ 10, -1, 0 });
 
-        const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
-        defer floor_shape_settings.asShapeSettings().release();
+    const body_interface = physics_system.getBodyInterfaceMut();
 
-        const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
-        defer floor_shape.release();
+    const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
+    defer floor_shape_settings.asShapeSettings().release();
 
+    const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
+    defer floor_shape.release();
+
+    _ = try body_interface.createAndAddBody(.{
+        .position = .{ 0.0, -1.0, 0.0, 1.0 },
+        .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
+        .shape = floor_shape,
+        .motion_type = .static,
+        .object_layer = object_layers.non_moving,
+    }, .activate);
+
+    const box_shape_settings = try zphy.SphereShapeSettings.create(5);
+    defer box_shape_settings.asShapeSettings().release();
+    const box_shape = try box_shape_settings.asShapeSettings().createShape();
+    defer box_shape.release();
+
+    var query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
+    while (query.next()) |entry| {
+        std.debug.print("ENTRY_ID {d}\n", .{@intFromEnum(entry)});
+        const transform = entry.get(nz.Transform3D(f32), world).?;
+        const matrix = transform.toMat4x4();
         _ = try body_interface.createAndAddBody(.{
-            .position = .{ 0.0, -1.0, 0.0, 1.0 },
+            .position = matrix.vec4Position(),
             .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
-            .shape = floor_shape,
-            .motion_type = .static,
-            .object_layer = object_layers.non_moving,
+            .shape = box_shape,
+            .motion_type = .dynamic,
+            .object_layer = object_layers.moving,
+            .user_data = @intFromEnum(entry),
+            .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+            //.allow_sleeping = false,
         }, .activate);
-
-        const box_shape_settings = try zphy.SphereShapeSettings.create(5);
-        defer box_shape_settings.asShapeSettings().release();
-        const box_shape = try box_shape_settings.asShapeSettings().createShape();
-        defer box_shape.release();
-
-        var i: u32 = 0;
-        while (i < 4) : (i += 1) {
-            const fi = @as(f32, @floatFromInt(i));
-            _ = try body_interface.createAndAddBody(.{
-                .position = .{ 0.0, 8.0 + fi * 1.2, 8.0, 1.0 },
-                .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
-                .shape = box_shape,
-                .motion_type = .dynamic,
-                .object_layer = object_layers.moving,
-                .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
-                //.allow_sleeping = false,
-            }, .activate);
-        }
-
-        physics_system.optimizeBroadPhase();
     }
+    physics_system.optimizeBroadPhase();
 
     const system = try allocator.create(@This());
     system.* = .{
@@ -227,26 +225,20 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     zphy.deinit();
 }
 
-pub fn reload(self: *@This(), allocator: std.mem.Allocator, pre_reload: bool) void {
-    std.debug.print("THE ALLOC: {any}\n", .{allocator});
-    if (pre_reload) self.global_state = zphy.preReload() else zphy.postReload(allocator, self.global_state);
-}
-
 pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
-    std.debug.print("UPDATE\n", .{});
+    // std.debug.print("UPDATE - lOLXD\n", .{});
     self.physics_system.update(delta_time, .{}) catch unreachable;
-
-    var query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
 
     const bodies = self.physics_system.getBodiesUnsafe();
     for (bodies) |body| {
         // std.debug.print("[0]UPDATE\n", .{});
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        // std.debug.print("[1]UPDATE\n", .{});
-        var entry = query.next();
-        const transform = entry.?.getPtr(nz.Transform3D(f32), world).?;
+        const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
+        // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
+        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{
+            // 0,
             @as(f32, @floatCast(body.position[0])),
             @as(f32, @floatCast(body.position[1])),
             @as(f32, @floatCast(body.position[2])),

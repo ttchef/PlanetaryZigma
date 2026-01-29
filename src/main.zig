@@ -9,18 +9,16 @@ const WorldModule = @import("World");
 const World = WorldModule.World;
 
 pub fn main() !void {
-    var watcher: Watcher.Game = try .init("librenderer{s}");
-    defer watcher.deinit();
+    var render_watcher: Watcher.Game = try .init("librenderer{s}");
+    defer render_watcher.deinit();
     var system_watcher: Watcher.Game = try .init("libsystem{s}");
     defer system_watcher.deinit();
-    const rendererInit = try watcher.lookup(Renderer.c.Init, "init");
-    const rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
 
     // var buffer: [4096 * 100]u8 = undefined;
     // var fba = std.heap.FixedBufferAllocator.init(&buffer);
     // const allocator = fba.allocator();
     // var gpa: std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }) = .init;
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true, .safety = true }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
     defer _ = gpa.deinit();
     var allocator = gpa.allocator();
 
@@ -79,25 +77,21 @@ pub fn main() !void {
     };
 
     var renderer: Renderer = undefined;
+    const rendererInit = try render_watcher.lookup(Renderer.c.Init, "init");
+    const rendererDraw = try render_watcher.lookup(Renderer.c.Draw, "draw");
     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
 
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
-    // const physics_system = try System.Physics.init(allocator);
-
     var systems: System = undefined;
-    // var systemUpdate = try system_watcher.lookup(System.Update, "update");
+    const systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
+    var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
+    const systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
+    var systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
+    if (systemsInit(&systems, &allocator, &world, &renderer) != 0) @panic("XD");
+    defer systemsDeinit(&systems, &allocator);
 
-    const init_fn = try system_watcher.lookup(System.InitSystems, "initSystems");
-    var update_fn = try system_watcher.lookup(System.UpdateSystems, "update");
-    const deinit_fn = try system_watcher.lookup(System.DeinitSystems, "deinit");
-    var reload_fn = try system_watcher.lookup(System.ReloadSystems, "reload");
-    if (init_fn(&allocator, &systems, &world, &renderer) != 0) @panic("XD");
-
-    defer deinit_fn(&systems, &allocator);
-
-    // systems.physics_system = physics_system;
     var time: f64 = 0;
     var timer = try std.time.Timer.start();
     var accumulated_time: f64 = 0;
@@ -121,7 +115,7 @@ pub fn main() !void {
         accumulated_time += delta_time;
 
         if (accumulated_time >= seconds_per_update) {
-            update_fn(&systems, &world, seconds_per_update);
+            systemsUpdate(&systems, &world, seconds_per_update);
             // systemUpdate(&systems, &world, seconds_per_update);
             try Renderer.c.toErr(rendererDraw(&renderer, &world, @floatCast(time)));
             accumulated_time -= seconds_per_update;
@@ -137,11 +131,11 @@ pub fn main() !void {
         //     rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
         // }
         if (try system_watcher.listen()) {
-            reload_fn(&systems, &allocator, true);
+            systemsReload(&systems, &allocator, &world, true);
             try system_watcher.reload();
-            update_fn = try system_watcher.lookup(System.UpdateSystems, "update");
-            reload_fn = try system_watcher.lookup(System.ReloadSystems, "reload");
-            reload_fn(&systems, &allocator, false);
+            systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
+            systemsReload(&systems, &allocator, &world, false);
+            systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
         }
     }
     renderer.deinit(allocator);
