@@ -147,8 +147,8 @@ pub fn build(b: *std.Build) void {
             .link_libcpp = true,
         }),
     });
-    // exe.root_module.addImport("zphysics", zphysics.module("root"));
-    // exe.linkLibrary(zphysics.artifact("joltc"));
+    exe.root_module.addImport("zphysics", zphysics.module("root"));
+    exe.linkLibrary(zphysics.artifact("joltc"));
     exe.step.dependOn(&cargo_cmd.step);
 
     exe.root_module.linkSystemLibrary("unwind", .{});

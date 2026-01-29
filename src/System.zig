@@ -11,19 +11,23 @@ physics_system: *Physics = undefined,
 allocator: *std.mem.Allocator,
 
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
-pub const InitSystems = *const fn (*std.mem.Allocator, *@This(), *World, *Renderer) callconv(.c) u32;
+pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer) callconv(.c) u32;
 pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
-pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, bool) callconv(.c) void;
+pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, *World, bool) callconv(.c) void;
 
-export fn reload(self: *@This(), allocator: *std.mem.Allocator, pre_reload: bool) void {
-    std.debug.print("PTR: {*}\n", .{allocator});
-    self.physics_system.reload(allocator.*, pre_reload);
+export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, pre_reload: bool) u32 {
+    if (pre_reload) {
+        self.physics_system.deinit(allocator.*);
+    } else {
+        self.physics_system = Physics.init(allocator.*, world) catch |err| return @intFromError(err);
+    }
+    return 0;
 }
 
-export fn initSystems(allocator: *std.mem.Allocator, systems: *@This(), world: *World, renderer: *Renderer) u32 {
+export fn initSystems(systems: *@This(), allocator: *std.mem.Allocator, world: *World, renderer: *Renderer) u32 {
     initEcs(allocator.*, world, renderer) catch |err| return @intFromError(err);
     systems.* = .{
-        .physics_system = Physics.init(allocator.*) catch |err| return @intFromError(err),
+        .physics_system = Physics.init(allocator.*, world) catch |err| return @intFromError(err),
         .allocator = allocator,
     };
     return 0;
