@@ -79,7 +79,8 @@ pub fn build(b: *std.Build) void {
             .{ .name = "ecs", .module = ecs },
         },
     });
-
+    world_module.addImport("zphysics", zphysics.module("root"));
+    world_module.linkLibrary(zphysics.artifact("joltc"));
     const renderer = b.addLibrary(.{
         .name = "renderer",
         .root_module = b.createModule(.{
@@ -147,8 +148,8 @@ pub fn build(b: *std.Build) void {
             .link_libcpp = true,
         }),
     });
-    exe.root_module.addImport("zphysics", zphysics.module("root"));
-    exe.linkLibrary(zphysics.artifact("joltc"));
+    // exe.root_module.addImport("zphysics", zphysics.module("root"));
+    // exe.linkLibrary(zphysics.artifact("joltc"));
     exe.step.dependOn(&cargo_cmd.step);
 
     exe.root_module.linkSystemLibrary("unwind", .{});
