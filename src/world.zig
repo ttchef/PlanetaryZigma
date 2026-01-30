@@ -1,3 +1,5 @@
+const std = @import("std");
+const zphy = @import("zphysics");
 const ecs = @import("ecs");
 const nz = @import("numz");
 
@@ -6,10 +8,25 @@ pub const World = ecs.World(&.{
     Camera,
     Player,
     Model,
+    Collider,
 });
 
 pub const Player = struct {
     local: bool = false,
+};
+
+pub const Collider = struct {
+    const Primitive = enum {
+        capsule,
+        box,
+        sphere,
+    };
+    const Complex = struct {
+        indices: std.ArrayList(u32),
+        // vertices: std.ArrayList(Vertex),
+    };
+    z_phycis_body: zphy.BodyId = undefined,
+    shape: union(enum) { primitive: Primitive, complex: Complex },
 };
 
 pub const Camera = struct {

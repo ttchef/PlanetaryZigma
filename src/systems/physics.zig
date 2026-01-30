@@ -164,7 +164,7 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
         },
     );
 
-    physics_system.setGravity(.{ 10, -1, 0 });
+    physics_system.setGravity(.{ 0, 0, 0 });
 
     const body_interface = physics_system.getBodyInterfaceMut();
 
@@ -187,12 +187,13 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
     const box_shape = try box_shape_settings.asShapeSettings().createShape();
     defer box_shape.release();
 
-    var query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
+    var query = world.query(&.{ WorldModule.Collider, nz.Transform3D(f32) });
     while (query.next()) |entry| {
         std.debug.print("ENTRY_ID {d}\n", .{@intFromEnum(entry)});
         const transform = entry.get(nz.Transform3D(f32), world).?;
+        const collider = entry.getPtr(WorldModule.Collider, world).?;
         const matrix = transform.toMat4x4();
-        _ = try body_interface.createAndAddBody(.{
+        const body_id = try body_interface.createAndAddBody(.{
             .position = matrix.vec4Position(),
             .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
             .shape = box_shape,
@@ -202,7 +203,9 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
             .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
             //.allow_sleeping = false,
         }, .activate);
+        collider.z_phycis_body = body_id;
     }
+
     physics_system.optimizeBroadPhase();
 
     const system = try allocator.create(@This());
