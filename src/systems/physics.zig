@@ -168,19 +168,19 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
 
     const body_interface = physics_system.getBodyInterfaceMut();
 
-    const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
-    defer floor_shape_settings.asShapeSettings().release();
-
-    const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
-    defer floor_shape.release();
-
-    _ = try body_interface.createAndAddBody(.{
-        .position = .{ 0.0, -1.0, 0.0, 1.0 },
-        .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
-        .shape = floor_shape,
-        .motion_type = .static,
-        .object_layer = object_layers.non_moving,
-    }, .activate);
+    // const floor_shape_settings = try zphy.BoxShapeSettings.create(.{ 100.0, 1.0, 100.0 });
+    // defer floor_shape_settings.asShapeSettings().release();
+    //
+    // const floor_shape = try floor_shape_settings.asShapeSettings().createShape();
+    // defer floor_shape.release();
+    //
+    // _ = try body_interface.createAndAddBody(.{
+    //     .position = .{ 0.0, -1.0, 0.0, 1.0 },
+    //     .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
+    //     .shape = floor_shape,
+    //     .motion_type = .static,
+    //     .object_layer = object_layers.non_moving,
+    // }, .activate);
 
     const box_shape_settings = try zphy.SphereShapeSettings.create(5);
     defer box_shape_settings.asShapeSettings().release();
@@ -247,13 +247,17 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
             @as(f32, @floatCast(body.position[2])),
         };
         var rotation: nz.quat.Hamiltonian(f32) = .{
-            .w = body.rotation[0],
-            .x = body.rotation[1],
-            .y = body.rotation[2],
-            .z = body.rotation[3],
+            .x = body.rotation[0],
+            .y = body.rotation[1],
+            .z = body.rotation[2],
+            .w = body.rotation[3],
         };
-        const new_matrix = rotation.toMat4x4().mul(.translate(position));
-        transform.* = .fromMat4x4(new_matrix);
+        transform.*.position = position;
+        transform.rotation = rotation.toEuler();
+        // const tmp: nz.Mat4x4(f32) = .identity;
+        // transform.* = .fromMat4x4(tmp.mul(.translate(position)));
+        // const new_matrix = rotation.toMat4x4().inverse().mul(.translate(position));
+        // transform.* = .fromMat4x4(new_matrix);
 
         // const mem = gctx.uniformsAllocate(DrawUniforms, 1);
         // mem.slice[0] = .{
