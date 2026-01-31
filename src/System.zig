@@ -39,24 +39,25 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
 
 export fn update(self: *@This(), world: *World, delta_time: f32) void {
     self.physics_system.update(world, delta_time);
-    player.update(@ptrCast(world), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
+    player.update(@ptrCast(world), @ptrCast(self.physics_system.physics_system), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
 }
 
 fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
     const entity_player = try world.addEntity();
     entity_player.set(WorldModule.Player, .{}, world);
-    entity_player.set(nz.Transform3D(f32), .{}, world);
+    entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 10 } }, world);
     entity_player.set(WorldModule.Camera, .{}, world);
     entity_player.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
 
     // _ = renderer;
     // _ = allocator;
-    var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, -10 }, 10);
+    var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
     defer planet_mesh2.deinit(allocator);
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
     entity_mesh2.set(WorldModule.Model, .{ .model = .{ .mesh = box2 } }, world);
     entity_mesh2.set(nz.Transform3D(f32), .{}, world);
+    entity_mesh2.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
 
     // var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     // defer planet_mesh.deinit(allocator);
@@ -65,10 +66,10 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     // entity_mesh.set(WorldModule.Model, .{ .model = .{ .mesh = box } }, world);
     // entity_mesh.set(nz.Transform3D(f32), .{}, world);
     //
-    // const entity_gltf = try world.addEntity();
-    // const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
-    // entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
-    // entity_gltf.set(nz.Transform3D(f32), .{}, world);
+    const entity_gltf = try world.addEntity();
+    const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
+    entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
+    entity_gltf.set(nz.Transform3D(f32), .{}, world);
     //
     // const entity_gltf2 = try world.addEntity();
     // const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");

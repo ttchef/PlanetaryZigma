@@ -1,4 +1,5 @@
 const std = @import("std");
+const zphy = @import("zphysics");
 
 const WorldModule = @import("World");
 const World = WorldModule.World;
@@ -8,16 +9,22 @@ const Collider = WorldModule.Collider;
 const nz = @import("numz");
 const sdl = @import("sdl");
 
-pub fn update(world: *World, delta_time: f32) !void {
+pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !void {
     var query = world.query(&.{ Player, Camera, nz.Transform3D(f32), Collider });
     while (query.next()) |entity| {
         var transform = entity.getPtr(nz.Transform3D(f32), world).?;
         const camera = entity.getPtr(Camera, world).?;
+        const collider = entity.getPtr(Collider, world).?;
         const keyboard = sdl.SDL_GetKeyboardState(null);
-        const pitch_rad = &transform.rotation[0];
-        const yaw_rad = &transform.rotation[1];
+        const current_pitch_rad = transform.rotation[0];
+        const current_yaw_rad = transform.rotation[1];
+        var pitch_rad: f32 = 0;
+        var yaw_rad: f32 = 0;
 
         const mouse = sdl.SDL_GetMouseState(null, null);
+
+        camera.sensitivity = 10;
+        camera.speed = 500;
 
         var relative_x: f32 = undefined;
         var relative_y: f32 = undefined;
@@ -26,8 +33,8 @@ pub fn update(world: *World, delta_time: f32) !void {
         //SDL_BUTTON_X1 works on Lucas machine for right click
         if (mouse == sdl.SDL_BUTTON_RIGHT or mouse == sdl.SDL_BUTTON_X1) {
             if (!sdl.SDL_HideCursor()) return error.SdlHideCursor;
-            yaw_rad.* += relative_x * camera.sensitivity * delta_time;
-            pitch_rad.* -= relative_y * camera.sensitivity * delta_time;
+            yaw_rad += relative_x * camera.sensitivity * delta_time;
+            pitch_rad -= relative_y * camera.sensitivity * delta_time;
             camera.was_rotating = true;
         } else if (camera.was_rotating) {
             _ = sdl.SDL_GetRelativeMouseState(null, null);
@@ -35,12 +42,12 @@ pub fn update(world: *World, delta_time: f32) !void {
             if (!sdl.SDL_ShowCursor()) return error.SdlShowCursor;
         }
 
-        pitch_rad.* = std.math.clamp(pitch_rad.*, -1.5, 1.5);
+        pitch_rad = std.math.clamp(pitch_rad, -1.5, 1.5);
 
         const forward = nz.vec.normalize(nz.Vec3(f32){
-            @cos(pitch_rad.*) * @sin(yaw_rad.*),
-            @sin(pitch_rad.*),
-            -@cos(pitch_rad.*) * @cos(yaw_rad.*),
+            @cos(current_pitch_rad) * @sin(current_yaw_rad),
+            @sin(current_pitch_rad),
+            -@cos(current_pitch_rad) * @cos(current_yaw_rad),
         });
 
         const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
@@ -104,12 +111,23 @@ pub fn update(world: *World, delta_time: f32) !void {
 
         camera.speed = std.math.clamp(camera.speed, 0, 1000);
 
-        transform.position += nz.vec.scale(move, speed_multiplier + 1);
+        const bodies = physics.getBodyInterfaceMut();
+        // yaw_rad = 10;
+        // const quat = nz.quat.Hamiltonian(f32).fromEuler(.{ 0, yaw_rad, pitch_rad });
+        // bodies.setRotation(collider.z_phycis_body, quat.toVecReversed(), .activate);
+        bodies.setAngularVelocity(collider.z_phycis_body, .{ pitch_rad, yaw_rad, 0 });
+        bodies.setLinearVelocity(collider.z_phycis_body, move);
+        // bodies.addLinearVelocity(collider.z_phycis_body, move);
+
+        // transform.position += nz.vec.scale(move, speed_multiplier + 1);
 
         if (keyboard[sdl.SDL_SCANCODE_R]) {
-            yaw_rad.* = 0;
-            pitch_rad.* = 0;
-            transform.position = .{ 0, 0, 0 };
+            // yaw_rad.* = 0;
+            // pitch_rad.* = 0;
+            bodies.setLinearVelocity(collider.z_phycis_body, .{ 0, 0, 0 });
+            bodies.setPosition(collider.z_phycis_body, .{ 0, 0, 0 }, .activate);
+            bodies.setRotation(collider.z_phycis_body, .{ 1, 0, 0, 0 }, .activate);
+            // bodies.setRotation(collider.z_phycis_body, .{ 0, 0, 0, 0 }, .activate);
         }
 
         std.debug.print(
@@ -136,7 +154,7 @@ pub fn update(world: *World, delta_time: f32) !void {
                 up[0],                 up[1],                 up[2],
                 velocity,              camera.speed,          speed_multiplier + 1,
                 transform.position[0], transform.position[1], transform.position[2],
-                yaw_rad.*,             pitch_rad.*,           transform.rotation[2],
+                transform.rotation[0], transform.rotation[1], transform.rotation[2],
                 delta_time,
             },
         );
