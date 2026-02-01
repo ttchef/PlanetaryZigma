@@ -7,7 +7,6 @@ broad_phase_layer_interface: *BroadPhaseLayerInterface,
 object_layer_pair_filter: *ObjectLayerPairFilter,
 object_vs_broad_phase_layer_filter: *ObjectVsBroadPhaseLayerFilter,
 contact_listener: *ContactListener,
-global_state: zphy.GlobalState = undefined,
 
 const object_layers = struct {
     const non_moving: zphy.ObjectLayer = 0;
@@ -189,13 +188,14 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
 
     var query = world.query(&.{ WorldModule.Collider, nz.Transform3D(f32) });
     while (query.next()) |entry| {
-        std.debug.print("ENTRY_ID {d}\n", .{@intFromEnum(entry)});
         const transform = entry.get(nz.Transform3D(f32), world).?;
         const collider = entry.getPtr(WorldModule.Collider, world).?;
         const matrix = transform.toMat4x4();
+        const euler_to_quat = nz.quat.Hamiltonian(f32).fromEuler(transform.rotation);
+
         const body_id = try body_interface.createAndAddBody(.{
             .position = matrix.vec4Position(),
-            .rotation = .{ 0.0, 0.0, 0.0, 1.0 },
+            .rotation = euler_to_quat.toVecReversed(),
             .shape = box_shape,
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
@@ -254,23 +254,5 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
         };
         transform.*.position = position;
         transform.rotation = rotation.toEuler();
-        // const tmp: nz.Mat4x4(f32) = .identity;
-        // transform.* = .fromMat4x4(tmp.mul(.translate(position)));
-        // const new_matrix = rotation.toMat4x4().inverse().mul(.translate(position));
-        // transform.* = .fromMat4x4(new_matrix);
-
-        // const mem = gctx.uniformsAllocate(DrawUniforms, 1);
-        // mem.slice[0] = .{
-        //     .object_to_world = zm.transpose(object_to_world),
-        //     .basecolor_roughness = .{ 0.1, 0.5, 0.05, 0.5 },
-        // };
-        // pass.setBindGroup(1, uniform_bg, &.{mem.offset});
-        // pass.drawIndexed(
-        //     demo.meshes.items[mesh_cube].num_indices,
-        //     1,
-        //     demo.meshes.items[mesh_cube].index_offset,
-        //     demo.meshes.items[mesh_cube].vertex_offset,
-        //     0,
-        // );
     }
 }

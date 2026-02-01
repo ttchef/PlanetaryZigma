@@ -654,33 +654,6 @@ fn draw_geometry(
 }
 
 pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []vk.Mesh.Vertex) !usize {
-    // var material_buffer: vk.Buffer = try .init(self.vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
-    // const scene_uniform_data: vk.Material.GltfMetallicRoughness.Constants = .{
-    //     .color_factores = .{ 1, 1, 1, 1 },
-    //     .metal_rough_factors = .{ 1, 0.5, 0, 0 },
-    //     .extra = std.mem.zeroes([14]nz.Vec4(f32)),
-    // };
-    //
-    // // Copy the initialized data to GPU memory
-    // self.vma.copyToAllocation(
-    //     vk.Material.GltfMetallicRoughness.Constants,
-    //     scene_uniform_data,
-    //     material_buffer.vma_allocation,
-    //     &material_buffer.info,
-    // );
-    //
-    // const material_resources: vk.Material.GltfMetallicRoughness.Resources = .{
-    //     .color_image = self.white_image,
-    //     .color_sampler = self.default_sampler_linear,
-    //     .metal_rough_image = self.white_image,
-    //     .metal_rough_sampler = self.default_sampler_linear,
-    //     .data_buffer = material_buffer.buffer,
-    //     .data_buffer_offset = 0, // This is already aligned since it's the start of thconstuffer
-    // };
-    //
-    // const mat_instance = try self.allocator.create(vk.Material.Instance);
-    // mat_instance.* = try self.metal_rough_material.writeMaterial(self.device, .main_color, material_resources, &self.global_descriptor_allocator);
-
     const mesh = try vk.Mesh.init(
         self.allocator,
         self.vma.handle,

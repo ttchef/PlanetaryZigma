@@ -57,7 +57,7 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     const entity_mesh2 = try world.addEntity();
     entity_mesh2.set(WorldModule.Model, .{ .model = .{ .mesh = box2 } }, world);
     entity_mesh2.set(nz.Transform3D(f32), .{}, world);
-    entity_mesh2.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
+    // entity_mesh2.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
 
     // var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     // defer planet_mesh.deinit(allocator);
