@@ -120,6 +120,36 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         // bodies.addLinearVelocity(collider.z_phycis_body, move);
 
         // transform.position += nz.vec.scale(move, speed_multiplier + 1);
+        if (keyboard[sdl.SDL_SCANCODE_X]) {
+            std.debug.print(
+                \\--- camera movement debug------- 
+                \\move:        ({d:.3}, {d:.3}, {d:.3})
+                \\forward:     ({d:.3}, {d:.3}, {d:.3})
+                \\right:       ({d:.3}, {d:.3}, {d:.3})
+                \\up:          ({d:.3}, {d:.3}, {d:.3})
+                \\velocity:    {d:.3}
+                \\speed:       {d:.3}
+                \\mult:        {d:.1}
+                \\camera pos:  ({d:.3}, {d:.3}, {d:.3})
+                \\yaw:         {d:.3}
+                \\pitch:       {d:.3}
+                \\roll:       {d:.3}
+                \\delta_time:  {d:.10}
+                \\----------------------------
+                \\
+            ,
+                .{
+                    move[0],               move[1],               move[2],
+                    forward[0],            forward[1],            forward[2],
+                    right[0],              right[1],              right[2],
+                    up[0],                 up[1],                 up[2],
+                    velocity,              camera.speed,          speed_multiplier + 1,
+                    transform.position[0], transform.position[1], transform.position[2],
+                    transform.rotation[0], transform.rotation[1], transform.rotation[2],
+                    delta_time,
+                },
+            );
+        }
 
         if (keyboard[sdl.SDL_SCANCODE_R]) {
             // yaw_rad.* = 0;
@@ -130,33 +160,6 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             // bodies.setRotation(collider.z_phycis_body, .{ 0, 0, 0, 0 }, .activate);
         }
 
-        std.debug.print(
-            \\--- Camera Movement Debug---
-            \\move:        ({d:.3}, {d:.3}, {d:.3})
-            \\forward:     ({d:.3}, {d:.3}, {d:.3})
-            \\right:       ({d:.3}, {d:.3}, {d:.3})
-            \\up:          ({d:.3}, {d:.3}, {d:.3})
-            \\velocity:    {d:.3}
-            \\speed:       {d:.3}
-            \\mult:        {d:.1}
-            \\camera pos:  ({d:.3}, {d:.3}, {d:.3})
-            \\yaw:         {d:.3}
-            \\pitch:       {d:.3}
-            \\roll:       {d:.3}
-            \\delta_time:  {d:.10}
-            \\-----------------------------
-            \\
-        ,
-            .{
-                move[0],               move[1],               move[2],
-                forward[0],            forward[1],            forward[2],
-                right[0],              right[1],              right[2],
-                up[0],                 up[1],                 up[2],
-                velocity,              camera.speed,          speed_multiplier + 1,
-                transform.position[0], transform.position[1], transform.position[2],
-                transform.rotation[0], transform.rotation[1], transform.rotation[2],
-                delta_time,
-            },
-        );
+        transform.rotation[2] = 0;
     }
 }

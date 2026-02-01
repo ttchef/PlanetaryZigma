@@ -25,6 +25,7 @@ pub const Collider = struct {
         indices: std.ArrayList(u32),
         // vertices: std.ArrayList(Vertex),
     };
+    quat: nz.quat.Hamiltonian(f32) = .identity,
     z_phycis_body: zphy.BodyId = undefined,
     shape: union(enum) { primitive: Primitive, complex: Complex },
 };
