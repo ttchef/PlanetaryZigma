@@ -139,8 +139,10 @@ const ContactListener = extern struct {
         _ = sub_shape_id_pair;
     }
 };
-pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
-    try zphy.init(allocator, .{});
+pub fn init(allocator: *std.mem.Allocator, world: *WorldModule.World) !*@This() {
+    // const space = try allocator.alloc(i32, 1024 * 1024 * 1024);
+    // _ = space;
+    try zphy.init(allocator.*, .{});
     const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
     const object_layer_pair_filter = try allocator.create(ObjectLayerPairFilter);
@@ -202,8 +204,9 @@ pub fn init(allocator: std.mem.Allocator, world: *WorldModule.World) !*@This() {
             .user_data = @intFromEnum(entry),
             .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
             //.allow_sleeping = false,
+            .max_angular_velocity = collider.max_angular_velocity,
         }, .activate);
-        collider.z_phycis_body = body_id;
+        collider.body_id = body_id;
     }
 
     physics_system.optimizeBroadPhase();
@@ -237,7 +240,7 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
         // std.debug.print("[0]UPDATE\n", .{});
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
-        // std.debug.print("USER_DATA {d}\n", .{body.user_data});
+        std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
         // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{
@@ -254,5 +257,6 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
         };
         transform.*.position = position;
         transform.rotation = rotation.toEuler();
+        std.debug.print("ROTATION {any}\n", .{body.rotation});
     }
 }

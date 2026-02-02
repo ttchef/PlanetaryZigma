@@ -8,7 +8,6 @@ const World = WorldModule.World;
 const Renderer = @import("Renderer");
 
 physics_system: *Physics = undefined,
-allocator: *std.mem.Allocator,
 
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
 pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer) callconv(.c) u32;
@@ -19,7 +18,7 @@ export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, p
     if (pre_reload) {
         self.physics_system.deinit(allocator.*);
     } else {
-        self.physics_system = Physics.init(allocator.*, world) catch |err| return @intFromError(err);
+        self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
     }
     return 0;
 }
@@ -27,8 +26,7 @@ export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, p
 export fn initSystems(systems: *@This(), allocator: *std.mem.Allocator, world: *World, renderer: *Renderer) u32 {
     initEcs(allocator.*, world, renderer) catch |err| return @intFromError(err);
     systems.* = .{
-        .physics_system = Physics.init(allocator.*, world) catch |err| return @intFromError(err),
-        .allocator = allocator,
+        .physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err),
     };
     return 0;
 }
@@ -43,21 +41,21 @@ export fn update(self: *@This(), world: *World, delta_time: f32) void {
 }
 
 fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
+    // _ = renderer;
+    // _ = allocator;
     const entity_player = try world.addEntity();
     entity_player.set(WorldModule.Player, .{}, world);
     entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 10 } }, world);
     entity_player.set(WorldModule.Camera, .{}, world);
-    entity_player.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
+    entity_player.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule }, .max_angular_velocity = 0 }, world);
 
-    // _ = renderer;
-    // _ = allocator;
     var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
     defer planet_mesh2.deinit(allocator);
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
     entity_mesh2.set(WorldModule.Model, .{ .model = .{ .mesh = box2 } }, world);
     entity_mesh2.set(nz.Transform3D(f32), .{}, world);
-    // entity_mesh2.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
+    entity_mesh2.set(WorldModule.Collider, .{ .shape = .{ .primitive = .capsule } }, world);
 
     // var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     // defer planet_mesh.deinit(allocator);

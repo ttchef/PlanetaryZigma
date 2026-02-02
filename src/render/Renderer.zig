@@ -35,6 +35,9 @@ metal_rough_material: vk.Material.GltfMetallicRoughness,
 default_data: *const vk.Material.Instance,
 material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
+//Debug
+debug_pipeline: vk.Pipeline,
+
 //Vulkan Render Specific
 allocator: std.mem.Allocator,
 instance: vk.Instance,
@@ -260,6 +263,56 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
+    const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
+    const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
+    defer vk.c.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
+    defer vk.c.vkDestroyShaderModule(device.handle, mesh_vertex_shader, null);
+
+    const matrix_range: vk.c.VkPushConstantRange = .{
+        .offset = 0,
+        .size = @sizeOf(vk.Mesh.GPUDrawPushConstants),
+        .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
+    };
+
+    var material_layout: vk.descriptor.Layout = try .init(device, &.{
+        .{
+            .binding = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+        .{
+            .binding = 1,
+            .descriptorCount = 1,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+        .{
+            .binding = 2,
+            .descriptorCount = 1,
+            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    });
+
+    var debug_pipeline_config: vk.Pipeline.Graphics.Config = .{
+        .rasterization_state = .{
+            .polygonMode = vk.c.VK_POLYGON_MODE_LINE,
+        },
+        .push_constants = &.{matrix_range},
+        .descriptor_set_layouts = &.{
+            descriptor_gpu_scene_data.handle,
+            material_layout.handle,
+        },
+        .vertex_shaders = .{
+            .module = mesh_vertex_shader,
+        },
+        .fragment_shaders = .{
+            .module = mesh_frag_shader,
+        },
+    };
+    const debug_pipeline: vk.Pipeline = try .initGraphics(device, &debug_pipeline_config);
+
     return .{
         .allocator = allocator,
         .instance = instance,
@@ -271,6 +324,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .vma = vma,
         .draw_image = draw_image,
         .depth_image = depth_image,
+        .debug_pipeline = debug_pipeline,
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         .draw_image_descriptor_layout = draw_image_descriptor_layout,
