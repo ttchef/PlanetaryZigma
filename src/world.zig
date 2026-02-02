@@ -25,8 +25,8 @@ pub const Collider = struct {
         indices: std.ArrayList(u32),
         // vertices: std.ArrayList(Vertex),
     };
-    quat: nz.quat.Hamiltonian(f32) = .identity,
-    z_phycis_body: zphy.BodyId = undefined,
+    body_id: zphy.BodyId = undefined,
+    max_angular_velocity: f32 = 1,
     shape: union(enum) { primitive: Primitive, complex: Complex },
 };
 
@@ -35,8 +35,8 @@ pub const Camera = struct {
     aspect: f32 = 0,
     near: f32 = 0.1,
     far: f32 = 1000,
-    speed: f32 = 10,
-    sensitivity: f32 = 0.5,
+    speed: f32 = 500,
+    sensitivity: f32 = 1,
     was_rotating: bool = false,
 };
 

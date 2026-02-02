@@ -116,7 +116,6 @@ pub fn main() !void {
 
         if (accumulated_time >= seconds_per_update) {
             systemsUpdate(&systems, &world, seconds_per_update);
-            // systemUpdate(&systems, &world, seconds_per_update);
             try Renderer.c.toErr(rendererDraw(&renderer, &world, @floatCast(time)));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
