@@ -86,23 +86,20 @@ pub const DebugMessenger = struct {
 
     pub const Config = struct {
         severities: struct {
-            verbose: bool = true,
-            warning: bool = true,
-            @"error": bool = true,
-            info: bool = true,
+            verbose: bool = false,
+            warning: bool = false,
+            @"error": bool = false,
+            info: bool = false,
         } = .{},
     };
 
     pub fn init(instance: Instance, config: Config) !@This() {
-        const running_renderdoc = std.process.hasEnvVarConstant("RENDERDOC_CAPFILE");
-
         var message_severity: u32 = 0;
-        if (!running_renderdoc) {
-            if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
-            if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-            if (config.severities.@"error") message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-            if (config.severities.info) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
-        }
+        if (config.severities.verbose) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+        if (config.severities.warning) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+        if (config.severities.@"error") message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        if (config.severities.info) message_severity |= c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+
         const message_type: u32 = c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
             c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;

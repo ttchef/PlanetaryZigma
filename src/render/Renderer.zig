@@ -36,7 +36,9 @@ default_data: *const vk.Material.Instance,
 material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
 //Debug
+debug_descriptor_layout: vk.descriptor.Layout,
 debug_pipeline: vk.Pipeline,
+debug_meshes: [3]vk.Mesh,
 
 //Vulkan Render Specific
 allocator: std.mem.Allocator,
@@ -263,6 +265,9 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         &global_descriptor_allocator,
     );
 
+    //============
+    //NOTE: DEBUG
+    //============
     const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
     const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
     defer vk.c.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
@@ -274,7 +279,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
     };
 
-    var material_layout: vk.descriptor.Layout = try .init(device, &.{
+    var debug_descriptor_layout: vk.descriptor.Layout = try .init(device, &.{
         .{
             .binding = 0,
             .descriptorCount = 1,
@@ -296,13 +301,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     });
 
     var debug_pipeline_config: vk.Pipeline.Graphics.Config = .{
-        .rasterization_state = .{
-            .polygonMode = vk.c.VK_POLYGON_MODE_LINE,
-        },
         .push_constants = &.{matrix_range},
         .descriptor_set_layouts = &.{
             descriptor_gpu_scene_data.handle,
-            material_layout.handle,
+            debug_descriptor_layout.handle,
         },
         .vertex_shaders = .{
             .module = mesh_vertex_shader,
@@ -311,7 +313,66 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             .module = mesh_frag_shader,
         },
     };
+    debug_pipeline_config.viewport_state.scissorCount = 1;
+    debug_pipeline_config.viewport_state.viewportCount = 1;
+    debug_pipeline_config.dynamic_state.dynamicStateCount = 2;
+    debug_pipeline_config.dynamic_state.pDynamicStates = &[_]c_uint{
+        vk.c.VK_DYNAMIC_STATE_VIEWPORT,
+        vk.c.VK_DYNAMIC_STATE_SCISSOR,
+    };
+    debug_pipeline_config.rasterization_state.polygonMode = vk.c.VK_POLYGON_MODE_LINE;
+
     const debug_pipeline: vk.Pipeline = try .initGraphics(device, &debug_pipeline_config);
+
+    var debug_mehses: [3]vk.Mesh = undefined;
+    // 8 corners of a cube
+    const positions = [_][3]f32{
+        .{ -0.5, -0.5, -0.5 }, // 0
+        .{ 0.5, -0.5, -0.5 }, // 1
+        .{ 0.5, 0.5, -0.5 }, // 2
+        .{ -0.5, 0.5, -0.5 }, // 3
+        .{ -0.5, -0.5, 0.5 }, // 4
+        .{ 0.5, -0.5, 0.5 }, // 5
+        .{ 0.5, 0.5, 0.5 }, // 6
+        .{ -0.5, 0.5, 0.5 }, // 7
+    };
+
+    var vertices: [8]vk.Mesh.Vertex = undefined;
+    for (positions, 0..) |pos, i| {
+        vertices[i] = vk.Mesh.Vertex{
+            .position = pos,
+            .uv_x = 0,
+            .uv_y = 0,
+            .normal = .{ 0, 0, 0 },
+            .color = .{ 1, 1, 1, 1 },
+        };
+    }
+
+    // indices for triangles (two per face)
+
+    var indices: [36]u32 = .{
+        0, 1, 2, 2, 3, 0, // back
+        4, 5, 6, 6, 7, 4, // front
+        0, 4, 7, 7, 3, 0, // left
+        1, 5, 6, 6, 2, 1, // right
+        0, 1, 5, 5, 4, 0, // bottom
+        3, 2, 6, 6, 7, 3, // top
+    };
+
+    debug_mehses[0] = try .init(
+        allocator,
+        vma.handle,
+        "Box",
+        device,
+        &.{.{
+            .index_start = 0,
+            .index_count = @intCast(indices.len),
+            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+            .material = default_data,
+        }},
+        indices[0..],
+        vertices[0..],
+    );
 
     return .{
         .allocator = allocator,
@@ -325,6 +386,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .draw_image = draw_image,
         .depth_image = depth_image,
         .debug_pipeline = debug_pipeline,
+        .debug_descriptor_layout = debug_descriptor_layout,
+        .debug_meshes = debug_mehses,
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         .draw_image_descriptor_layout = draw_image_descriptor_layout,
@@ -366,6 +429,9 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.metal_rough_material.deinit(allocator, self.device);
     self.material_buffer.deinit(self.vma.handle);
     allocator.destroy(self.default_data);
+
+    self.debug_pipeline.deinit(self.device);
+    self.debug_descriptor_layout.deinit(self.device);
 
     for (self.loaded_scenes.items) |*scene| {
         scene.deinit(self.allocator, self.vma, self.device);
@@ -568,10 +634,39 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
             },
         }
 
-        draw_geometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        draw_geometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
+    var draw_debug_query = world.query(&.{ WorldModule.Collider, nz.Transform3D(f32) });
+    while (draw_debug_query.next()) |entry| {
+        self.main_draw_context.clear();
+        const transform = entry.get(nz.Transform3D(f32), world).?;
+        const collider = entry.get(WorldModule.Collider, world).?;
+        self.last_index_buffer = null;
+        self.last_material = null;
+        self.last_pipeline = null;
+        switch (collider.shape) {
+            .primitive => |shape| {
+                switch (shape) {
+                    .box => {
+                        var mesh = self.debug_meshes[0];
+                        var mesh_node: vk.Node = .{
+                            .material = mesh.surfaces.items[0].material,
+                            .mesh = &mesh,
+                            .local_transform = .fromMat4x4(.identity),
+                            .world_transform = .fromMat4x4(.identity),
+                        };
+                        try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                    },
+                    .capsule => {},
+                    .sphere => {},
+                }
+            },
+            .complex => {},
+        }
+        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+    }
     vk.c.vkCmdEndRendering(cmd_buffer);
 
     draw_image_barrier.transition(vk.c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vk.c.VK_PIPELINE_STAGE_TRANSFER_BIT, vk.c.VK_ACCESS_TRANSFER_READ_BIT);
@@ -629,7 +724,7 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-fn draw_geometry(
+fn drawGeometry(
     self: *@This(),
     render_objects: std.ArrayList(vk.Node.RenderObject),
     cmd_buffer: vk.c.VkCommandBuffer,

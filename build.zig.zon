@@ -2,11 +2,11 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.1484+d0ba6642b",
+    .minimum_zig_version = "0.16.0-dev.2368+380ea6fb5",
     .dependencies = .{
         .numz = .{
-            .url = "git+https://github.com/HaraldWik/numz#172a455c37dc6a6726f78ce4d0402e51f4da21b9",
-            .hash = "numz-0.0.2-V-sGm6euAAAUkgIaPj5ecZEjphMHrqoJa-PDNRI-C8WD",
+            .url = "git+https://github.com/HaraldWik/numz#eea6a44cacea6343ea1146d415efa184ccd7edc3",
+            .hash = "numz-0.0.2-V-sGmzmwAABdth6jnJ6RhawFjif5BtmW9kSQXhrTj61-",
         },
         .ecs = .{
             .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",

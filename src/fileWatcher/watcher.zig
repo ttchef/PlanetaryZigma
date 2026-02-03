@@ -33,7 +33,7 @@ pub const Game = struct {
     dynlib: std.DynLib,
     file_watcher: FileWatcher,
 
-    pub fn init(comptime library_name: []const u8) !@This() {
+    pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
         const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
 
         const search_paths: []const []const u8 = &.{
@@ -44,10 +44,10 @@ pub const Game = struct {
 
         const lib_path: ?[]const u8 =
             for (search_paths) |path_prefix| {
-                var buffer: [std.fs.max_path_bytes]u8 = undefined;
+                var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
                 const path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ path_prefix, lib_name });
 
-                if ((std.fs.cwd().access(path, .{}) catch null) != null) {
+                if ((std.Io.Dir.cwd().access(io, path, .{}) catch null) != null) {
                     break @constCast(path);
                 }
             } else null;
