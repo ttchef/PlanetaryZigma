@@ -124,7 +124,7 @@ pub fn build(b: *std.Build) void {
         .linkage = .dynamic,
     });
     system.root_module.addImport("zphysics", zphysics.module("root"));
-    system.linkLibrary(zphysics.artifact("joltc"));
+    system.root_module.linkLibrary(zphysics.artifact("joltc"));
     system.root_module.linkSystemLibrary("SDL3", .{});
     b.installArtifact(system);
 
@@ -159,7 +159,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.linkSystemLibrary("vulkan", .{});
     exe.root_module.linkSystemLibrary("SDL3", .{});
 
-    renderer.addCSourceFile(.{
+    renderer.root_module.addCSourceFile(.{
         .file = b.addWriteFiles().add("vma_impl.cpp",
             \\#define VMA_IMPLEMENTATION
             \\#include "vk_mem_alloc.h"
@@ -167,7 +167,7 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c++14"},
     });
 
-    renderer.addCSourceFile(.{
+    renderer.root_module.addCSourceFile(.{
         .file = b.addWriteFiles().add("cgltf_impl.c",
             \\#define CGLTF_IMPLEMENTATION
             \\#include "cgltf.h"
@@ -175,17 +175,17 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c99"},
     });
 
-    renderer.addCSourceFile(.{
+    renderer.root_module.addCSourceFile(.{
         .file = b.addWriteFiles().add("stbi_impl.c",
             \\#define STB_IMAGE_IMPLEMENTATION
             \\#include "stb_image.h"
         ),
     });
 
-    renderer.addIncludePath(vma_dep.path("include/"));
-    renderer.addIncludePath(vulkan_header_dep.path("include/"));
-    renderer.addIncludePath(cgltf_dep.path("."));
-    renderer.addIncludePath(stb_dep.path("."));
+    renderer.root_module.addIncludePath(vma_dep.path("include/"));
+    renderer.root_module.addIncludePath(vulkan_header_dep.path("include/"));
+    renderer.root_module.addIncludePath(cgltf_dep.path("."));
+    renderer.root_module.addIncludePath(stb_dep.path("."));
 
     b.installArtifact(exe);
 
@@ -199,11 +199,12 @@ pub fn build(b: *std.Build) void {
 }
 
 fn compileShaders(b: *std.Build) !void {
-    try std.fs.cwd().makePath(b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
-    const dir = try std.fs.cwd().openDir("assets/shaders/", .{ .iterate = true });
+    const io = b.graph.io;
+    try std.Io.Dir.cwd().createDirPath(io, b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
+    const dir = try std.Io.Dir.cwd().openDir(io, "assets/shaders/", .{ .iterate = true });
     var it = dir.iterate();
 
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".glsl")) continue;
         const cmp_cmd = b.addSystemCommand(&.{
             "glslc",

@@ -232,7 +232,6 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 }
 
 pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
-    // std.debug.print("UPDATE - lOLXD\n", .{});
     self.physics_system.update(delta_time, .{}) catch unreachable;
 
     const bodies = self.physics_system.getBodiesUnsafe();

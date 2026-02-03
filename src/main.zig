@@ -8,10 +8,11 @@ const System = @import("System");
 const WorldModule = @import("World");
 const World = WorldModule.World;
 
-pub fn main() !void {
-    var render_watcher: Watcher.Game = try .init("librenderer{s}");
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    var render_watcher: Watcher.Game = try .init("librenderer{s}", io);
     defer render_watcher.deinit();
-    var system_watcher: Watcher.Game = try .init("libsystem{s}");
+    var system_watcher: Watcher.Game = try .init("libsystem{s}", io);
     defer system_watcher.deinit();
 
     // var buffer: [4096 * 100]u8 = undefined;
@@ -50,7 +51,7 @@ pub fn main() !void {
                 // "VK_LAYER_LUNARG_api_dump",
             },
             .debug_config = .{
-                .severities = .{
+                .severities = if (init.environ_map.contains("RENDERDOC_CAPFILE")) .{} else .{
                     .warning = true,
                     .verbose = true,
                     .@"error" = true,
@@ -89,7 +90,7 @@ pub fn main() !void {
     var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
     const systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
     var systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
-    if (systemsInit(&systems, &allocator, &world, &renderer) != 0) @panic("XD");
+    if (systemsInit(&systems, &allocator, &world, &renderer) != 0) return error.SystemsInit;
     defer systemsDeinit(&systems, &allocator);
 
     var time: f64 = 0;
