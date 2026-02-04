@@ -36,8 +36,7 @@ default_data: *const vk.Material.Instance,
 material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
 //Debug
-debug_descriptor_layout: vk.descriptor.Layout,
-debug_pipeline: vk.Pipeline,
+debug_pipeline: *vk.Pipeline,
 debug_meshes: [3]vk.Mesh,
 
 //Vulkan Render Specific
@@ -279,32 +278,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT,
     };
 
-    var debug_descriptor_layout: vk.descriptor.Layout = try .init(device, &.{
-        .{
-            .binding = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        },
-        .{
-            .binding = 1,
-            .descriptorCount = 1,
-            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        },
-        .{
-            .binding = 2,
-            .descriptorCount = 1,
-            .descriptorType = vk.c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .stageFlags = vk.c.VK_SHADER_STAGE_VERTEX_BIT | vk.c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        },
-    });
-
     var debug_pipeline_config: vk.Pipeline.Graphics.Config = .{
         .push_constants = &.{matrix_range},
         .descriptor_set_layouts = &.{
             descriptor_gpu_scene_data.handle,
-            debug_descriptor_layout.handle,
         },
         .vertex_shaders = .{
             .module = mesh_vertex_shader,
@@ -322,7 +299,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     };
     debug_pipeline_config.rasterization_state.polygonMode = vk.c.VK_POLYGON_MODE_LINE;
 
-    const debug_pipeline: vk.Pipeline = try .initGraphics(device, &debug_pipeline_config);
+    const debug_pipeline = try allocator.create(vk.Pipeline);
+    debug_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
+    var debug_material = try allocator.create(vk.Material.Instance);
+    debug_material.pipeline = debug_pipeline;
 
     var debug_mehses: [3]vk.Mesh = undefined;
     // 8 corners of a cube
@@ -368,7 +348,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             .index_start = 0,
             .index_count = @intCast(indices.len),
             .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = default_data,
+            .material = debug_material,
         }},
         indices[0..],
         vertices[0..],
@@ -386,7 +366,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .draw_image = draw_image,
         .depth_image = depth_image,
         .debug_pipeline = debug_pipeline,
-        .debug_descriptor_layout = debug_descriptor_layout,
         .debug_meshes = debug_mehses,
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
@@ -431,7 +410,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     allocator.destroy(self.default_data);
 
     self.debug_pipeline.deinit(self.device);
-    self.debug_descriptor_layout.deinit(self.device);
+    allocator.destroy(self.debug_pipeline);
 
     for (self.loaded_scenes.items) |*scene| {
         scene.deinit(self.allocator, self.vma, self.device);

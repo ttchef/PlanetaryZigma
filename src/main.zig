@@ -137,6 +137,7 @@ pub fn main(init: std.process.Init) !void {
             systemsReload(&systems, &allocator, &world, false);
             systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
         }
+        break;
     }
     renderer.deinit(allocator);
 }
