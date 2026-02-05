@@ -267,8 +267,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     //============
     //NOTE: DEBUG
     //============
-    const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
-    const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
+    const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.frag.spv");
+    const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.vert.spv");
     defer vk.c.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
     defer vk.c.vkDestroyShaderModule(device.handle, mesh_vertex_shader, null);
 
@@ -411,6 +411,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 
     self.debug_pipeline.deinit(self.device);
     allocator.destroy(self.debug_pipeline);
+    self.debug_meshes[0].deinit(self.allocator, self.vma.handle);
 
     for (self.loaded_scenes.items) |*scene| {
         scene.deinit(self.allocator, self.vma, self.device);

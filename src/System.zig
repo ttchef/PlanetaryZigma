@@ -1,5 +1,6 @@
 const std = @import("std");
 const nz = @import("numz");
+const sdl = @import("sdl");
 const player = @import("systems/player.zig");
 const Planet = @import("systems/Planet.zig");
 pub const Physics = @import("systems/physics.zig");
@@ -8,36 +9,40 @@ const World = WorldModule.World;
 const Renderer = @import("Renderer");
 
 physics_system: *Physics = undefined,
+renderer: Renderer = undefined,
 
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
-pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer) callconv(.c) u32;
+pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer.Config) callconv(.c) u32;
 pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
-pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, *World, bool) callconv(.c) void;
-
-export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, pre_reload: bool) u32 {
+pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer.Config, bool) callconv(.c) void;
+export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, render_config: *Renderer.Config, pre_reload: bool) u32 {
     if (pre_reload) {
+        self.renderer.deinit(allocator.*);
         self.physics_system.deinit(allocator.*);
     } else {
+        self.renderer = Renderer.init(allocator.*, render_config.*) catch |err| return @intFromError(err);
         self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
     }
     return 0;
 }
 
-export fn initSystems(systems: *@This(), allocator: *std.mem.Allocator, world: *World, renderer: *Renderer) u32 {
-    initEcs(allocator.*, world, renderer) catch |err| return @intFromError(err);
-    systems.* = .{
-        .physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err),
-    };
+export fn initSystems(self: *@This(), allocator: *std.mem.Allocator, world: *World, renderer_config: *Renderer.Config) u32 {
+    self.renderer = Renderer.init(allocator.*, renderer_config.*) catch |err| return @intFromError(err);
+    initEcs(allocator.*, world, &self.renderer) catch |err| return @intFromError(err);
+    self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
     return 0;
 }
 export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
     self.physics_system.deinit(allocator.*);
     allocator.destroy(self.physics_system);
+    self.renderer.deinit(allocator.*);
 }
 
-export fn update(self: *@This(), world: *World, delta_time: f32) void {
+export fn update(self: *@This(), world: *World, delta_time: f32) u32 {
     self.physics_system.update(world, delta_time);
     player.update(@ptrCast(world), @ptrCast(self.physics_system.physics_system), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
+    self.renderer.draw(world, delta_time) catch |err| return @intFromError(err);
+    return 0;
 }
 
 fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
