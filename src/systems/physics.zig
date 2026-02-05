@@ -239,7 +239,7 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
         // std.debug.print("[0]UPDATE\n", .{});
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
-        std.debug.print("USER_DATA {d}\n", .{body.user_data});
+        // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
         // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{

@@ -10,8 +10,6 @@ const World = WorldModule.World;
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
-    var render_watcher: Watcher.Game = try .init("librenderer{s}", io);
-    defer render_watcher.deinit();
     var system_watcher: Watcher.Game = try .init("libsystem{s}", io);
     defer system_watcher.deinit();
 
@@ -77,11 +75,6 @@ pub fn main(init: std.process.Init) !void {
         },
     };
 
-    var renderer: Renderer = undefined;
-    const rendererInit = try render_watcher.lookup(Renderer.c.Init, "init");
-    const rendererDraw = try render_watcher.lookup(Renderer.c.Draw, "draw");
-    try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
-
     var world: World = try .init(allocator, null);
     defer world.deinit();
 
@@ -90,7 +83,7 @@ pub fn main(init: std.process.Init) !void {
     var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
     const systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
     var systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
-    if (systemsInit(&systems, &allocator, &world, &renderer) != 0) return error.SystemsInit;
+    if (systemsInit(&systems, &allocator, &world, &renderer_config) != 0) return error.SystemsInit;
     defer systemsDeinit(&systems, &allocator);
 
     var time: f64 = 0;
@@ -103,7 +96,7 @@ pub fn main(init: std.process.Init) !void {
         while (sdl.SDL_PollEvent(&event)) switch (event.type) {
             sdl.SDL_EVENT_WINDOW_CLOSE_REQUESTED => break :main_loop,
             sdl.SDL_EVENT_WINDOW_RESIZED => {
-                try renderer.reCreateSwapchain(@intCast(event.window.data1), @intCast(event.window.data2));
+                try systems.renderer.reCreateSwapchain(@intCast(event.window.data1), @intCast(event.window.data2));
             },
             sdl.SDL_EVENT_KEY_DOWN => {
                 if (event.key.key == sdl.SDLK_ESCAPE) break :main_loop;
@@ -117,29 +110,20 @@ pub fn main(init: std.process.Init) !void {
 
         if (accumulated_time >= seconds_per_update) {
             systemsUpdate(&systems, &world, seconds_per_update);
-            try Renderer.c.toErr(rendererDraw(&renderer, &world, @floatCast(time)));
+            // try Renderer.c.toErr(rendererDraw(&renderer, &world, @floatCast(time)));
             accumulated_time -= seconds_per_update;
             // if (time >= 2 * seconds_per_update)
             //     @panic("LOLXD");
         }
 
-        // if (try watcher.listen()) {
-        //     renderer.deinit(allocator);
-        //     try watcher.reload();
-        //     rendererInit = try watcher.lookup(Renderer.c.Init, "init");
-        //     try Renderer.c.toErr(rendererInit(&renderer, &allocator, &renderer_config));
-        //     rendererDraw = try watcher.lookup(Renderer.c.Draw, "draw");
-        // }
         if (try system_watcher.listen()) {
-            systemsReload(&systems, &allocator, &world, true);
+            systemsReload(&systems, &allocator, &world, &renderer_config, true);
             try system_watcher.reload();
             systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
-            systemsReload(&systems, &allocator, &world, false);
+            systemsReload(&systems, &allocator, &world, &renderer_config, false);
             systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
         }
-        break;
     }
-    renderer.deinit(allocator);
 }
 
 pub fn initVulkanSurface(instance: Renderer.vk.Instance, window: *anyopaque) anyerror!*anyopaque {
