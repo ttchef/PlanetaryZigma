@@ -1,11 +1,11 @@
 const std = @import("std");
 const zphy = @import("zphysics");
 
-const WorldModule = @import("World");
-const World = WorldModule.World;
-const Camera = WorldModule.Camera;
-const Player = WorldModule.Player;
-const Collider = WorldModule.Collider;
+const ecs = @import("ecs");
+const World = ecs.World;
+const Camera = ecs.Camera;
+const Player = ecs.Player;
+const Collider = ecs.Collider;
 const nz = @import("numz");
 const sdl = @import("sdl");
 
@@ -116,6 +116,8 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         bodies.setRotation(collider.body_id, quat.toVecReversed(), .activate);
         bodies.setLinearVelocity(collider.body_id, move);
 
+        if (keyboard[sdl.SDL_SCANCODE_K]) try spawnBox(world);
+
         if (keyboard[sdl.SDL_SCANCODE_X]) {
             std.debug.print(
                 \\--- camera movement debug------- 
@@ -153,4 +155,15 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             bodies.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
     }
+}
+
+fn spawnBox(world: *World) !void {
+
+    // var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
+    // defer planet_mesh2.deinit(allocator);
+    // const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
+    const entity_mesh2 = try world.addEntity();
+    // entity_mesh2.set(ecs.Model, .{ .model = .{ .mesh = box2 } }, world);
+    entity_mesh2.set(nz.Transform3D(f32), .{ .position = .{ 0, 1, 0 } }, world);
+    entity_mesh2.set(ecs.Collider, .{ .shape = .{ .primitive = .box } }, world);
 }
