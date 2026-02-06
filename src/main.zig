@@ -5,8 +5,8 @@ const nz = @import("numz");
 const Renderer = @import("Renderer");
 const Watcher = @import("fileWatcher/watcher.zig");
 const System = @import("System");
-const WorldModule = @import("World");
-const World = WorldModule.World;
+const ecs = @import("ecs");
+const World = ecs.World;
 
 pub fn main(init: std.process.Init) !void {
     const io = init.io;

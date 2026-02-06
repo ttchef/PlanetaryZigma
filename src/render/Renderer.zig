@@ -1,9 +1,9 @@
 const std = @import("std");
 const nz = @import("numz");
-const WorldModule = @import("World");
+const ecs = @import("ecs");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
 pub const vk = @import("vulkan/vulkan.zig");
-pub const Camera = @import("World").Camera;
+pub const Camera = ecs.Camera;
 pub const c = @import("c.zig");
 
 //TODO: FIX temporarly SOLUTION, (build.zig)?
@@ -307,14 +307,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     var debug_mehses: [3]vk.Mesh = undefined;
     // 8 corners of a cube
     const positions = [_][3]f32{
-        .{ -0.5, -0.5, -0.5 }, // 0
-        .{ 0.5, -0.5, -0.5 }, // 1
-        .{ 0.5, 0.5, -0.5 }, // 2
-        .{ -0.5, 0.5, -0.5 }, // 3
-        .{ -0.5, -0.5, 0.5 }, // 4
-        .{ 0.5, -0.5, 0.5 }, // 5
-        .{ 0.5, 0.5, 0.5 }, // 6
-        .{ -0.5, 0.5, 0.5 }, // 7
+        .{ -1, -1, -1 }, // 0
+        .{ 1, -1, -1 }, // 1
+        .{ 1, 1, -1 }, // 2
+        .{ -1, 1, -1 }, // 3
+        .{ -1, -1, 1 }, // 4
+        .{ 1, -1, 1 }, // 5
+        .{ 1, 1, 1 }, // 6
+        .{ -1, 1, 1 }, // 7
     };
 
     var vertices: [8]vk.Mesh.Vertex = undefined;
@@ -447,10 +447,10 @@ pub fn reCreateSwapchain(self: *@This(), width: usize, height: usize) !void {
     self.draw_image.extent.width = @intFromFloat(scaled_width);
 }
 
-pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
-    var query = world.query(&.{ WorldModule.Player, WorldModule.Camera, nz.Transform3D(f32) });
+pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
+    var query = world.query(&.{ ecs.Player, ecs.Camera, nz.Transform3D(f32) });
     const entity = query.next().?;
-    const camera = entity.getPtr(WorldModule.Camera, world).?;
+    const camera = entity.getPtr(ecs.Camera, world).?;
     const camera_transform = entity.getPtr(nz.Transform3D(f32), world).?;
 
     var image_index: u32 = undefined;
@@ -588,10 +588,10 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
     //     .scale = @splat(-1),
     // };
 
-    var draw_query = world.query(&.{ WorldModule.Model, nz.Transform3D(f32) });
+    var draw_query = world.query(&.{ ecs.Model, nz.Transform3D(f32) });
     while (draw_query.next()) |entry| {
         self.main_draw_context.clear();
-        const model = entry.get(WorldModule.Model, world).?;
+        const model = entry.get(ecs.Model, world).?;
         const transform = entry.get(nz.Transform3D(f32), world).?;
         self.last_index_buffer = null;
         self.last_material = null;
@@ -614,15 +614,15 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
             },
         }
 
-        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
-    var draw_debug_query = world.query(&.{ WorldModule.Collider, nz.Transform3D(f32) });
+    var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
     while (draw_debug_query.next()) |entry| {
         self.main_draw_context.clear();
         const transform = entry.get(nz.Transform3D(f32), world).?;
-        const collider = entry.get(WorldModule.Collider, world).?;
+        const collider = entry.get(ecs.Collider, world).?;
         self.last_index_buffer = null;
         self.last_material = null;
         self.last_pipeline = null;
@@ -630,6 +630,7 @@ pub fn draw(self: *@This(), world: *WorldModule.World, time: f32) !void {
             .primitive => |shape| {
                 switch (shape) {
                     .box => {
+                        // std.debug.print("hello\n", .{});
                         var mesh = self.debug_meshes[0];
                         var mesh_node: vk.Node = .{
                             .material = mesh.surfaces.items[0].material,

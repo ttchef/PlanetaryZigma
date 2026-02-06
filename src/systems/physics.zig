@@ -1,7 +1,7 @@
 const std = @import("std");
 const nz = @import("numz");
 pub const zphy = @import("zphysics");
-const WorldModule = @import("World");
+const ecs = @import("ecs");
 physics_system: *zphy.PhysicsSystem,
 broad_phase_layer_interface: *BroadPhaseLayerInterface,
 object_layer_pair_filter: *ObjectLayerPairFilter,
@@ -139,7 +139,7 @@ const ContactListener = extern struct {
         _ = sub_shape_id_pair;
     }
 };
-pub fn init(allocator: *std.mem.Allocator, world: *WorldModule.World) !*@This() {
+pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
     // const space = try allocator.alloc(i32, 1024 * 1024 * 1024);
     // _ = space;
     try zphy.init(allocator.*, .{});
@@ -183,15 +183,15 @@ pub fn init(allocator: *std.mem.Allocator, world: *WorldModule.World) !*@This() 
     //     .object_layer = object_layers.non_moving,
     // }, .activate);
 
-    const box_shape_settings = try zphy.SphereShapeSettings.create(5);
+    const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
     defer box_shape_settings.asShapeSettings().release();
     const box_shape = try box_shape_settings.asShapeSettings().createShape();
     defer box_shape.release();
 
-    var query = world.query(&.{ WorldModule.Collider, nz.Transform3D(f32) });
+    var query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
     while (query.next()) |entry| {
         const transform = entry.get(nz.Transform3D(f32), world).?;
-        const collider = entry.getPtr(WorldModule.Collider, world).?;
+        const collider = entry.getPtr(ecs.Collider, world).?;
         const matrix = transform.toMat4x4();
         const euler_to_quat = nz.quat.Hamiltonian(f32).fromEuler(transform.rotation);
 
@@ -231,7 +231,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     zphy.deinit();
 }
 
-pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
+pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
     self.physics_system.update(delta_time, .{}) catch unreachable;
 
     const bodies = self.physics_system.getBodiesUnsafe();
@@ -256,6 +256,6 @@ pub fn update(self: *@This(), world: *WorldModule.World, delta_time: f32) void {
         };
         transform.*.position = position;
         transform.rotation = rotation.toEuler();
-        std.debug.print("ROTATION {any}\n", .{body.rotation});
+        // std.debug.print("ROTATION {any}\n", .{body.rotation});
     }
 }

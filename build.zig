@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
-    const ecs = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
+    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
     const vulkan_header_dep = b.dependency("vulkan_headers", .{});
 
     const vulkan_headers = b.addTranslateC(.{
@@ -70,17 +70,17 @@ pub fn build(b: *std.Build) void {
         "cargo", "build", "--release",
     });
 
-    const world_module = b.createModule(.{
-        .root_source_file = b.path("src/world.zig"),
+    const ecs = b.createModule(.{
+        .root_source_file = b.path("src/ecs.zig"),
         .optimize = optimize,
         .target = target,
         .imports = &.{
             .{ .name = "numz", .module = numz },
-            .{ .name = "ecs", .module = ecs },
+            .{ .name = "ec", .module = ec },
         },
     });
-    world_module.addImport("zphysics", zphysics.module("root"));
-    world_module.linkLibrary(zphysics.artifact("joltc"));
+    ecs.addImport("zphysics", zphysics.module("root"));
+    ecs.linkLibrary(zphysics.artifact("joltc"));
     const renderer = b.addLibrary(.{
         .name = "renderer",
         .root_module = b.createModule(.{
@@ -90,12 +90,11 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "vma", .module = vma },
                 .{ .name = "cgltf", .module = cgltf },
                 .{ .name = "stb", .module = stb.createModule() },
-                .{ .name = "World", .module = world_module },
+                .{ .name = "ecs", .module = ecs },
             },
             .link_libcpp = true,
         }),
@@ -117,7 +116,6 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
                 .{ .name = "ecs", .module = ecs },
-                .{ .name = "World", .module = world_module },
                 .{ .name = "Renderer", .module = renderer.root_module },
             },
         }),
@@ -137,13 +135,12 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "sdl", .module = sdl_header },
                 .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
                 .{ .name = "vulkan", .module = vulkan_headers },
                 .{ .name = "vma", .module = vma },
                 .{ .name = "stb", .module = stb.createModule() },
                 .{ .name = "Renderer", .module = renderer.root_module },
                 .{ .name = "System", .module = system.root_module },
-                .{ .name = "World", .module = world_module },
+                .{ .name = "ecs", .module = ecs },
             },
             .link_libcpp = true,
         }),

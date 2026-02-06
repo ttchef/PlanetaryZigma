@@ -1,9 +1,9 @@
 const std = @import("std");
 const zphy = @import("zphysics");
-const ecs = @import("ecs");
+const ec = @import("ec");
 const nz = @import("numz");
 
-pub const World = ecs.World(&.{
+pub const World = ec.World(&.{
     nz.Transform3D(f32),
     Camera,
     Player,
