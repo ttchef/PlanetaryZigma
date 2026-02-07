@@ -189,16 +189,38 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
     defer box_shape.release();
 
     var query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
+    //TODO: Lucas make custom mesh shape load yes.
+    var custom_shape: zphy.Shape = undefined;
+    defer custom_shape.release();
     while (query.next()) |entry| {
         const transform = entry.get(nz.Transform3D(f32), world).?;
         const collider = entry.getPtr(ecs.Collider, world).?;
         const matrix = transform.toMat4x4();
         const euler_to_quat = nz.quat.Hamiltonian(f32).fromEuler(transform.rotation);
 
+        const shape = switch (collider.shape) {
+            .primitive => |primitive_shape| switch (primitive_shape) {
+                .box => box_shape,
+                else => box_shape,
+            },
+            // else => box_shape,
+            .mesh => |mesh_shape| {
+                const mesh_shape_setting = try zphy.MeshShapeSettings.create(
+                    mesh_shape.vertices.items.ptr,
+                    @intCast(mesh_shape.vertices.items.len),
+                    @sizeOf(nz.Vec3(f32)),
+                    mesh_shape.indices.items,
+                );
+                defer mesh_shape_setting.asShapeSettings().release();
+                custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
+                => custom_shape,
+            },
+        };
+
         const body_id = try body_interface.createAndAddBody(.{
             .position = matrix.vec4Position(),
             .rotation = euler_to_quat.toVecReversed(),
-            .shape = box_shape,
+            .shape = shape,
             .motion_type = .dynamic,
             .object_layer = object_layers.moving,
             .user_data = @intFromEnum(entry),
