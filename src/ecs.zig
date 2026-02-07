@@ -21,13 +21,13 @@ pub const Collider = struct {
         box,
         sphere,
     };
-    const Complex = struct {
+    const Mesh = struct {
         indices: std.ArrayList(u32),
-        // vertices: std.ArrayList(Vertex),
+        vertices: std.ArrayList(nz.Vec3(f32)),
     };
     body_id: zphy.BodyId = undefined,
     max_angular_velocity: f32 = 1,
-    shape: union(enum) { primitive: Primitive, complex: Complex },
+    shape: union(enum) { primitive: Primitive, mesh: Mesh },
 };
 
 pub const Camera = struct {

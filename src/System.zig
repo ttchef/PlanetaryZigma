@@ -8,8 +8,14 @@ const ecs = @import("ecs");
 const World = ecs.World;
 const Renderer = @import("Renderer");
 
-physics_system: *Physics = undefined,
-renderer: Renderer = undefined,
+physics_system: *Physics,
+renderer: Renderer,
+// mesh_shapes: std.ArrayList(MeshShape),
+
+// const MeshShape = struct {
+//     indices: std.ArrayList(u32),
+//     vertices: std.ArrayList(nz.Vec3(f32)),
+// };
 
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
 pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer.Config) callconv(.c) u32;
@@ -38,6 +44,11 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
     self.physics_system.deinit(allocator.*);
     allocator.destroy(self.physics_system);
     self.renderer.deinit(allocator.*);
+    // for (0..self.mesh_shapes.items.len) |i| {
+    //     self.mesh_shapes.items[i].indices.deinit(allocator.*);
+    //     self.mesh_shapes.items[i].vertices.deinit(allocator.*);
+    // }
+    // self.mesh_shapes.deinit(allocator.*);
 }
 
 export fn update(self: *@This(), world: *World, delta_time: f32) u32 {
@@ -53,7 +64,7 @@ fn loadMeshes(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) 
         const model = entry.getPtr(ecs.Model, world).?;
         switch (model.model) {
             .mesh => {
-                var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 30);
+                var planet_mesh2 = try Planet.init(allocator, 30);
                 defer planet_mesh2.deinit(allocator);
                 const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
                 model.model.mesh = box2;
@@ -73,13 +84,20 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     entity_player.set(ecs.Camera, .{}, world);
     entity_player.set(ecs.Collider, .{ .shape = .{ .primitive = .box }, .max_angular_velocity = 0 }, world);
 
-    var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
+    var planet_mesh2 = try Planet.init(allocator, 5);
     defer planet_mesh2.deinit(allocator);
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
+    var plenet_vert: std.ArrayList(nz.Vec3(f32)) = .empty;
+    var plenet_idx: std.ArrayList(u32) = .empty;
+
+    for (0..planet_mesh2.vertices.items.len) |i| {
+        try plenet_vert.append(allocator, planet_mesh2.vertices.items[i].position);
+    }
+    try plenet_idx.appendSlice(allocator, planet_mesh2.indices.items);
     entity_mesh2.set(ecs.Model, .{ .model = .{ .mesh = box2 } }, world);
     entity_mesh2.set(nz.Transform3D(f32), .{}, world);
-    entity_mesh2.set(ecs.Collider, .{ .shape = .{ .primitive = .box } }, world);
+    entity_mesh2.set(ecs.Collider, .{ .shape = .{ .mesh = .{ .indices = plenet_idx, .vertices = plenet_vert } } }, world);
 
     // var planet_mesh = try Planet.init(allocator, .{ 0, 0, 0 }, 6);
     // defer planet_mesh.deinit(allocator);

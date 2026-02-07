@@ -297,7 +297,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         vk.c.VK_DYNAMIC_STATE_VIEWPORT,
         vk.c.VK_DYNAMIC_STATE_SCISSOR,
     };
+
+    debug_pipeline_config.render_info.colorAttachmentCount = 1;
+    debug_pipeline_config.render_info.pColorAttachmentFormats = &draw_image.format;
+    debug_pipeline_config.render_info.depthAttachmentFormat = depth_image.format;
+    debug_pipeline_config.enableDepthTesting(vk.c.VK_TRUE, vk.c.VK_COMPARE_OP_LESS);
+
     debug_pipeline_config.rasterization_state.polygonMode = vk.c.VK_POLYGON_MODE_LINE;
+    debug_pipeline_config.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
 
     const debug_pipeline = try allocator.create(vk.Pipeline);
     debug_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
@@ -614,8 +621,8 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             },
         }
 
-        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
     var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -644,7 +651,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                     .sphere => {},
                 }
             },
-            .complex => {},
+            .mesh => {},
         }
         drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     }

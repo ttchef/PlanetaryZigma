@@ -8,13 +8,13 @@ indices: std.ArrayList(u32),
 //if size < 3, size = 3. It beaks other ways.
 pub fn init(
     allocator: std.mem.Allocator,
-    center_pos: nz.Vec3(f32),
     size: u32,
 ) !@This() {
     const clamped_size = @max(size, 3);
     const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
     var points = try allocator.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
     defer allocator.free(points);
+    const center_pos: nz.Vec3(f32) = .{ 0, 0, 0 };
 
     for (0..clamped_size + 1) |x| {
         for (0..clamped_size + 1) |y| {
