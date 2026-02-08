@@ -165,5 +165,14 @@ fn spawnBox(world: *World) !void {
     const entity_mesh2 = try world.addEntity();
     // entity_mesh2.set(ecs.Model, .{ .model = .{ .mesh = box2 } }, world);
     entity_mesh2.set(nz.Transform3D(f32), .{ .position = .{ 0, 1, 0 } }, world);
-    entity_mesh2.set(ecs.Collider, .{ .shape = .{ .primitive = .box } }, world);
+    entity_mesh2.set(
+        ecs.Collider,
+        .{
+            .shape = .{
+                .primitive = .box,
+            },
+            .motion_type = .dynamic,
+        },
+        world,
+    );
 }
