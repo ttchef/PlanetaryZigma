@@ -183,15 +183,7 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
     //     .object_layer = object_layers.non_moving,
     // }, .activate);
 
-    const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
-    defer box_shape_settings.asShapeSettings().release();
-    const box_shape = try box_shape_settings.asShapeSettings().createShape();
-    defer box_shape.release();
-
     var query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
-    //TODO: Lucas make custom mesh shape load yes.
-    var custom_shape: zphy.Shape = undefined;
-    defer custom_shape.release();
     while (query.next()) |entry| {
         const transform = entry.get(nz.Transform3D(f32), world).?;
         const collider = entry.getPtr(ecs.Collider, world).?;
@@ -200,34 +192,61 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
 
         const shape = switch (collider.shape) {
             .primitive => |primitive_shape| switch (primitive_shape) {
-                .box => box_shape,
-                else => box_shape,
+                .box => shape: {
+                    const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
+                    defer box_shape_settings.asShapeSettings().release();
+                    const box_shape = try box_shape_settings.asShapeSettings().createShape();
+                    break :shape box_shape;
+                },
+                else => shape: { //TODO: add the rest of he primitive shapes
+                    const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
+                    defer box_shape_settings.asShapeSettings().release();
+                    const box_shape = try box_shape_settings.asShapeSettings().createShape();
+                    break :shape box_shape;
+                },
             },
-            // else => box_shape,
-            .mesh => |mesh_shape| {
+            .mesh => |mesh_shape| shape: {
+                std.debug.print("vertices {d}\n", .{mesh_shape.vertices.items.len});
                 const mesh_shape_setting = try zphy.MeshShapeSettings.create(
-                    mesh_shape.vertices.items.ptr,
+                    @ptrCast(&mesh_shape.vertices.items),
                     @intCast(mesh_shape.vertices.items.len),
-                    @sizeOf(nz.Vec3(f32)),
+                    @sizeOf(f32) * 3,
                     mesh_shape.indices.items,
                 );
+                // const vert: [3][3]f32 = .{
+                //     .{ 0, 0, 0 },
+                //     .{ 1, 0, 0 },
+                //     .{ 0, 1, 0 },
+                // };
+                // const idx: [3]u32 = .{ 0, 1, 2 };
+                // const mesh_shape_setting = try zphy.MeshShapeSettings.create(
+                //     &vert,
+                //     3,
+                //     @sizeOf(f32) * 3,
+                //     idx[0..],
+                // );
+                std.debug.print("HIII 1 \n", .{});
                 defer mesh_shape_setting.asShapeSettings().release();
-                custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
-                => custom_shape,
+                std.debug.print("HIII 2 \n", .{});
+                const custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
+                std.debug.print("HIII 3 \n", .{});
+                break :shape custom_shape;
             },
         };
-
+        defer shape.release();
+        std.debug.print("HIII 4 motion_type {d} \n", .{collider.motion_type});
         const body_id = try body_interface.createAndAddBody(.{
             .position = matrix.vec4Position(),
             .rotation = euler_to_quat.toVecReversed(),
             .shape = shape,
-            .motion_type = .dynamic,
+            .motion_type = collider.motion_type,
             .object_layer = object_layers.moving,
             .user_data = @intFromEnum(entry),
             .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
             //.allow_sleeping = false,
             .max_angular_velocity = collider.max_angular_velocity,
         }, .activate);
+        std.debug.print("HIII 5 \n", .{});
         collider.body_id = body_id;
     }
 

@@ -651,7 +651,17 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                     .sphere => {},
                 }
             },
-            .mesh => {},
+            .mesh => |colider_mesh| {
+                _ = colider_mesh;
+                // var mesh = self.meshes.items[colider_mesh.render_handle];
+                // var mesh_node: vk.Node = .{
+                //     .material = mesh.surfaces.items[0].material,
+                //     .mesh = &mesh,
+                //     .local_transform = .fromMat4x4(.identity),
+                //     .world_transform = .fromMat4x4(.identity),
+                // };
+                // try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+            },
         }
         drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     }

@@ -22,10 +22,12 @@ pub const Collider = struct {
         sphere,
     };
     const Mesh = struct {
+        render_handle: usize,
         indices: std.ArrayList(u32),
         vertices: std.ArrayList(nz.Vec3(f32)),
     };
     body_id: zphy.BodyId = undefined,
+    motion_type: zphy.MotionType,
     max_angular_velocity: f32 = 1,
     shape: union(enum) { primitive: Primitive, mesh: Mesh },
 };
