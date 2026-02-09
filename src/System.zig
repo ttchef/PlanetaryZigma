@@ -73,6 +73,22 @@ fn loadMeshes(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) 
             // .gltf
         }
     }
+    var debug_query = world.query(&.{ecs.Collider});
+    while (debug_query.next()) |entry| {
+        var collider = entry.getPtr(ecs.Collider, world).?;
+        switch (collider.shape) {
+            .primitive => {},
+            .mesh => |*debug_shape| {
+                const mesh_shape: usize = try renderer.createDebugMesh(
+                    "debug_planet",
+                    debug_shape.indices.items,
+                    debug_shape.vertices.items,
+                );
+
+                debug_shape.render_handle = mesh_shape;
+            },
+        }
+    }
 }
 
 fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !void {
@@ -80,7 +96,7 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     // _ = allocator;
     const entity_player = try world.addEntity();
     entity_player.set(ecs.Player, .{}, world);
-    entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 10 } }, world);
+    entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 20 } }, world);
     entity_player.set(ecs.Camera, .{}, world);
     entity_player.set(ecs.Collider, .{
         .shape = .{ .primitive = .box },
@@ -88,22 +104,22 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
         .motion_type = .dynamic,
     }, world);
 
-    var planet_mesh2 = try Planet.init(allocator, 5);
+    var planet_mesh2 = try Planet.init(allocator, 30);
     defer planet_mesh2.deinit(allocator);
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
-    var plenet_vert: std.ArrayList(nz.Vec3(f32)) = .empty;
-    var plenet_idx: std.ArrayList(u32) = .empty;
+    var planet_vert: std.ArrayList(nz.Vec3(f32)) = .empty;
+    var planet_idx: std.ArrayList(u32) = .empty;
 
     for (0..planet_mesh2.vertices.items.len) |i| {
-        try plenet_vert.append(allocator, planet_mesh2.vertices.items[i].position);
+        try planet_vert.append(allocator, planet_mesh2.vertices.items[i].position);
     }
-    try plenet_idx.appendSlice(allocator, planet_mesh2.indices.items);
+    try planet_idx.appendSlice(allocator, planet_mesh2.indices.items);
 
-    const debug_mesh_handle = try renderer.createMesh(
+    const debug_mesh_handle = try renderer.createDebugMesh(
         "debug_planet",
-        planet_mesh2.indices.items,
-        planet_mesh2.vertices.items,
+        planet_idx.items,
+        planet_vert.items,
     );
 
     entity_mesh2.set(ecs.Model, .{ .model = .{ .mesh = box2 } }, world);
@@ -112,8 +128,8 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
         .shape = .{
             .mesh = .{
                 .render_handle = debug_mesh_handle,
-                .indices = plenet_idx,
-                .vertices = plenet_vert,
+                .indices = planet_idx,
+                .vertices = planet_vert,
             },
         },
         .motion_type = .static,

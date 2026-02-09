@@ -313,7 +313,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     var debug_mehses: [3]vk.Mesh = undefined;
     // 8 corners of a cube
-    const positions = [_][3]f32{
+    var vertices = [_]nz.Vec3(f32){
         .{ -1, -1, -1 }, // 0
         .{ 1, -1, -1 }, // 1
         .{ 1, 1, -1 }, // 2
@@ -323,19 +323,6 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .{ 1, 1, 1 }, // 6
         .{ -1, 1, 1 }, // 7
     };
-
-    var vertices: [8]vk.Mesh.Vertex = undefined;
-    for (positions, 0..) |pos, i| {
-        vertices[i] = vk.Mesh.Vertex{
-            .position = pos,
-            .uv_x = 0,
-            .uv_y = 0,
-            .normal = .{ 0, 0, 0 },
-            .color = .{ 1, 1, 1, 1 },
-        };
-    }
-
-    // indices for triangles (two per face)
 
     var indices: [36]u32 = .{
         0, 1, 2, 2, 3, 0, // back
@@ -358,6 +345,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             .material = debug_material,
         }},
         indices[0..],
+        nz.Vec3(f32),
         vertices[0..],
     );
 
@@ -621,8 +609,8 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             },
         }
 
-        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
     var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -652,17 +640,17 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                 }
             },
             .mesh => |colider_mesh| {
-                _ = colider_mesh;
-                // var mesh = self.meshes.items[colider_mesh.render_handle];
-                // var mesh_node: vk.Node = .{
-                //     .material = mesh.surfaces.items[0].material,
-                //     .mesh = &mesh,
-                //     .local_transform = .fromMat4x4(.identity),
-                //     .world_transform = .fromMat4x4(.identity),
-                // };
-                // try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                var mesh = self.meshes.items[colider_mesh.render_handle];
+                var mesh_node: vk.Node = .{
+                    .material = mesh.surfaces.items[0].material,
+                    .mesh = &mesh,
+                    .local_transform = .fromMat4x4(.identity),
+                    .world_transform = .fromMat4x4(.identity),
+                };
+                try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
             },
         }
+
         drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
     }
     vk.c.vkCmdEndRendering(cmd_buffer);
@@ -813,6 +801,31 @@ pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []v
             .material = self.default_data,
         }},
         indices,
+        vk.Mesh.Vertex,
+        verices,
+    );
+    try self.meshes.append(
+        self.allocator,
+        mesh,
+    );
+
+    return (self.meshes.items.len - 1);
+}
+
+pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices: []nz.Vec3(f32)) !usize {
+    const mesh = try vk.Mesh.init(
+        self.allocator,
+        self.vma.handle,
+        name,
+        self.device,
+        &.{.{
+            .index_start = 0,
+            .index_count = @intCast(indices.len),
+            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+            .material = self.default_data,
+        }},
+        indices,
+        nz.Vec3(f32),
         verices,
     );
     try self.meshes.append(

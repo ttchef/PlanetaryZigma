@@ -45,9 +45,10 @@ pub fn init(
     device: Device,
     geo_surfaces: []const GeoSurface,
     indices: []u32,
-    vertices: []Vertex,
+    vertex_type: type,
+    vertices: []vertex_type,
 ) !@This() {
-    const vertex_buffer_size: usize = vertices.len * @sizeOf(Vertex);
+    const vertex_buffer_size: usize = vertices.len * @sizeOf(vertex_type);
     const index_buffer_size: usize = indices.len * @sizeOf(u32);
 
     var vertex_buffer_address: c.VkDeviceAddress = undefined;

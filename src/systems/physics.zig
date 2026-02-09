@@ -206,35 +206,20 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
                 },
             },
             .mesh => |mesh_shape| shape: {
-                std.debug.print("vertices {d}\n", .{mesh_shape.vertices.items.len});
                 const mesh_shape_setting = try zphy.MeshShapeSettings.create(
-                    @ptrCast(&mesh_shape.vertices.items),
+                    mesh_shape.vertices.items.ptr,
                     @intCast(mesh_shape.vertices.items.len),
-                    @sizeOf(f32) * 3,
-                    mesh_shape.indices.items,
+                    @sizeOf(nz.Vec3(f32)),
+                    mesh_shape.indices.items[0..],
                 );
-                // const vert: [3][3]f32 = .{
-                //     .{ 0, 0, 0 },
-                //     .{ 1, 0, 0 },
-                //     .{ 0, 1, 0 },
-                // };
-                // const idx: [3]u32 = .{ 0, 1, 2 };
-                // const mesh_shape_setting = try zphy.MeshShapeSettings.create(
-                //     &vert,
-                //     3,
-                //     @sizeOf(f32) * 3,
-                //     idx[0..],
-                // );
-                std.debug.print("HIII 1 \n", .{});
+                zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
                 defer mesh_shape_setting.asShapeSettings().release();
-                std.debug.print("HIII 2 \n", .{});
                 const custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
-                std.debug.print("HIII 3 \n", .{});
                 break :shape custom_shape;
             },
         };
         defer shape.release();
-        std.debug.print("HIII 4 motion_type {d} \n", .{collider.motion_type});
+
         const body_id = try body_interface.createAndAddBody(.{
             .position = matrix.vec4Position(),
             .rotation = euler_to_quat.toVecReversed(),
