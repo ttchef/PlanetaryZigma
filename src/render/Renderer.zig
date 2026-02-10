@@ -38,6 +38,7 @@ material_resources: vk.Material.GltfMetallicRoughness.Resources,
 //Debug
 debug_pipeline: *vk.Pipeline,
 debug_meshes: [3]vk.Mesh,
+debug_material: *vk.Material.Instance,
 
 //Vulkan Render Specific
 allocator: std.mem.Allocator,
@@ -305,23 +306,25 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     debug_pipeline_config.rasterization_state.polygonMode = vk.c.VK_POLYGON_MODE_LINE;
     debug_pipeline_config.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
+    debug_pipeline_config.rasterization_state.lineWidth = 1;
 
     const debug_pipeline = try allocator.create(vk.Pipeline);
     debug_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
     var debug_material = try allocator.create(vk.Material.Instance);
     debug_material.pipeline = debug_pipeline;
+    debug_material.descriptor_set = null;
 
     var debug_mehses: [3]vk.Mesh = undefined;
-    // 8 corners of a cube
-    var vertices = [_]nz.Vec3(f32){
-        .{ -1, -1, -1 }, // 0
-        .{ 1, -1, -1 }, // 1
-        .{ 1, 1, -1 }, // 2
-        .{ -1, 1, -1 }, // 3
-        .{ -1, -1, 1 }, // 4
-        .{ 1, -1, 1 }, // 5
-        .{ 1, 1, 1 }, // 6
-        .{ -1, 1, 1 }, // 7
+    // 8 corners of a cube :D
+    var vertices = [_][4](f32){
+        .{ -1, -1, -1, 0 }, // 0
+        .{ 1, -1, -1, 0 }, // 1
+        .{ 1, 1, -1, 0 }, // 2
+        .{ -1, 1, -1, 0 }, // 3
+        .{ -1, -1, 1, 0 }, // 4
+        .{ 1, -1, 1, 0 }, // 5
+        .{ 1, 1, 1, 0 }, // 6
+        .{ -1, 1, 1, 0 }, // 7
     };
 
     var indices: [36]u32 = .{
@@ -345,7 +348,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             .material = debug_material,
         }},
         indices[0..],
-        nz.Vec3(f32),
+        [4]f32,
         vertices[0..],
     );
 
@@ -362,6 +365,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .depth_image = depth_image,
         .debug_pipeline = debug_pipeline,
         .debug_meshes = debug_mehses,
+        .debug_material = debug_material,
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         .draw_image_descriptor_layout = draw_image_descriptor_layout,
@@ -609,8 +613,8 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             },
         }
 
-        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
     var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -761,16 +765,18 @@ fn drawGeometry(
 
                 vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
             }
-            vk.c.vkCmdBindDescriptorSets(
-                cmd_buffer,
-                vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                render_obj.material_instance.pipeline.get().layout,
-                1,
-                1,
-                &render_obj.material_instance.descriptor_set,
-                0,
-                null,
-            );
+            if (render_obj.material_instance.descriptor_set != null) {
+                vk.c.vkCmdBindDescriptorSets(
+                    cmd_buffer,
+                    vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    render_obj.material_instance.pipeline.get().layout,
+                    1,
+                    1,
+                    &render_obj.material_instance.descriptor_set.?,
+                    0,
+                    null,
+                );
+            }
         }
         if (render_obj.index_buffer != self.last_index_buffer) {
             self.last_index_buffer = render_obj.index_buffer;
@@ -822,7 +828,7 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
             .index_start = 0,
             .index_count = @intCast(indices.len),
             .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = self.default_data,
+            .material = self.debug_material,
         }},
         indices,
         nz.Vec3(f32),

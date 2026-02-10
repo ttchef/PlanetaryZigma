@@ -231,7 +231,6 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
             //.allow_sleeping = false,
             .max_angular_velocity = collider.max_angular_velocity,
         }, .activate);
-        std.debug.print("HIII 5 \n", .{});
         collider.body_id = body_id;
     }
 
