@@ -225,7 +225,16 @@ pub fn init(
         }
 
         const new_mesh = try allocator.create(vk.Mesh);
-        new_mesh.* = try .init(allocator, vma.handle, std.mem.span(mesh.name), device, surfaces.items, indices_list.items, vertices_list.items);
+        new_mesh.* = try .init(
+            allocator,
+            vma.handle,
+            std.mem.span(mesh.name),
+            device,
+            surfaces.items,
+            indices_list.items,
+            vk.Mesh.Vertex,
+            vertices_list.items,
+        );
         try meshes.append(allocator, new_mesh);
         try file.meshes.put(allocator, new_mesh.name, new_mesh);
     }

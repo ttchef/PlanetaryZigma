@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
     const systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
     var systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
     if (systemsInit(&systems, &allocator, &world, &renderer_config) != 0) return error.SystemsInit;
-    defer systemsDeinit(&systems, &allocator);
+    defer systemsDeinit(&systems, &allocator, &world);
 
     var time: f64 = 0;
     var timer = try std.time.Timer.start();

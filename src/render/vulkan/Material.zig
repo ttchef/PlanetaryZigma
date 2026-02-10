@@ -16,7 +16,7 @@ pub const Pass = enum {
 
 pub const Instance = struct {
     pipeline: *const Pipeline,
-    descriptor_set: vk.VkDescriptorSet,
+    descriptor_set: ?vk.VkDescriptorSet,
     pass_type: Pass,
 };
 
@@ -145,7 +145,7 @@ pub const GltfMetallicRoughness = struct {
         self.writer.appendBuffer(0, resources.data_buffer, @sizeOf(Constants), resources.data_buffer_offset, vk.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
         self.writer.appendImage(1, resources.color_image.vk_imageview, resources.color_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
         self.writer.appendImage(2, resources.metal_rough_image.vk_imageview, resources.metal_rough_sampler, vk.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, vk.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        self.writer.updateSet(device, material_data_instance.descriptor_set);
+        self.writer.updateSet(device, material_data_instance.descriptor_set.?);
         return material_data_instance;
     }
 

@@ -11,7 +11,7 @@ const Renderer = @import("Renderer");
 physics_system: *Physics,
 renderer: Renderer,
 // mesh_shapes: std.ArrayList(MeshShape),
-
+//
 // const MeshShape = struct {
 //     indices: std.ArrayList(u32),
 //     vertices: std.ArrayList(nz.Vec3(f32)),
@@ -19,7 +19,7 @@ renderer: Renderer,
 
 pub const UpdateSystems = *const fn (*@This(), *World, f32) callconv(.c) void;
 pub const InitSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer.Config) callconv(.c) u32;
-pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
+pub const DeinitSystems = *const fn (*@This(), *std.mem.Allocator, *World) callconv(.c) void;
 pub const ReloadSystems = *const fn (*@This(), *std.mem.Allocator, *World, *Renderer.Config, bool) callconv(.c) void;
 export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, render_config: *Renderer.Config, pre_reload: bool) u32 {
     if (pre_reload) {
@@ -40,10 +40,20 @@ export fn initSystems(self: *@This(), allocator: *std.mem.Allocator, world: *Wor
     self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
     return 0;
 }
-export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
+export fn deinit(self: *@This(), allocator: *std.mem.Allocator, world: *World) void {
+    var query = world.query(&.{ecs.Collider});
+    while (query.next()) |entry| {
+        var collider = entry.getPtr(ecs.Collider, world).?;
+        if (collider.shape == .mesh) {
+            collider.shape.mesh.vertices.deinit(allocator.*);
+            collider.shape.mesh.indices.deinit(allocator.*);
+        }
+    }
+
     self.physics_system.deinit(allocator.*);
     allocator.destroy(self.physics_system);
     self.renderer.deinit(allocator.*);
+
     // for (0..self.mesh_shapes.items.len) |i| {
     //     self.mesh_shapes.items[i].indices.deinit(allocator.*);
     //     self.mesh_shapes.items[i].vertices.deinit(allocator.*);
@@ -69,8 +79,13 @@ fn loadMeshes(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) 
                 const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
                 model.model.mesh = box2;
             },
-            .gltf => {},
-            // .gltf
+            .gltf => { //test 24
+                // if (renderer.loaded_scenes.get(model.model.gltf) == null) {
+                //     _ = try renderer.loadGltf(model.model.gltf);
+                // }
+                std.debug.print("PATH {s}\n", .{model.model.gltf});
+                model.model.gltf = try renderer.loadGltf("assets/objects/tree.glb");
+            },
         }
     }
     var debug_query = world.query(&.{ecs.Collider});
@@ -108,11 +123,16 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     defer planet_mesh2.deinit(allocator);
     const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
-    var planet_vert: std.ArrayList(nz.Vec3(f32)) = .empty;
+    var planet_vert: std.ArrayList([4]f32) = .empty;
     var planet_idx: std.ArrayList(u32) = .empty;
 
     for (0..planet_mesh2.vertices.items.len) |i| {
-        try planet_vert.append(allocator, planet_mesh2.vertices.items[i].position);
+        try planet_vert.append(allocator, .{
+            planet_mesh2.vertices.items[i].position[0],
+            planet_mesh2.vertices.items[i].position[1],
+            planet_mesh2.vertices.items[i].position[2],
+            0,
+        });
     }
     try planet_idx.appendSlice(allocator, planet_mesh2.indices.items);
 
@@ -142,13 +162,24 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     // entity_mesh.set(WorldModule.Model, .{ .model = .{ .mesh = box } }, world);
     // entity_mesh.set(nz.Transform3D(f32), .{}, world);
     //
-    // const entity_gltf = try world.addEntity();
-    // const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
-    // entity_gltf.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
-    // entity_gltf.set(nz.Transform3D(f32), .{}, world);
+    const entity_gltf = try world.addEntity();
+    const gltf_handle = try renderer.loadGltf("assets/objects/tree.glb");
+    entity_gltf.set(ecs.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
+    entity_gltf.set(nz.Transform3D(f32), .{ .position = .{ 0, 40, 0 }, .rotation = .{ 180, 0, 0 } }, world);
+    entity_gltf.set(ecs.Collider, .{
+        .shape = .{ .primitive = .box },
+        .max_angular_velocity = 0,
+        .motion_type = .dynamic,
+    }, world);
+
     //
-    // const entity_gltf2 = try world.addEntity();
-    // const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");
-    // entity_gltf2.set(WorldModule.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
-    // entity_gltf2.set(nz.Transform3D(f32), .{}, world);
+    const entity_gltf2 = try world.addEntity();
+    const gltf_handle2 = try renderer.loadGltf("assets/objects/bag.glb");
+    entity_gltf2.set(ecs.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
+    entity_gltf2.set(nz.Transform3D(f32), .{ .position = .{ 0, 34, 0 } }, world);
+    entity_gltf2.set(ecs.Collider, .{
+        .shape = .{ .primitive = .box },
+        .max_angular_velocity = 0,
+        .motion_type = .dynamic,
+    }, world);
 }

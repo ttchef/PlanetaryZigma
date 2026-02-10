@@ -24,7 +24,7 @@ pub const Collider = struct {
     const Mesh = struct {
         render_handle: usize,
         indices: std.ArrayList(u32),
-        vertices: std.ArrayList(nz.Vec3(f32)),
+        vertices: std.ArrayList([4]f32),
     };
     body_id: zphy.BodyId = undefined,
     motion_type: zphy.MotionType,
@@ -43,5 +43,5 @@ pub const Camera = struct {
 };
 
 pub const Model = struct {
-    model: union(enum) { gltf: usize, mesh: usize },
+    model: union(enum) { gltf: []const u8, mesh: usize },
 };
