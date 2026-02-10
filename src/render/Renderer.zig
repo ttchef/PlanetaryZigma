@@ -12,7 +12,7 @@ comptime {
 }
 
 //models
-loaded_scenes: std.ArrayList(LoadedGltf) = .empty,
+loaded_scenes: std.StringHashMapUnmanaged(LoadedGltf) = .empty,
 meshes: std.ArrayList(vk.Mesh) = .empty,
 
 //Default values
@@ -411,9 +411,11 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.debug_pipeline.deinit(self.device);
     allocator.destroy(self.debug_pipeline);
     self.debug_meshes[0].deinit(self.allocator, self.vma.handle);
+    allocator.destroy(self.debug_material);
 
-    for (self.loaded_scenes.items) |*scene| {
-        scene.deinit(self.allocator, self.vma, self.device);
+    var loaded_scenes_it = self.loaded_scenes.iterator();
+    while (loaded_scenes_it.next()) |scene| {
+        scene.value_ptr.deinit(self.allocator, self.vma, self.device);
     }
     self.loaded_scenes.deinit(allocator);
     for (self.meshes.items) |*mesh| {
@@ -607,14 +609,14 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                 try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
             },
             .gltf => |handle| {
-                var structure_scene = self.loaded_scenes.items[handle];
+                var structure_scene = self.loaded_scenes.get(handle).?;
                 try structure_scene.draw(self.allocator, transform, &self.main_draw_context);
                 //TODO: fix ur shit. Transparent pipelines are broken.
             },
         }
 
-        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
     var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -818,7 +820,7 @@ pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []v
     return (self.meshes.items.len - 1);
 }
 
-pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices: []nz.Vec3(f32)) !usize {
+pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices: [][4]f32) !usize {
     const mesh = try vk.Mesh.init(
         self.allocator,
         self.vma.handle,
@@ -831,7 +833,7 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
             .material = self.debug_material,
         }},
         indices,
-        nz.Vec3(f32),
+        [4]f32,
         verices,
     );
     try self.meshes.append(
@@ -842,7 +844,8 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
     return (self.meshes.items.len - 1);
 }
 
-pub fn loadGltf(self: *@This(), path: []const u8) !usize {
+pub fn loadGltf(self: *@This(), path: []const u8) ![]const u8 {
+    if (self.loaded_scenes.get(path) != null) return path;
     const strcture_file = try LoadedGltf.init(
         self.allocator,
         self.vma,
@@ -852,8 +855,9 @@ pub fn loadGltf(self: *@This(), path: []const u8) !usize {
         self.default_sampler_linear,
         &self.metal_rough_material,
     );
-    try self.loaded_scenes.append(self.allocator, strcture_file);
-    return self.loaded_scenes.items.len - 1;
+
+    try self.loaded_scenes.put(self.allocator, path, strcture_file);
+    return path;
 }
 
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
