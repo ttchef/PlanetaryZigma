@@ -257,9 +257,19 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
 }
 
 pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
+    const bodies = self.physics_system.getBodiesMutUnsafe();
+    for (bodies) |body| {
+        if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
+        const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
+
+        const force = nz.vec.normalize(-transform.position);
+
+        std.debug.print("GRAVITY {any}\n", .{force});
+        body.addForce(nz.vec.scale(force, 1000000));
+    }
+
     self.physics_system.update(delta_time, .{}) catch unreachable;
 
-    const bodies = self.physics_system.getBodiesUnsafe();
     for (bodies) |body| {
         // std.debug.print("[0]UPDATE\n", .{});
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
@@ -281,6 +291,8 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
         };
         transform.*.position = position;
         transform.rotation = rotation.toEuler();
-        // std.debug.print("ROTATION {any}\n", .{body.rotation});
+        // std.debug.print("ROTATION {any}\n", .{body.rotation}); x
+        //
+
     }
 }

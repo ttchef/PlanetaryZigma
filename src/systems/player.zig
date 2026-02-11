@@ -40,7 +40,7 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             if (!sdl.SDL_ShowCursor()) return error.SdlShowCursor;
         }
 
-        current_pitch_rad = std.math.clamp(current_pitch_rad, -1.5, 1.5);
+        // current_pitch_rad = std.math.clamp(current_pitch_rad, -1.5, 1.5);
 
         const forward = nz.vec.normalize(nz.Vec3(f32){
             @cos(current_pitch_rad) * @sin(current_yaw_rad),
@@ -109,14 +109,14 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         const speed_multiplier: f32 = if (keyboard[sdl.SDL_SCANCODE_LSHIFT]) 3 else 1;
         move = nz.vec.scale(move, speed_multiplier);
 
-        const bodies = physics.getBodyInterfaceMut();
-        //TODO: Figure out a better rotation, THIS is jagged. try (camera.sensitivity = 10;)
+        const body = physics.getBodyInterfaceMut();
+        //TODO: Figure out a better rotation, THIS is jagged. try (camera.sensitivity = 10;) x
         // bodies.setAngularVelocity(collider.z_phycis_body, .{ current_pitch_rad, current_yaw_rad, 0 });
         const quat = nz.quat.Hamiltonian(f32).fromEuler(.{ current_pitch_rad, current_yaw_rad, 0 });
-        bodies.setRotation(collider.body_id, quat.toVecReversed(), .activate);
-        bodies.setLinearVelocity(collider.body_id, move);
+        body.setRotation(collider.body_id, quat.toVecReversed(), .activate);
+        body.setLinearVelocity(collider.body_id, move);
 
-        if (keyboard[sdl.SDL_SCANCODE_K]) try spawnBox(world);
+        if (keyboard[sdl.SDL_SCANCODE_K]) try spawnBox(world, transform.position);
 
         if (keyboard[sdl.SDL_SCANCODE_X]) {
             std.debug.print(
@@ -150,21 +150,20 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         }
 
         if (keyboard[sdl.SDL_SCANCODE_R]) {
-            bodies.setLinearVelocity(collider.body_id, .{ 0, 0, 0 });
-            bodies.setPosition(collider.body_id, .{ 0, 0, 0 }, .activate);
-            bodies.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
+            body.setLinearVelocity(collider.body_id, .{ 0, 0, 0 });
+            body.setPosition(collider.body_id, .{ 0, 0, 0 }, .activate);
+            body.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
     }
 }
 
-fn spawnBox(world: *World) !void {
+fn spawnBox(world: *World, player_pos: [3]f32) !void {
 
     // var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
     // defer planet_mesh2.deinit(allocator);
     // const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
-    // entity_mesh2.set(ecs.Model, .{ .model = .{ .mesh = box2 } }, world);
-    entity_mesh2.set(nz.Transform3D(f32), .{ .position = .{ 0, 1, 0 } }, world);
+    entity_mesh2.set(nz.Transform3D(f32), .{ .position = player_pos }, world);
     entity_mesh2.set(
         ecs.Collider,
         .{
