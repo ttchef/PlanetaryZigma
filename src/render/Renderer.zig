@@ -620,44 +620,47 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
     }
 
     var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
-    while (draw_debug_query.next()) |entry| {
-        self.main_draw_context.clear();
-        const transform = entry.get(nz.Transform3D(f32), world).?;
-        const collider = entry.get(ecs.Collider, world).?;
-        self.last_index_buffer = null;
-        self.last_material = null;
-        self.last_pipeline = null;
-        switch (collider.shape) {
-            .primitive => |shape| {
-                switch (shape) {
-                    .box => {
-                        // std.debug.print("hello\n", .{});
-                        var mesh = self.debug_meshes[0];
-                        var mesh_node: vk.Node = .{
-                            .material = mesh.surfaces.items[0].material,
-                            .mesh = &mesh,
-                            .local_transform = .fromMat4x4(.identity),
-                            .world_transform = .fromMat4x4(.identity),
-                        };
-                        try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
-                    },
-                    .capsule => {},
-                    .sphere => {},
-                }
-            },
-            .mesh => |colider_mesh| {
-                var mesh = self.meshes.items[colider_mesh.render_handle];
-                var mesh_node: vk.Node = .{
-                    .material = mesh.surfaces.items[0].material,
-                    .mesh = &mesh,
-                    .local_transform = .fromMat4x4(.identity),
-                    .world_transform = .fromMat4x4(.identity),
-                };
-                try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
-            },
-        }
+    const debug_draw = true;
+    if (debug_draw) {
+        while (draw_debug_query.next()) |entry| {
+            self.main_draw_context.clear();
+            const transform = entry.get(nz.Transform3D(f32), world).?;
+            const collider = entry.get(ecs.Collider, world).?;
+            self.last_index_buffer = null;
+            self.last_material = null;
+            self.last_pipeline = null;
+            switch (collider.shape) {
+                .primitive => |shape| {
+                    switch (shape) {
+                        .box => {
+                            // std.debug.print("hello\n", .{});
+                            var mesh = self.debug_meshes[0];
+                            var mesh_node: vk.Node = .{
+                                .material = mesh.surfaces.items[0].material,
+                                .mesh = &mesh,
+                                .local_transform = .fromMat4x4(.identity),
+                                .world_transform = .fromMat4x4(.identity),
+                            };
+                            try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                        },
+                        .capsule => {},
+                        .sphere => {},
+                    }
+                },
+                .mesh => |colider_mesh| {
+                    var mesh = self.meshes.items[colider_mesh.render_handle];
+                    var mesh_node: vk.Node = .{
+                        .material = mesh.surfaces.items[0].material,
+                        .mesh = &mesh,
+                        .local_transform = .fromMat4x4(.identity),
+                        .world_transform = .fromMat4x4(.identity),
+                    };
+                    try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                },
+            }
 
-        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+            drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        }
     }
     vk.c.vkCmdEndRendering(cmd_buffer);
 
@@ -844,8 +847,9 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
     return (self.meshes.items.len - 1);
 }
 
-pub fn loadGltf(self: *@This(), path: []const u8) ![]const u8 {
-    if (self.loaded_scenes.get(path) != null) return path;
+pub fn loadGltf(self: *@This(), allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    var found_gltf = self.loaded_scenes.getEntry(path);
+    if (found_gltf != null) return found_gltf.?.key_ptr.*;
     const strcture_file = try LoadedGltf.init(
         self.allocator,
         self.vma,
@@ -855,9 +859,9 @@ pub fn loadGltf(self: *@This(), path: []const u8) ![]const u8 {
         self.default_sampler_linear,
         &self.metal_rough_material,
     );
-
-    try self.loaded_scenes.put(self.allocator, path, strcture_file);
-    return path;
+    const new_path = try allocator.dupe(u8, path);
+    try self.loaded_scenes.put(self.allocator, new_path, strcture_file);
+    return new_path;
 }
 
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
