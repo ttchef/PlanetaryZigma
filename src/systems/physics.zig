@@ -198,6 +198,12 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
                     const box_shape = try box_shape_settings.asShapeSettings().createShape();
                     break :shape box_shape;
                 },
+                .sphere => shape: {
+                    const sphere_shape_settings = try zphy.SphereShapeSettings.create(1);
+                    defer sphere_shape_settings.asShapeSettings().release();
+                    const sphere_shape = try sphere_shape_settings.asShapeSettings().createShape();
+                    break :shape sphere_shape;
+                },
                 else => shape: { //TODO: add the rest of he primitive shapes
                     const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
                     defer box_shape_settings.asShapeSettings().release();
@@ -227,9 +233,9 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
             .motion_type = collider.motion_type,
             .object_layer = object_layers.moving,
             .user_data = @intFromEnum(entry),
-            .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+            // .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
             //.allow_sleeping = false,
-            .max_angular_velocity = collider.max_angular_velocity,
+            // .max_angular_velocity = collider.max_angular_velocity,
         }, .activate);
         collider.body_id = body_id;
     }
@@ -264,14 +270,16 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
 
         const force = nz.vec.normalize(-transform.position);
 
-        std.debug.print("GRAVITY {any}\n", .{force});
+        // std.debug.print("GRAVITY {any}\n", .{force});
         body.addForce(nz.vec.scale(force, 1000000));
+        body.addAngularImpulse(.{ 100, 0, 0 });
+        // body.addTorque(.{ 10000, 0, 0 });
     }
 
     self.physics_system.update(delta_time, .{}) catch unreachable;
 
     for (bodies) |body| {
-        // std.debug.print("[0]UPDATE\n", .{});
+        // std.debug.print("[0]UPDATE\n", .{}); xd
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
         // std.debug.print("USER_DATA {d}\n", .{body.user_data});
@@ -291,7 +299,7 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
         };
         transform.*.position = position;
         transform.rotation = rotation.toEuler();
-        // std.debug.print("ROTATION {any}\n", .{body.rotation}); x
+        std.debug.print("ROTATION {any}\n", .{body.rotation});
         //
 
     }

@@ -452,7 +452,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
     var query = world.query(&.{ ecs.Player, ecs.Camera, nz.Transform3D(f32) });
     const entity = query.next().?;
     const camera = entity.getPtr(ecs.Camera, world).?;
-    const camera_transform = entity.getPtr(nz.Transform3D(f32), world).?;
+    // const camera_transform = entity.getPtr(nz.Transform3D(f32), world).?;
 
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
@@ -555,7 +555,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
         writer.updateSet(self.device, globalDescriptor);
     }
 
-    const view = getViewMatrix(camera_transform);
+    const view = getViewMatrix(&camera.transform);
     // const view = nz.Mat4x4(f32).identity;
     // _ = camera_transform;
     var projection = perspective(
@@ -632,7 +632,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             switch (collider.shape) {
                 .primitive => |shape| {
                     switch (shape) {
-                        .box => {
+                        .box, .sphere => {
                             // std.debug.print("hello\n", .{});
                             var mesh = self.debug_meshes[0];
                             var mesh_node: vk.Node = .{
@@ -644,7 +644,6 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                             try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
                         },
                         .capsule => {},
-                        .sphere => {},
                     }
                 },
                 .mesh => |colider_mesh| {

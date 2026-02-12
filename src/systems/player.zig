@@ -16,8 +16,8 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         const camera = entity.getPtr(Camera, world).?;
         const collider = entity.getPtr(Collider, world).?;
         const keyboard = sdl.SDL_GetKeyboardState(null);
-        var current_pitch_rad = transform.rotation[0];
-        var current_yaw_rad = transform.rotation[1];
+        var current_pitch_rad = camera.transform.rotation[0];
+        var current_yaw_rad = camera.transform.rotation[1];
 
         const mouse = sdl.SDL_GetMouseState(null, null);
 
@@ -112,8 +112,9 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         const body = physics.getBodyInterfaceMut();
         //TODO: Figure out a better rotation, THIS is jagged. try (camera.sensitivity = 10;) x
         // bodies.setAngularVelocity(collider.z_phycis_body, .{ current_pitch_rad, current_yaw_rad, 0 });
-        const quat = nz.quat.Hamiltonian(f32).fromEuler(.{ current_pitch_rad, current_yaw_rad, 0 });
-        body.setRotation(collider.body_id, quat.toVecReversed(), .activate);
+        // const quat = nz.quat.Hamiltonian(f32).fromEuler(.{ current_pitch_rad, current_yaw_rad, 0 });
+        // body.setRotation(collider.body_id, quat.toVecReversed(), .activate);
+
         body.setLinearVelocity(collider.body_id, move);
 
         if (keyboard[sdl.SDL_SCANCODE_K]) try spawnBox(world, transform.position);
@@ -154,6 +155,9 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             body.setPosition(collider.body_id, .{ 0, 0, 0 }, .activate);
             body.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
+        camera.transform = transform.*;
+
+        camera.transform.rotation = .{ current_pitch_rad, current_yaw_rad, 0 };
     }
 }
 
@@ -168,7 +172,7 @@ fn spawnBox(world: *World, player_pos: [3]f32) !void {
         ecs.Collider,
         .{
             .shape = .{
-                .primitive = .box,
+                .primitive = .sphere,
             },
             .motion_type = .dynamic,
         },
