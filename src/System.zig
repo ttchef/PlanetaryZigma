@@ -159,7 +159,7 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     // entity_mesh.set(nz.Transform3D(f32), .{}, world);
     //
     const entity_gltf = try world.addEntity();
-    const gltf_handle = try renderer.loadGltf(allocator, "assets/objects/tree.glb");
+    const gltf_handle = try renderer.loadGltf(allocator, "assets/objects/sci-fi.glb");
     entity_gltf.set(ecs.Model, .{ .model = .{ .gltf = gltf_handle } }, world);
     entity_gltf.set(nz.Transform3D(f32), .{ .position = .{ 0, 40, 0 }, .rotation = .{ 180, 0, 0 } }, world);
     entity_gltf.set(ecs.Collider, .{
@@ -169,13 +169,13 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     }, world);
 
     //
-    const entity_gltf2 = try world.addEntity();
-    const gltf_handle2 = try renderer.loadGltf(allocator, "assets/objects/bag.glb");
-    entity_gltf2.set(ecs.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
-    entity_gltf2.set(nz.Transform3D(f32), .{ .position = .{ 0, 34, 0 } }, world);
-    entity_gltf2.set(ecs.Collider, .{
-        .shape = .{ .primitive = .box },
-        .max_angular_velocity = 0,
-        .motion_type = .dynamic,
-    }, world);
+    // const entity_gltf2 = try world.addEntity();
+    // const gltf_handle2 = try renderer.loadGltf(allocator, "assets/objects/bag.glb");
+    // entity_gltf2.set(ecs.Model, .{ .model = .{ .gltf = gltf_handle2 } }, world);
+    // entity_gltf2.set(nz.Transform3D(f32), .{ .position = .{ 0, 34, 0 } }, world);
+    // entity_gltf2.set(ecs.Collider, .{
+    //     .shape = .{ .primitive = .box },
+    //     .max_angular_velocity = 0,
+    //     .motion_type = .dynamic,
+    // }, world);
 }
