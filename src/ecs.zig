@@ -40,6 +40,8 @@ pub const Camera = struct {
     speed: f32 = 500,
     sensitivity: f32 = 1,
     was_rotating: bool = false,
+
+    transform: nz.Transform3D(f32) = .{},
 };
 
 pub const Model = struct {
