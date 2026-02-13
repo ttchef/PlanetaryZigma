@@ -633,7 +633,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                 .primitive => |shape| {
                     switch (shape) {
                         .box, .sphere => {
-                            // std.debug.print("hello\n", .{});
+                            // std.debug.print("hello\n", .{}); x
                             var mesh = self.debug_meshes[0];
                             var mesh_node: vk.Node = .{
                                 .material = mesh.surfaces.items[0].material,

@@ -267,13 +267,11 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
+        const up = nz.vec.normalize(transform.position);
 
-        const force = nz.vec.normalize(-transform.position);
-
+        const force = -up;
         // std.debug.print("GRAVITY {any}\n", .{force});
         body.addForce(nz.vec.scale(force, 1000000));
-        body.addAngularImpulse(.{ 100, 0, 0 });
-        // body.addTorque(.{ 10000, 0, 0 });
     }
 
     self.physics_system.update(delta_time, .{}) catch unreachable;
@@ -284,22 +282,23 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
         // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
-        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
+        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)}); x
         const position: nz.Vec3(f32) = .{
             // 0,
             @as(f32, @floatCast(body.position[0])),
             @as(f32, @floatCast(body.position[1])),
             @as(f32, @floatCast(body.position[2])),
         };
-        var rotation: nz.quat.Hamiltonian(f32) = .{
+        const rotation: nz.quat.Hamiltonian(f32) = .{
             .x = body.rotation[0],
             .y = body.rotation[1],
             .z = body.rotation[2],
             .w = body.rotation[3],
         };
         transform.*.position = position;
-        transform.rotation = rotation.toEuler();
-        std.debug.print("ROTATION {any}\n", .{body.rotation});
+        const euler = rotation.toEuler();
+        transform.rotation = std.math.radiansToDegrees(euler);
+        // std.debug.print("ROTATION {any}\n", .{transform.rotation});
         //
 
     }

@@ -100,6 +100,9 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         if (keyboard[sdl.SDL_SCANCODE_E])
             move += nz.vec.scale(up, velocity);
 
+        if (keyboard[sdl.SDL_SCANCODE_SPACE])
+            move += nz.vec.scale(up, velocity);
+
         if (keyboard[sdl.SDL_SCANCODE_UP])
             camera.speed += 10;
         if (keyboard[sdl.SDL_SCANCODE_DOWN])
@@ -156,7 +159,6 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             body.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
         camera.transform = transform.*;
-
         camera.transform.rotation = .{ current_pitch_rad, current_yaw_rad, 0 };
     }
 }
