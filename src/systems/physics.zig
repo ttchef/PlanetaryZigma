@@ -233,9 +233,9 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
             .motion_type = collider.motion_type,
             .object_layer = object_layers.moving,
             .user_data = @intFromEnum(entry),
-            // .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+            .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+            .max_angular_velocity = collider.max_angular_velocity,
             //.allow_sleeping = false,
-            // .max_angular_velocity = collider.max_angular_velocity,
         }, .activate);
         collider.body_id = body_id;
     }
@@ -272,6 +272,12 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
         const force = -up;
         // std.debug.print("GRAVITY {any}\n", .{force});
         body.addForce(nz.vec.scale(force, 1000000));
+
+        const forward = transform.forward();
+        const location_front = transform.position + forward;
+        const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
+        const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
+        transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
     }
 
     self.physics_system.update(delta_time, .{}) catch unreachable;
@@ -295,9 +301,24 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
             .z = body.rotation[2],
             .w = body.rotation[3],
         };
+
         transform.*.position = position;
         const euler = rotation.toEuler();
         transform.rotation = std.math.radiansToDegrees(euler);
+        const camera = world.entityGetPtr(ecs.Camera, @enumFromInt(body.user_data));
+        if (camera != null and false) {
+            transform.rotation = std.math.radiansToDegrees(camera.?.transform.rotation);
+            std.debug.print("rotation : {any}\n", .{transform.rotation});
+        }
+
+        // std.debug.print("position {any}\n", .{transform.position});
+        const forward = transform.forward();
+        std.debug.print("forward {any}\n", .{forward});
+        const location_front = transform.position + forward;
+        const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
+        const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
+        transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
+        //
         // std.debug.print("ROTATION {any}\n", .{transform.rotation});
         //
 

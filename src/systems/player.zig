@@ -41,12 +41,7 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         }
 
         // current_pitch_rad = std.math.clamp(current_pitch_rad, -1.5, 1.5);
-
-        const forward = nz.vec.normalize(nz.Vec3(f32){
-            @cos(current_pitch_rad) * @sin(current_yaw_rad),
-            @sin(current_pitch_rad),
-            -@cos(current_pitch_rad) * @cos(current_yaw_rad),
-        });
+        var forward = nz.vec.forwardFromEuler(nz.Vec3(f32){ current_pitch_rad, current_yaw_rad, 0 });
 
         const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
 

@@ -641,6 +641,7 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                                 .local_transform = .fromMat4x4(.identity),
                                 .world_transform = .fromMat4x4(.identity),
                             };
+                            std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
                             try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
                         },
                         .capsule => {},
