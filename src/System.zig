@@ -30,6 +30,13 @@ export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, r
 
         loadMeshes(allocator.*, world, &self.renderer) catch |err| return @intFromError(err);
         self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
+        self.renderer.drawDebugLine(
+            .{
+                .from = .{ .position = .{ 0, 0, 0 }, .color = 0 },
+                .to = .{ .position = .{ 0, 40, 0 }, .color = 0 },
+            },
+            10,
+        );
     }
     return 0;
 }
@@ -64,6 +71,7 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator, world: *World) v
 export fn update(self: *@This(), world: *World, delta_time: f32) u32 {
     self.physics_system.update(world, delta_time);
     player.update(@ptrCast(world), @ptrCast(self.physics_system.physics_system), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
+
     self.renderer.draw(world, delta_time) catch |err| return @intFromError(err);
     return 0;
 }

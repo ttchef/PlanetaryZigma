@@ -85,7 +85,15 @@ pub fn deinit(self: @This(), vulkan_mem_alloc: vk.Vma, device: vk.Device) void {
 
 pub fn uploadDataToImage(self: *@This(), device: vk.Device, vma: vk.Vma.Allocator, data: anytype) !void {
     const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * 4;
-    const upload_buffer: vk.Buffer = try .init(vma, data_size, vk.c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    const upload_buffer: vk.Buffer = try .init(
+        vma,
+        data_size,
+        vk.c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .{
+            .usage = vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
+    );
     defer upload_buffer.deinit(vma);
 
     @memcpy(

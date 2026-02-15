@@ -56,7 +56,10 @@ pub fn init(
         vma_allocator,
         vertex_buffer_size,
         c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
+        .{
+            .usage = Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
+            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
     );
 
     var device_adress_info: c.VkBufferDeviceAddressInfo = .{
@@ -69,14 +72,20 @@ pub fn init(
         vma_allocator,
         index_buffer_size,
         c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT | c.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
+        .{
+            .usage = Vma.c.VMA_MEMORY_USAGE_GPU_ONLY,
+            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
     );
 
     var staging: Buffer = try .init(
         vma_allocator,
         vertex_buffer_size + index_buffer_size,
         c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        Vma.c.VMA_MEMORY_USAGE_CPU_ONLY,
+        .{
+            .usage = Vma.c.VMA_MEMORY_USAGE_CPU_ONLY,
+            .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
     );
 
     var info: Vma.AllocationInfo = undefined;

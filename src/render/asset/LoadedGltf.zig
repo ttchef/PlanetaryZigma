@@ -87,7 +87,15 @@ pub fn init(
         std.log.info("image count was 0", .{});
     }
 
-    file.material_data_buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count, vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    file.material_data_buffer = try .init(
+        vma.handle,
+        @sizeOf(vk.Material.GltfMetallicRoughness) * data.materials_count,
+        vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .{
+            .usage = vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
+    );
     var data_index: u32 = 0;
 
     var ptr: [*]vk.Material.GltfMetallicRoughness.Constants = @ptrCast(@alignCast(file.material_data_buffer.info.pMappedData));
