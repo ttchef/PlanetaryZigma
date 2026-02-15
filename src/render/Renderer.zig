@@ -2,6 +2,7 @@ const std = @import("std");
 const nz = @import("numz");
 const ecs = @import("ecs");
 const LoadedGltf = @import("asset/LoadedGltf.zig");
+const debug = @import("asset/debug.zig");
 pub const vk = @import("vulkan/vulkan.zig");
 pub const Camera = ecs.Camera;
 pub const c = @import("c.zig");
@@ -35,10 +36,18 @@ metal_rough_material: vk.Material.GltfMetallicRoughness,
 default_data: *const vk.Material.Instance,
 material_resources: vk.Material.GltfMetallicRoughness.Resources,
 
+//Collider
+collider_pipeline: *vk.Pipeline,
+collider_material: *vk.Material.Instance,
+collider_meshes: [3]vk.Mesh,
+
 //Debug
 debug_pipeline: *vk.Pipeline,
-debug_meshes: [3]vk.Mesh,
 debug_material: *vk.Material.Instance,
+debug_line_draws: std.ArrayList(f32),
+debug_line_vbo: vk.Buffer,
+debug_point_draws: std.ArrayList(f32),
+// debug_point_vbo_handle: vk.Buffer,
 
 //Vulkan Render Specific
 allocator: std.mem.Allocator,
@@ -231,7 +240,15 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     );
 
     var metal_rough_material: vk.Material.GltfMetallicRoughness = try .initBuildPipelines(allocator, device, descriptor_gpu_scene_data, draw_image, depth_image);
-    var material_buffer: vk.Buffer = try .init(vma.handle, @sizeOf(vk.Material.GltfMetallicRoughness.Constants), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    var material_buffer: vk.Buffer = try .init(
+        vma.handle,
+        @sizeOf(vk.Material.GltfMetallicRoughness.Constants),
+        vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .{
+            .usage = vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
+    );
 
     // Initialize the uniform data with proper values BEFORE copying
     const scene_uniform_data: vk.Material.GltfMetallicRoughness.Constants = .{
@@ -268,8 +285,8 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     //============
     //NOTE: DEBUG
     //============
-    const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.frag.spv");
-    const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.vert.spv");
+    const mesh_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/collider.frag.spv");
+    const mesh_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/collider.vert.spv");
     defer vk.c.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
     defer vk.c.vkDestroyShaderModule(device.handle, mesh_vertex_shader, null);
 
@@ -308,6 +325,27 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     debug_pipeline_config.rasterization_state.cullMode = vk.c.VK_CULL_MODE_NONE;
     debug_pipeline_config.rasterization_state.lineWidth = 1;
 
+    const collider_pipeline = try allocator.create(vk.Pipeline);
+    collider_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
+    var collider_material = try allocator.create(vk.Material.Instance);
+    collider_material.pipeline = collider_pipeline;
+    collider_material.descriptor_set = null;
+
+    //NOTE: Debug
+    // const debug_frag_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.frag.spv");
+    // const debug_vertex_shader: vk.c.VkShaderModule = try vk.LoadShader(device.handle, "zig-out/shaders/debug.vert.spv");
+    // defer vk.c.vkDestroyShaderModule(device.handle, debug_frag_shader, null);
+    // defer vk.c.vkDestroyShaderModule(device.handle, debug_vertex_shader, null);
+    //
+    // debug_pipeline_config.fragment_shaders = .{
+    //     .module = debug_frag_shader,
+    // };
+    //
+    // debug_pipeline_config.vertex_shaders = .{
+    //     .module = debug_vertex_shader,
+    // };
+
+    debug_pipeline_config.input_assembly_state.topology = vk.c.VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
     const debug_pipeline = try allocator.create(vk.Pipeline);
     debug_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
     var debug_material = try allocator.create(vk.Material.Instance);
@@ -327,7 +365,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .{ -1, 1, 1, 0 }, // 7
     };
 
-    var indices: [36]u32 = .{
+    var indices = [_]u32{
         0, 1, 2, 2, 3, 0, // back
         4, 5, 6, 6, 7, 4, // front
         0, 4, 7, 7, 3, 0, // left
@@ -345,11 +383,21 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
             .index_start = 0,
             .index_count = @intCast(indices.len),
             .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = debug_material,
+            .material = collider_material,
         }},
         indices[0..],
         [4]f32,
         vertices[0..],
+    );
+
+    const debug_line_vbo: vk.Buffer = try .init(
+        vma.handle,
+        10 * @sizeOf([4]f32),
+        vk.c.VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT,
+        .{
+            .usage = vk.Vma.c.VMA_MEMORY_USAGE_AUTO,
+            .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT | vk.Vma.c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        },
     );
 
     return .{
@@ -363,9 +411,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .vma = vma,
         .draw_image = draw_image,
         .depth_image = depth_image,
+        .collider_material = collider_material,
+        .collider_pipeline = collider_pipeline,
+        .collider_meshes = debug_mehses,
         .debug_pipeline = debug_pipeline,
-        .debug_meshes = debug_mehses,
         .debug_material = debug_material,
+        .debug_line_draws = try .initCapacity(allocator, 10),
+        .debug_line_vbo = debug_line_vbo,
+        .debug_point_draws = try .initCapacity(allocator, 10),
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         .draw_image_descriptor_layout = draw_image_descriptor_layout,
@@ -408,9 +461,10 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.material_buffer.deinit(self.vma.handle);
     allocator.destroy(self.default_data);
 
-    self.debug_pipeline.deinit(self.device);
-    allocator.destroy(self.debug_pipeline);
-    self.debug_meshes[0].deinit(self.allocator, self.vma.handle);
+    self.debug_line_vbo.deinit(self.vma.handle);
+    self.collider_pipeline.deinit(self.device);
+    allocator.destroy(self.collider_pipeline);
+    self.collider_meshes[0].deinit(self.allocator, self.vma.handle);
     allocator.destroy(self.debug_material);
 
     var loaded_scenes_it = self.loaded_scenes.iterator();
@@ -545,7 +599,15 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
 
     vk.c.vkCmdBeginRendering(cmd_buffer, &render_info);
 
-    current_frame.gpu_scene = try .init(self.vma.handle, @sizeOf(vk.GPUSceneData), vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU);
+    current_frame.gpu_scene = try .init(
+        self.vma.handle,
+        @sizeOf(vk.GPUSceneData),
+        vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .{
+            .usage = vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+            .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        },
+    );
 
     self.vma.copyToAllocation(vk.GPUSceneData, self.scene_data, current_frame.gpu_scene.vma_allocation, &current_frame.gpu_scene.info);
     const globalDescriptor: vk.c.VkDescriptorSet = try current_frame.descriptor.allocate(self.device, self.gpu_scene_data_descriptor_layout.handle, null);
@@ -615,14 +677,72 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             },
         }
 
-        drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
-        drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.opaque_surfaces, cmd_buffer, globalDescriptor);
+        // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
-    var draw_debug_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
-    const debug_draw = true;
-    if (debug_draw) {
-        while (draw_debug_query.next()) |entry| {
+    var current_debug_index: usize = 0;
+    while (current_debug_index < self.debug_line_draws.items.len) {
+        const line_draw = self.debug_line_draws.items[current_debug_index];
+        _ = line_draw;
+        current_debug_index += 1;
+        vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.debug_pipeline.graphics.handle);
+        vk.c.vkCmdBindDescriptorSets(
+            cmd_buffer,
+            vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.debug_pipeline.get().layout,
+            0,
+            1,
+            &globalDescriptor,
+            0,
+            null,
+        );
+
+        var viewport: vk.c.VkViewport = .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(self.draw_image.extent.width),
+            .height = @floatFromInt(self.draw_image.extent.height),
+            .minDepth = 0,
+            .maxDepth = 1,
+        };
+
+        vk.c.vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+        var scissor: vk.c.VkRect2D = .{
+            .offset = .{
+                .x = 0,
+                .y = 0,
+            },
+            .extent = .{
+                .width = self.draw_image.extent.width,
+                .height = self.draw_image.extent.height,
+            },
+        };
+
+        vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+        std.debug.print("HELLO :D \n", .{});
+        const offset: vk.c.VkDeviceSize = 0;
+        vk.c.vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &self.debug_line_vbo.buffer, &offset);
+        vk.c.vkCmdDraw(cmd_buffer, 2, 1, 0, 0);
+        // vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+
+        //TODO: FIX IT FOR DEBUG DRAW :D
+        var push_constant: vk.Mesh.GPUDrawPushConstants = .{
+            .world_matrix = .identity.d,
+            .vertex_buffer = self.de,
+        };
+
+        vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+
+        // vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
+
+    }
+
+    var collider_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
+    const collider_draw = true;
+    if (collider_draw) {
+        while (collider_query.next()) |entry| {
             self.main_draw_context.clear();
             const transform = entry.get(nz.Transform3D(f32), world).?;
             const collider = entry.get(ecs.Collider, world).?;
@@ -634,14 +754,14 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
                     switch (shape) {
                         .box, .sphere => {
                             // std.debug.print("hello\n", .{}); x
-                            var mesh = self.debug_meshes[0];
+                            var mesh = self.collider_meshes[0];
                             var mesh_node: vk.Node = .{
                                 .material = mesh.surfaces.items[0].material,
                                 .mesh = &mesh,
                                 .local_transform = .fromMat4x4(.identity),
                                 .world_transform = .fromMat4x4(.identity),
                             };
-                            std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
+                            // std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
                             try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
                         },
                         .capsule => {},
@@ -847,6 +967,19 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
     return (self.meshes.items.len - 1);
 }
 
+pub fn drawDebugLine(self: *@This(), line: debug.Line, seconds_alive: f32) void {
+    var mapped: [*]u8 = @ptrCast(self.debug_line_vbo.info.pMappedData);
+    const start = self.debug_line_draws.items.len * @sizeOf(debug.Line);
+    @memcpy(
+        mapped[start .. start + @sizeOf(debug.Line)],
+        std.mem.asBytes(&line),
+    );
+    self.debug_line_draws.appendAssumeCapacity(seconds_alive);
+}
+
+pub fn drawDebugPoint(self: *@This(), point: debug.Point) void {
+    self.debug_point_draws.appendAssumeCapacity(point);
+}
 pub fn loadGltf(self: *@This(), allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
     var found_gltf = self.loaded_scenes.getEntry(path);
     if (found_gltf != null) return found_gltf.?.key_ptr.*;

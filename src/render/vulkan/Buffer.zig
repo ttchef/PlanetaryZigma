@@ -4,15 +4,11 @@ buffer: vk.c.VkBuffer,
 vma_allocation: vk.Vma.Allocation,
 info: vk.Vma.AllocationInfo,
 
-pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vma_usage: vk.Vma.c.VmaMemoryUsage) !@This() {
+pub fn init(vma_allocator: vk.Vma.Allocator, size: usize, vk_usage: vk.c.VkBufferUsageFlags, vmaalloc_info: vk.Vma.c.VmaAllocationCreateInfo) !@This() {
     var buffer_info: vk.Vma.c.VkBufferCreateInfo = .{
         .sType = vk.c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
         .usage = vk_usage,
-    };
-    var vmaalloc_info: vk.Vma.c.VmaAllocationCreateInfo = .{
-        .usage = vma_usage,
-        .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
     };
 
     var new_buffer: vk.c.VkBuffer = undefined;

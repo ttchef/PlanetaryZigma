@@ -229,7 +229,10 @@ const FrameData = struct {
                 vma.handle,
                 @sizeOf(vk.GPUSceneData),
                 vk.c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+                .{
+                    .usage = vk.Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+                    .flags = vk.Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                },
             ),
         };
     }
