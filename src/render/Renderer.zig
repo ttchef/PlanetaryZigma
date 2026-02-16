@@ -346,6 +346,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     // };
 
     debug_pipeline_config.input_assembly_state.topology = vk.c.VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    debug_pipeline_config.rasterization_state.lineWidth = 10;
     const debug_pipeline = try allocator.create(vk.Pipeline);
     debug_pipeline.* = try .initGraphics(device, &debug_pipeline_config);
     var debug_material = try allocator.create(vk.Material.Instance);
@@ -355,14 +356,14 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     var debug_mehses: [3]vk.Mesh = undefined;
     // 8 corners of a cube :D
     var vertices = [_][4](f32){
-        .{ -1, -1, -1, 0 }, // 0
-        .{ 1, -1, -1, 0 }, // 1
-        .{ 1, 1, -1, 0 }, // 2
-        .{ -1, 1, -1, 0 }, // 3
-        .{ -1, -1, 1, 0 }, // 4
-        .{ 1, -1, 1, 0 }, // 5
-        .{ 1, 1, 1, 0 }, // 6
-        .{ -1, 1, 1, 0 }, // 7
+        .{ -1, -1, -1, @bitCast(white) }, // 0
+        .{ 1, -1, -1, @bitCast(white) }, // 1
+        .{ 1, 1, -1, @bitCast(white) }, // 2
+        .{ -1, 1, -1, @bitCast(white) }, // 3
+        .{ -1, -1, 1, @bitCast(white) }, // 4
+        .{ 1, -1, 1, @bitCast(white) }, // 5
+        .{ 1, 1, 1, @bitCast(white) }, // 6
+        .{ -1, 1, 1, @bitCast(white) }, // 7
     };
 
     var indices = [_]u32{
@@ -683,9 +684,6 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
 
     var current_debug_index: usize = 0;
     while (current_debug_index < self.debug_line_draws.items.len) {
-        const line_draw = self.debug_line_draws.items[current_debug_index];
-        _ = line_draw;
-        current_debug_index += 1;
         vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.debug_pipeline.graphics.handle);
         vk.c.vkCmdBindDescriptorSets(
             cmd_buffer,
@@ -721,22 +719,29 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
         };
 
         vk.c.vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
-        std.debug.print("HELLO :D \n", .{});
+
         const offset: vk.c.VkDeviceSize = 0;
-        vk.c.vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &self.debug_line_vbo.buffer, &offset);
-        vk.c.vkCmdDraw(cmd_buffer, 2, 1, 0, 0);
-        // vk.c.vkCmdBindIndexBuffer(cmd_buffer, render_obj.index_buffer, 0, vk.c.VK_INDEX_TYPE_UINT32);
+
+        var device_adress_info: vk.c.VkBufferDeviceAddressInfo = .{
+            .sType = vk.c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .buffer = self.debug_line_vbo.buffer,
+        };
+        const vertex_buffer_address = vk.c.vkGetBufferDeviceAddress(self.device.handle, &device_adress_info);
 
         //TODO: FIX IT FOR DEBUG DRAW :D
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
-            .world_matrix = .identity.d,
-            .vertex_buffer = self.de,
+            .world_matrix = nz.Mat4x4(f32).identity.d,
+            .vertex_buffer = vertex_buffer_address,
         };
 
-        vk.c.vkCmdPushConstants(cmd_buffer, render_obj.material_instance.pipeline.get().layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
-
-        // vk.c.vkCmdDrawIndexed(cmd_buffer, render_obj.index_count, 1, render_obj.first_index, 0, 0);
-
+        vk.c.vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &self.debug_line_vbo.buffer, &offset);
+        vk.c.vkCmdPushConstants(cmd_buffer, self.debug_pipeline.graphics.layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
+        vk.c.vkCmdDraw(cmd_buffer, 2, 1, 0, 0);
+        self.debug_line_draws.items[current_debug_index] -= time;
+        if (self.debug_line_draws.items[current_debug_index] <= 0) {
+            _ = self.debug_line_draws.swapRemove(current_debug_index);
+        }
+        current_debug_index += 1;
     }
 
     var collider_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -943,7 +948,7 @@ pub fn createMesh(self: *@This(), name: []const u8, indices: []u32, verices: []v
     return (self.meshes.items.len - 1);
 }
 
-pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices: [][4]f32) !usize {
+pub fn createColliderMesh(self: *@This(), name: []const u8, indices: []u32, verices: [][4]f32) !usize {
     const mesh = try vk.Mesh.init(
         self.allocator,
         self.vma.handle,
@@ -953,7 +958,7 @@ pub fn createDebugMesh(self: *@This(), name: []const u8, indices: []u32, verices
             .index_start = 0,
             .index_count = @intCast(indices.len),
             .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
-            .material = self.debug_material,
+            .material = self.collider_material,
         }},
         indices,
         [4]f32,

@@ -9,8 +9,10 @@ layout(set = 0, binding = 0) uniform SceneData {
 	vec4 sunlightColor;
 } sceneData;
 
+layout(location = 0) out uint outColor;
+
 struct Vertex {
-	vec3 position;
+	vec4 position;
 }; 
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer{ 
@@ -25,6 +27,7 @@ layout(push_constant) uniform constants {
 
 void main(){
   Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
-  vec4 position = vec4(v.position, 1.0f);
+  outColor = floatBitsToUint(v.position.w);
+  vec4 position = vec4(v.position.xyz, 1.0f);
   gl_Position = sceneData.viewproj * PushConstants.render_matrix * position;
 }

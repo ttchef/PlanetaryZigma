@@ -2,6 +2,7 @@ const std = @import("std");
 const nz = @import("numz");
 pub const zphy = @import("zphysics");
 const ecs = @import("ecs");
+const Renderer = @import("Renderer");
 physics_system: *zphy.PhysicsSystem,
 broad_phase_layer_interface: *BroadPhaseLayerInterface,
 object_layer_pair_filter: *ObjectLayerPairFilter,
@@ -262,7 +263,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     zphy.deinit();
 }
 
-pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
+pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time: f32) void {
     const bodies = self.physics_system.getBodiesMutUnsafe();
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
@@ -273,11 +274,9 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
         // std.debug.print("GRAVITY {any}\n", .{force});
         body.addForce(nz.vec.scale(force, 1000000));
 
-        const forward = transform.forward();
-        const location_front = transform.position + forward;
-        const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
-        const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
-        transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
+        // const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
+        // const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
+        // transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
     }
 
     self.physics_system.update(delta_time, .{}) catch unreachable;
@@ -311,13 +310,29 @@ pub fn update(self: *@This(), world: *ecs.World, delta_time: f32) void {
             std.debug.print("rotation : {any}\n", .{transform.rotation});
         }
 
-        // std.debug.print("position {any}\n", .{transform.position});
-        const forward = transform.forward();
+        const forward = std.math.radiansToDegrees(transform.forward());
         std.debug.print("forward {any}\n", .{forward});
-        const location_front = transform.position + forward;
-        const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
-        const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
-        transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
+        // const location_front = transform.position + forward;
+        renderer.drawDebugLine(
+            .{
+                .from = .{ .position = transform.position, .color = .white },
+                .to = .{ .position = .{ 0, 0, 0 }, .color = .white },
+            },
+            0,
+        );
+        // renderer.drawDebugLine(
+        //     .{
+        //         .from = .{ .position = .{ 0, 0, 0 }, .color = .red },
+        //         .to = .{ .position = transform.position, .color = .red },
+        //     },
+        //     0,
+        // );
+        // std.debug.print("position {any}\n", .{transform.position});
+        // const forward = transform.forward();
+        // const location_front = transform.position + forward;
+        // const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
+        // const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
+        // transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
         //
         // std.debug.print("ROTATION {any}\n", .{transform.rotation});
         //
