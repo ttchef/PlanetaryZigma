@@ -9,8 +9,14 @@ layout(set = 0, binding = 0) uniform SceneData {
 	vec4 sunlightColor;
 } sceneData;
 
-layout (location = 0) out vec4 outFragColor;
+// Fragment shader
+layout(location = 0) flat in uint inColor;
 
-void main(){
-  outFragColor = vec4(1,1,1,1);
+layout(location = 0) out vec4 outFragColor;
+
+void main() {
+    // Unpack RGBA8 from uint (0xAABBGGRR format)
+    vec4 color = unpackUnorm4x8(inColor);
+    
+    outFragColor = color;
 }

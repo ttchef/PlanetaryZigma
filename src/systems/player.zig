@@ -9,6 +9,8 @@ const Collider = ecs.Collider;
 const nz = @import("numz");
 const sdl = @import("sdl");
 
+var k_was_pressed: bool = false;
+
 pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !void {
     var query = world.query(&.{ Player, Camera, nz.Transform3D(f32), Collider });
     while (query.next()) |entity| {
@@ -108,18 +110,21 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
         move = nz.vec.scale(move, speed_multiplier);
 
         const body = physics.getBodyInterfaceMut();
-        //TODO: Figure out a better rotation, THIS is jagged. try (camera.sensitivity = 10;) x
-        // bodies.setAngularVelocity(collider.z_phycis_body, .{ current_pitch_rad, current_yaw_rad, 0 });
-        // const quat = nz.quat.Hamiltonian(f32).fromEuler(.{ current_pitch_rad, current_yaw_rad, 0 });
-        // body.setRotation(collider.body_id, quat.toVecReversed(), .activate);
 
         body.setLinearVelocity(collider.body_id, move);
 
-        if (keyboard[sdl.SDL_SCANCODE_K]) try spawnBox(world, transform.position);
+        if (keyboard[sdl.SDL_SCANCODE_K]) {
+            if (k_was_pressed == false) {
+                k_was_pressed = true;
+                try spawnBox(world, transform.position);
+            }
+        } else {
+            k_was_pressed = false;
+        }
 
         if (keyboard[sdl.SDL_SCANCODE_X]) {
             std.debug.print(
-                \\--- camera movement debug------- 
+                \\--- camera movement debug-------- 
                 \\move:        ({d:.3}, {d:.3}, {d:.3})
                 \\forward:     ({d:.3}, {d:.3}, {d:.3})
                 \\right:       ({d:.3}, {d:.3}, {d:.3})
@@ -154,6 +159,7 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             body.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
         camera.transform = transform.*;
+        camera.transform.position[2] += 2;
         camera.transform.rotation = .{ current_pitch_rad, current_yaw_rad, 0 };
     }
 }

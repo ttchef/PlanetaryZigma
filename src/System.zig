@@ -27,16 +27,8 @@ export fn reload(self: *@This(), allocator: *std.mem.Allocator, world: *World, r
         self.physics_system.deinit(allocator.*);
     } else {
         self.renderer = Renderer.init(allocator.*, render_config.*) catch |err| return @intFromError(err);
-
         loadMeshes(allocator.*, world, &self.renderer) catch |err| return @intFromError(err);
         self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
-        self.renderer.drawDebugLine(
-            .{
-                .from = .{ .position = .{ 0, 0, 0 }, .color = 0 },
-                .to = .{ .position = .{ 0, 40, 0 }, .color = 0 },
-            },
-            10,
-        );
     }
     return 0;
 }
@@ -69,7 +61,7 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator, world: *World) v
 }
 
 export fn update(self: *@This(), world: *World, delta_time: f32) u32 {
-    self.physics_system.update(world, delta_time);
+    self.physics_system.update(world, &self.renderer, delta_time);
     player.update(@ptrCast(world), @ptrCast(self.physics_system.physics_system), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
 
     self.renderer.draw(world, delta_time) catch |err| return @intFromError(err);
@@ -98,7 +90,7 @@ fn loadMeshes(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) 
         switch (collider.shape) {
             .primitive => {},
             .mesh => |*debug_shape| {
-                const mesh_shape: usize = try renderer.createDebugMesh(
+                const mesh_shape: usize = try renderer.createColliderMesh(
                     "debug_planet",
                     debug_shape.indices.items,
                     debug_shape.vertices.items,
@@ -130,17 +122,18 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     var planet_vert: std.ArrayList([4]f32) = .empty;
     var planet_idx: std.ArrayList(u32) = .empty;
 
+    const color = nz.color.Rgba(u8).toU32(.{ .a = 255, .b = 0, .g = 255, .r = 0 }, .little);
     for (0..planet_mesh2.vertices.items.len) |i| {
         try planet_vert.append(allocator, .{
             planet_mesh2.vertices.items[i].position[0],
             planet_mesh2.vertices.items[i].position[1],
             planet_mesh2.vertices.items[i].position[2],
-            0,
+            @bitCast(color),
         });
     }
     try planet_idx.appendSlice(allocator, planet_mesh2.indices.items);
 
-    const debug_mesh_handle = try renderer.createDebugMesh(
+    const debug_mesh_handle = try renderer.createColliderMesh(
         "debug_planet",
         planet_idx.items,
         planet_vert.items,
