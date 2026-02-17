@@ -44,9 +44,9 @@ collider_meshes: [3]vk.Mesh,
 //Debug
 debug_pipeline: *vk.Pipeline,
 debug_material: *vk.Material.Instance,
-debug_line_draws: std.ArrayList(f32),
+debug_line_draws: [debug.line_amount]f32 = @splat(-1),
 debug_line_vbo: vk.Buffer,
-debug_point_draws: std.ArrayList(f32),
+debug_point_draws: [debug.line_amount]f32 = @splat(-1),
 // debug_point_vbo_handle: vk.Buffer,
 
 //Vulkan Render Specific
@@ -360,10 +360,10 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .{ 1, -1, -1, @bitCast(white) }, // 1
         .{ 1, 1, -1, @bitCast(white) }, // 2
         .{ -1, 1, -1, @bitCast(white) }, // 3
-        .{ -1, -1, 1, @bitCast(white) }, // 4
-        .{ 1, -1, 1, @bitCast(white) }, // 5
-        .{ 1, 1, 1, @bitCast(white) }, // 6
-        .{ -1, 1, 1, @bitCast(white) }, // 7
+        .{ -1, -1, 1, @bitCast(magenta_color) }, // 4
+        .{ 1, -1, 1, @bitCast(magenta_color) }, // 5
+        .{ 1, 1, 1, @bitCast(magenta_color) }, // 6
+        .{ -1, 1, 1, @bitCast(magenta_color) }, // 7
     };
 
     var indices = [_]u32{
@@ -393,7 +393,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
 
     const debug_line_vbo: vk.Buffer = try .init(
         vma.handle,
-        10 * @sizeOf([4]f32),
+        debug.line_amount * @sizeOf([4]f32),
         vk.c.VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT,
         .{
             .usage = vk.Vma.c.VMA_MEMORY_USAGE_AUTO,
@@ -417,9 +417,7 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
         .collider_meshes = debug_mehses,
         .debug_pipeline = debug_pipeline,
         .debug_material = debug_material,
-        .debug_line_draws = try .initCapacity(allocator, 10),
         .debug_line_vbo = debug_line_vbo,
-        .debug_point_draws = try .initCapacity(allocator, 10),
         .gpu_scene_data_descriptor_layout = descriptor_gpu_scene_data,
         .graphics_descriptor_layout = graphics_descriptor_layout,
         .draw_image_descriptor_layout = draw_image_descriptor_layout,
@@ -682,8 +680,11 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
         // drawGeometry(self, self.main_draw_context.transparent_surfaces, cmd_buffer, globalDescriptor);
     }
 
-    var current_debug_index: usize = 0;
-    while (current_debug_index < self.debug_line_draws.items.len) {
+    for (0..debug.line_amount) |debug_idx| {
+        if (self.debug_line_draws[debug_idx] < 0) {
+            continue;
+        }
+        self.debug_line_draws[debug_idx] -= time;
         vk.c.vkCmdBindPipeline(cmd_buffer, vk.c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.debug_pipeline.graphics.handle);
         vk.c.vkCmdBindDescriptorSets(
             cmd_buffer,
@@ -728,20 +729,14 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
         };
         const vertex_buffer_address = vk.c.vkGetBufferDeviceAddress(self.device.handle, &device_adress_info);
 
-        //TODO: FIX IT FOR DEBUG DRAW :D
         var push_constant: vk.Mesh.GPUDrawPushConstants = .{
             .world_matrix = nz.Mat4x4(f32).identity.d,
-            .vertex_buffer = vertex_buffer_address,
+            .vertex_buffer = vertex_buffer_address + (debug_idx * @sizeOf(debug.Line)),
         };
 
         vk.c.vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &self.debug_line_vbo.buffer, &offset);
         vk.c.vkCmdPushConstants(cmd_buffer, self.debug_pipeline.graphics.layout, vk.c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(vk.Mesh.GPUDrawPushConstants), &push_constant);
         vk.c.vkCmdDraw(cmd_buffer, 2, 1, 0, 0);
-        self.debug_line_draws.items[current_debug_index] -= time;
-        if (self.debug_line_draws.items[current_debug_index] <= 0) {
-            _ = self.debug_line_draws.swapRemove(current_debug_index);
-        }
-        current_debug_index += 1;
     }
 
     var collider_query = world.query(&.{ ecs.Collider, nz.Transform3D(f32) });
@@ -973,13 +968,21 @@ pub fn createColliderMesh(self: *@This(), name: []const u8, indices: []u32, veri
 }
 
 pub fn drawDebugLine(self: *@This(), line: debug.Line, seconds_alive: f32) void {
+    var idx: i32 = -1;
+    for (0..debug.line_amount) |i| {
+        if (self.debug_line_draws[i] < 0) {
+            idx = @intCast(i);
+            break;
+        }
+    }
+    std.debug.assert(idx != -1);
     var mapped: [*]u8 = @ptrCast(self.debug_line_vbo.info.pMappedData);
-    const start = self.debug_line_draws.items.len * @sizeOf(debug.Line);
+    const start: usize = @as(usize, @intCast(idx)) * @sizeOf(debug.Line);
     @memcpy(
         mapped[start .. start + @sizeOf(debug.Line)],
         std.mem.asBytes(&line),
     );
-    self.debug_line_draws.appendAssumeCapacity(seconds_alive);
+    self.debug_line_draws[@intCast(idx)] = seconds_alive;
 }
 
 pub fn drawDebugPoint(self: *@This(), point: debug.Point) void {
