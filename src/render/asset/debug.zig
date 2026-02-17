@@ -1,6 +1,13 @@
 const std = @import("std");
 const nz = @import("numz");
 
+pub const line_amount: u32 = 100;
+
+pub const Info = struct {
+    seconds_alive: f32,
+    index_handle: usize,
+};
+
 pub const Point = extern struct {
     position: [3]f32,
     color: nz.color.Rgba(u8),

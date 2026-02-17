@@ -312,7 +312,7 @@ pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time
 
         const forward = std.math.radiansToDegrees(transform.forward());
         std.debug.print("forward {any}\n", .{forward});
-        // const location_front = transform.position + forward;
+        // const location_front = transform.position + forward; x
         renderer.drawDebugLine(
             .{
                 .from = .{ .position = transform.position, .color = .white },
@@ -320,13 +320,13 @@ pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time
             },
             0,
         );
-        // renderer.drawDebugLine(
-        //     .{
-        //         .from = .{ .position = .{ 0, 0, 0 }, .color = .red },
-        //         .to = .{ .position = transform.position, .color = .red },
-        //     },
-        //     0,
-        // );
+        renderer.drawDebugLine(
+            .{
+                .from = .{ .position = transform.position, .color = .red },
+                .to = .{ .position = forward, .color = .red },
+            },
+            0,
+        );
         // std.debug.print("position {any}\n", .{transform.position});
         // const forward = transform.forward();
         // const location_front = transform.position + forward;
