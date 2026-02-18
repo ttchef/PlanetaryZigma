@@ -110,7 +110,7 @@ fn initEcs(allocator: std.mem.Allocator, world: *World, renderer: *Renderer) !vo
     entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 20, 0 } }, world);
     entity_player.set(ecs.Camera, .{}, world);
     entity_player.set(ecs.Collider, .{
-        .shape = .{ .primitive = .box },
+        .shape = .{ .primitive = .capsule },
         .max_angular_velocity = 0,
         .motion_type = .dynamic,
     }, world);

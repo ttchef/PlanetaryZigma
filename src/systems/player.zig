@@ -159,14 +159,14 @@ pub fn update(world: *World, physics: *zphy.PhysicsSystem, delta_time: f32) !voi
             body.setRotation(collider.body_id, .{ 1, 0, 0, 0 }, .activate);
         }
         camera.transform = transform.*;
-        camera.transform.position[2] += 2;
+        camera.transform.position[2] += 6;
         camera.transform.rotation = .{ current_pitch_rad, current_yaw_rad, 0 };
     }
 }
 
 fn spawnBox(world: *World, player_pos: [3]f32) !void {
 
-    // var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10);
+    // var planet_mesh2 = try Planet.init(allocator, .{ 0, 0, 0 }, 10); x
     // defer planet_mesh2.deinit(allocator);
     // const box2: usize = try renderer.createMesh("planet2", planet_mesh2.indices.items, planet_mesh2.vertices.items);
     const entity_mesh2 = try world.addEntity();
@@ -175,7 +175,7 @@ fn spawnBox(world: *World, player_pos: [3]f32) !void {
         ecs.Collider,
         .{
             .shape = .{
-                .primitive = .sphere,
+                .primitive = .capsule,
             },
             .motion_type = .dynamic,
         },
