@@ -205,11 +205,11 @@ pub fn init(allocator: *std.mem.Allocator, world: *ecs.World) !*@This() {
                     const sphere_shape = try sphere_shape_settings.asShapeSettings().createShape();
                     break :shape sphere_shape;
                 },
-                else => shape: { //TODO: add the rest of he primitive shapes
-                    const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
-                    defer box_shape_settings.asShapeSettings().release();
-                    const box_shape = try box_shape_settings.asShapeSettings().createShape();
-                    break :shape box_shape;
+                .capsule => shape: {
+                    const capsule_shape_settings = try zphy.CapsuleShapeSettings.create(1, 1);
+                    defer capsule_shape_settings.asShapeSettings().release();
+                    const capsule_shape = try capsule_shape_settings.asShapeSettings().createShape();
+                    break :shape capsule_shape;
                 },
             },
             .mesh => |mesh_shape| shape: {
@@ -287,7 +287,7 @@ pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time
         const transform = world.entityGetPtr(nz.Transform3D(f32), @enumFromInt(body.user_data)).?;
         // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
-        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)}); x
+        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{
             // 0,
             @as(f32, @floatCast(body.position[0])),
@@ -302,17 +302,17 @@ pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time
         };
 
         transform.*.position = position;
-        const euler = rotation.toEuler();
-        transform.rotation = std.math.radiansToDegrees(euler);
-        const camera = world.entityGetPtr(ecs.Camera, @enumFromInt(body.user_data));
-        if (camera != null and false) {
-            transform.rotation = std.math.radiansToDegrees(camera.?.transform.rotation);
-            std.debug.print("rotation : {any}\n", .{transform.rotation});
-        }
+        const euler = std.math.radiansToDegrees(rotation.toEuler());
+        // const camera = world.entityGetPtr(ecs.Camera, @enumFromInt(body.user_data)); .
+        // if (camera != null and false) {
+        //     transform.rotation = std.math.radiansToDegrees(camera.?.transform.rotation);
+        //     std.debug.print("rotation : {any}\n", .{transform.rotation});
+        // }
 
-        const forward = std.math.radiansToDegrees(transform.forward());
+        transform.rotation = euler;
+        const forward = transform.forward();
         std.debug.print("forward {any}\n", .{forward});
-        // const location_front = transform.position + forward; x
+        const location_front = transform.position + forward;
         renderer.drawDebugLine(
             .{
                 .from = .{ .position = transform.position, .color = .white },
@@ -323,7 +323,7 @@ pub fn update(self: *@This(), world: *ecs.World, renderer: *Renderer, delta_time
         renderer.drawDebugLine(
             .{
                 .from = .{ .position = transform.position, .color = .red },
-                .to = .{ .position = forward, .color = .red },
+                .to = .{ .position = location_front, .color = .red },
             },
             0,
         );

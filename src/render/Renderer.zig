@@ -354,43 +354,31 @@ pub fn init(allocator: std.mem.Allocator, config: Config) !@This() {
     debug_material.descriptor_set = null;
 
     var debug_mehses: [3]vk.Mesh = undefined;
-    // 8 corners of a cube :D
-    var vertices = [_][4](f32){
-        .{ -1, -1, -1, @bitCast(white) }, // 0
-        .{ 1, -1, -1, @bitCast(white) }, // 1
-        .{ 1, 1, -1, @bitCast(white) }, // 2
-        .{ -1, 1, -1, @bitCast(white) }, // 3
-        .{ -1, -1, 1, @bitCast(magenta_color) }, // 4
-        .{ 1, -1, 1, @bitCast(magenta_color) }, // 5
-        .{ 1, 1, 1, @bitCast(magenta_color) }, // 6
-        .{ -1, 1, 1, @bitCast(magenta_color) }, // 7
-    };
-
-    var indices = [_]u32{
-        0, 1, 2, 2, 3, 0, // back
-        4, 5, 6, 6, 7, 4, // front
-        0, 4, 7, 7, 3, 0, // left
-        1, 5, 6, 6, 2, 1, // right
-        0, 1, 5, 5, 4, 0, // bottom
-        3, 2, 6, 6, 7, 3, // top
-    };
-
-    debug_mehses[0] = try .init(
-        allocator,
-        vma.handle,
-        "Box",
-        device,
-        &.{.{
-            .index_start = 0,
-            .index_count = @intCast(indices.len),
-            .bounds = .{ .origin = @splat(0), .sphere_radius = 0, .extents = @splat(1) },
+    debug_mehses[0] = try debug.collider.createBox(.{
+        .allocator = allocator,
+        .vma = vma,
+        .device = device,
+        .material = collider_material,
+    });
+    debug_mehses[1] = try debug.collider.createCapsuleMesh(
+        .{
+            .allocator = allocator,
+            .vma = vma,
+            .device = device,
             .material = collider_material,
-        }},
-        indices[0..],
-        [4]f32,
-        vertices[0..],
+        },
+        1,
+        1,
     );
-
+    debug_mehses[2] = try debug.collider.createSphereMesh(
+        .{
+            .allocator = allocator,
+            .vma = vma,
+            .device = device,
+            .material = collider_material,
+        },
+        1,
+    );
     const debug_line_vbo: vk.Buffer = try .init(
         vma.handle,
         debug.line_amount * @sizeOf([4]f32),
@@ -464,6 +452,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.collider_pipeline.deinit(self.device);
     allocator.destroy(self.collider_pipeline);
     self.collider_meshes[0].deinit(self.allocator, self.vma.handle);
+    self.collider_meshes[1].deinit(self.allocator, self.vma.handle);
+    self.collider_meshes[2].deinit(self.allocator, self.vma.handle);
     allocator.destroy(self.debug_material);
 
     var loaded_scenes_it = self.loaded_scenes.iterator();
@@ -750,22 +740,41 @@ pub fn draw(self: *@This(), world: *ecs.World, time: f32) !void {
             self.last_material = null;
             self.last_pipeline = null;
             switch (collider.shape) {
-                .primitive => |shape| {
-                    switch (shape) {
-                        .box, .sphere => {
-                            // std.debug.print("hello\n", .{}); x
-                            var mesh = self.collider_meshes[0];
-                            var mesh_node: vk.Node = .{
-                                .material = mesh.surfaces.items[0].material,
-                                .mesh = &mesh,
-                                .local_transform = .fromMat4x4(.identity),
-                                .world_transform = .fromMat4x4(.identity),
-                            };
-                            // std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
-                            try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
-                        },
-                        .capsule => {},
-                    }
+                .primitive => |shape| switch (shape) {
+                    .box => {
+                        // std.debug.print("hello\n", .{}); x
+                        var mesh = self.collider_meshes[0];
+                        var mesh_node: vk.Node = .{
+                            .material = mesh.surfaces.items[0].material,
+                            .mesh = &mesh,
+                            .local_transform = .fromMat4x4(.identity),
+                            .world_transform = .fromMat4x4(.identity),
+                        };
+                        // std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
+                        try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                    },
+                    .capsule => {
+                        var mesh = self.collider_meshes[1];
+                        var mesh_node: vk.Node = .{
+                            .material = mesh.surfaces.items[0].material,
+                            .mesh = &mesh,
+                            .local_transform = .fromMat4x4(.identity),
+                            .world_transform = .fromMat4x4(.identity),
+                        };
+                        // std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
+                        try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                    },
+                    .sphere => {
+                        var mesh = self.collider_meshes[2];
+                        var mesh_node: vk.Node = .{
+                            .material = mesh.surfaces.items[0].material,
+                            .mesh = &mesh,
+                            .local_transform = .fromMat4x4(.identity),
+                            .world_transform = .fromMat4x4(.identity),
+                        };
+                        // std.debug.print("draw Transform rot: {any}\n", .{transform.rotation});
+                        try mesh_node.draw(self.allocator, transform, &self.main_draw_context);
+                    },
                 },
                 .mesh => |colider_mesh| {
                     var mesh = self.meshes.items[colider_mesh.render_handle];
