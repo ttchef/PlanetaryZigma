@@ -3,5 +3,7 @@
 
 Making a 3D game using Procedual gen planets. Zig, Vulkan. 
 
-# Push Rule
-Must compile and run.
+## Push Rules
+1. Must compile.
+2. Run.
+3. Hot Reload.
