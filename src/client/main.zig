@@ -6,14 +6,12 @@ pub fn main(init: std.process.Init) !void {
     _ = glfw.glfwInit();
     defer glfw.glfwTerminate();
 
-    glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE)
+    glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE);
 
     const window: *glfw.GLFWwindow = glfw.glfwCreateWindow(900, 800, "PlanetaryZigma", null, null) orelse return error.CreateWindow;
     defer glfw.glfwDestroyWindow(window);
 
-    while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
-
-    }
+    while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {}
 
     _ = init;
 
