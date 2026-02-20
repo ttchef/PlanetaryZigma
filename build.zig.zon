@@ -3,40 +3,7 @@
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
     .minimum_zig_version = "0.16.0-dev.2368+380ea6fb5",
-    .dependencies = .{
-        .numz = .{
-            .url = "git+https://github.com/LuEklund/numz#3c6d94d7de9949c8c9b009374f8defa781c61f18",
-            .hash = "numz-0.0.2-V-sGm72vAADIyZHzrjiliiklqkyxc3fxPUR8QnNNDR0p",
-        },
-        .ecs = .{
-            .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",
-            .hash = "ecs-0.0.0-8vkflw8iAAD81LYGmf2I7Kq4QR5wmyFlwfSy6SfpqGFv",
-        },
-        .vulkan_headers = .{
-            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
-            .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
-        },
-        .vma = .{
-            .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.0.1",
-            .hash = "N-V-__8AAHeWOQABqWHSzsYkiKh9vr8y4hszFdUU0OKecnjX",
-        },
-        .stb = .{
-            .url = "git+https://github.com/nothings/stb#fede005abaf93d9d7f3a679d1999b2db341b360f",
-            .hash = "N-V-__8AACIvTgCTqOj6KM32YnqNx1bcsaMuGAeKQEIWZ8Ph",
-        },
-        .cgltf = .{
-            .url = "git+https://github.com/jkuhlmann/cgltf.git#a46a1116f672896ee9233a940b663a10c91b681e",
-            .hash = "N-V-__8AAEpsBAA5vmDdnUJyrMbhpss88BWHjCHd5X15vEst",
-        },
-        .sdl = .{
-            .url = "git+https://github.com/libsdl-org/SDL#ca537d651b82f28bc280685391665eb25c856e00",
-            .hash = "N-V-__8AAPWd8gKEnPWYHgaXRLb2fVuO6VrJ6W8yvIjDA8Uu",
-        },
-        .zphysics = .{
-            .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
-            .hash = "zphysics-0.2.0-dev-nZDEAI_fQgAEgTR_PnmxLaBEeYAqOi4GD644fPnJ9THh",
-        },
-    },
+    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
