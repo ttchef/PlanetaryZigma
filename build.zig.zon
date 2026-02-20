@@ -12,6 +12,14 @@
             .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",
             .hash = "ecs-0.0.0-8vkflw8iAAD81LYGmf2I7Kq4QR5wmyFlwfSy6SfpqGFv",
         },
+        .glfw = .{
+            .url = "git+https://codeberg.org/HaraldWik/glfw_zig#1810b47f2dabc6f1f28d0cef194ede664e9cfa5b",
+            .hash = "glfw-3.4.0-a4Mg88DIBgAhxrur_Nm1I6n3nFdyVhaG8CK01QBiyCZe",
+        },
+        .glfw_headers = .{
+            .url = "git+https://github.com/glfw/glfw#7c9ea952338b792cb2f70d7c663e498725073797",
+            .hash = "N-V-__8AAAQdSgC7xfmpp3sHsMxANb6YDkz_kZ2i1tTRMRP8",
+        },
     },
     .paths = .{
         "build.zig",
