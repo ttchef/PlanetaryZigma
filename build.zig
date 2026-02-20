@@ -4,211 +4,61 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
-    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
-    const vulkan_header_dep = b.dependency("vulkan_headers", .{});
-
-    const vulkan_headers = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add("c.h",
-            \\#include "vulkan/vulkan.h"
-        ),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
-
-    const vma_dep = b.dependency("vma", .{});
-    const vma = b.addTranslateC(.{
-        .root_source_file = vma_dep.path("include/vk_mem_alloc.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    vma.addIncludePath(vulkan_header_dep.path("include/"));
-
-    const cgltf_dep = b.dependency("cgltf", .{});
-    const cgltf = b.addTranslateC(.{
-        .root_source_file = cgltf_dep.path("cgltf.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    cgltf.addIncludePath(cgltf_dep.path("."));
-
-    const zphysics = b.dependency("zphysics", .{
-        .use_double_precision = false,
-        .enable_cross_platform_determinism = true,
-    });
-
-    const stb_dep = b.dependency("stb", .{});
-    const stb = b.addTranslateC(.{
-        .root_source_file = stb_dep.path("stb_image.h"),
+    const shared = b.addModule("shared", .{
+        .root_source_file = b.path("src/shared/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    stb.addIncludePath(b.dependency("stb", .{}).path("."));
 
-    const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
-        //.preferred_linkage = .static,
-        //.strip = null,
-        //.sanitize_c = null,
-        //.pic = null,
-        //.lto = null,
-        //.emscripten_pthreads = false,
-    });
-    const sdl_header = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add("c.h",
-            \\#include <SDL3/SDL.h>
-            \\#include <SDL3/SDL_vulkan.h>
-        ),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    sdl_header.addIncludePath(sdl_dep.path("include/"));
+    // const client_step = b.step("client", "Client step");
+    const client_exe = client(b, target, optimize, shared);
 
-    const cargo_cmd = b.addSystemCommand(&.{
-        "cargo", "build", "--release",
-    });
-
-    const ecs = b.createModule(.{
-        .root_source_file = b.path("src/ecs.zig"),
-        .optimize = optimize,
-        .target = target,
-        .imports = &.{
-            .{ .name = "numz", .module = numz },
-            .{ .name = "ec", .module = ec },
-        },
-    });
-    ecs.addImport("zphysics", zphysics.module("root"));
-    ecs.linkLibrary(zphysics.artifact("joltc"));
-    const renderer = b.addLibrary(.{
-        .name = "renderer",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/render/Renderer.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "sdl", .module = sdl_header },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "vulkan", .module = vulkan_headers },
-                .{ .name = "vma", .module = vma },
-                .{ .name = "cgltf", .module = cgltf },
-                .{ .name = "stb", .module = stb.createModule() },
-                .{ .name = "ecs", .module = ecs },
-            },
-            .link_libcpp = true,
-        }),
-        .linkage = .dynamic,
-    });
-
-    renderer.root_module.linkSystemLibrary("vulkan", .{});
-    renderer.root_module.linkSystemLibrary("SDL3", .{});
-
-    b.installArtifact(renderer);
-
-    const system = b.addLibrary(.{
-        .name = "system",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/System.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "sdl", .module = sdl_header },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "ecs", .module = ecs },
-                .{ .name = "Renderer", .module = renderer.root_module },
-            },
-        }),
-        .linkage = .dynamic,
-    });
-    system.root_module.addImport("zphysics", zphysics.module("root"));
-    system.root_module.linkLibrary(zphysics.artifact("joltc"));
-    system.root_module.linkSystemLibrary("SDL3", .{});
-    b.installArtifact(system);
-
-    const exe = b.addExecutable(.{
-        .name = "PlanetaryZigma",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "sdl", .module = sdl_header },
-                .{ .name = "numz", .module = numz },
-                .{ .name = "vulkan", .module = vulkan_headers },
-                .{ .name = "vma", .module = vma },
-                .{ .name = "stb", .module = stb.createModule() },
-                .{ .name = "Renderer", .module = renderer.root_module },
-                .{ .name = "System", .module = system.root_module },
-                .{ .name = "ecs", .module = ecs },
-            },
-            .link_libcpp = true,
-        }),
-    });
-    // exe.root_module.addImport("zphysics", zphysics.module("root"));
-    // exe.linkLibrary(zphysics.artifact("joltc"));
-    exe.step.dependOn(&cargo_cmd.step);
-
-    exe.root_module.linkSystemLibrary("unwind", .{});
-    exe.root_module.linkSystemLibrary("openssl", .{});
-    exe.root_module.addLibraryPath(b.path("target/release/"));
-    exe.root_module.linkSystemLibrary("spacetime", .{});
-    exe.root_module.linkSystemLibrary("vulkan", .{});
-    exe.root_module.linkSystemLibrary("SDL3", .{});
-
-    renderer.root_module.addCSourceFile(.{
-        .file = b.addWriteFiles().add("vma_impl.cpp",
-            \\#define VMA_IMPLEMENTATION
-            \\#include "vk_mem_alloc.h"
-        ),
-        .flags = &.{"-std=c++14"},
-    });
-
-    renderer.root_module.addCSourceFile(.{
-        .file = b.addWriteFiles().add("cgltf_impl.c",
-            \\#define CGLTF_IMPLEMENTATION
-            \\#include "cgltf.h"
-        ),
-        .flags = &.{"-std=c99"},
-    });
-
-    renderer.root_module.addCSourceFile(.{
-        .file = b.addWriteFiles().add("stbi_impl.c",
-            \\#define STB_IMAGE_IMPLEMENTATION
-            \\#include "stb_image.h"
-        ),
-    });
-
-    renderer.root_module.addIncludePath(vma_dep.path("include/"));
-    renderer.root_module.addIncludePath(vulkan_header_dep.path("include/"));
-    renderer.root_module.addIncludePath(cgltf_dep.path("."));
-    renderer.root_module.addIncludePath(stb_dep.path("."));
-
-    b.installArtifact(exe);
+    // const server_step = b.step("server", "Client step");
+    const server_exe = server(b, target, optimize, shared);
 
     const run_step = b.step("run", "Run the app");
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
-
-    compileShaders(b) catch unreachable;
+    const client_run_cmd = b.addRunArtifact(client_exe);
+    const server_run_cmd = b.addRunArtifact(server_exe);
+    run_step.dependOn(&client_run_cmd.step);
+    run_step.dependOn(&server_run_cmd.step);
+    client_run_cmd.step.dependOn(b.getInstallStep());
+    server_run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        client_run_cmd.addArgs(args);
+        server_run_cmd.addArgs(args);
+    }
 }
 
-fn compileShaders(b: *std.Build) !void {
-    const io = b.graph.io;
-    try std.Io.Dir.cwd().createDirPath(io, b.fmt("{s}/{s}", .{ b.install_path, "shaders" }));
-    const dir = try std.Io.Dir.cwd().openDir(io, "assets/shaders/", .{ .iterate = true });
-    var it = dir.iterate();
+pub fn client(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shared: *std.Build.Module) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = "client",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/client/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+            },
+        }),
+    });
+    b.installArtifact(exe);
 
-    while (try it.next(io)) |entry| {
-        if (entry.kind != .file or std.mem.endsWith(u8, entry.name, ".glsl")) continue;
-        const cmp_cmd = b.addSystemCommand(&.{
-            "glslc",
-            b.fmt("assets/shaders/{s}", .{entry.name}),
-            "-o",
-            b.fmt("zig-out/shaders/{s}.spv", .{entry.name}),
-        });
-        b.default_step.dependOn(&cmp_cmd.step);
-    }
+    return exe;
+}
+
+pub fn server(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shared: *std.Build.Module) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = "server",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/server/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+            },
+        }),
+    });
+    b.installArtifact(exe);
+
+    return exe;
 }
