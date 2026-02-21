@@ -63,6 +63,27 @@ pub fn client(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 }
 
 pub fn server(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shared: *std.Build.Module) *std.Build.Step.Compile {
+    const zphysics = b.dependency("zphysics", .{
+        .use_double_precision = false,
+        .enable_cross_platform_determinism = true,
+    });
+
+    //NOTE: hot reloading.
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/server/System.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                .{ .name = "zphy", .module = zphysics.module("root") },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+    system.root_module.linkLibrary(zphysics.artifact("joltc"));
+
     const exe = b.addExecutable(.{
         .name = "server",
         .root_module = b.createModule(.{
@@ -71,9 +92,11 @@ pub fn server(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
+                .{ .name = "System", .module = system.root_module },
             },
         }),
     });
+
     b.installArtifact(exe);
 
     return exe;
