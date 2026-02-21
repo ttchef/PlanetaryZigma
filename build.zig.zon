@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.2368+380ea6fb5",
+    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
     .dependencies = .{
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",

@@ -10,7 +10,7 @@ const FileWatcher = struct {
     inotify_fd: i32,
 
     pub fn init() !@This() {
-        const fd = try std.posix.inotify_init1(std.os.linux.SOCK.NONBLOCK);
+        const fd = try inotify_init1(std.os.linux.SOCK.NONBLOCK);
         return .{ .inotify_fd = fd };
     }
 
@@ -18,8 +18,8 @@ const FileWatcher = struct {
         std.posix.close(self.inotify_fd);
     }
 
-    pub fn addFile(self: *@This(), path: []const u8) !void {
-        _ = try std.posix.inotify_add_watch(self.inotify_fd, path, std.os.linux.IN.MODIFY);
+    pub fn addFile(self: *@This(), path: [:0]const u8) !void {
+        _ = try inotify_add_watchZ(self.inotify_fd, path, std.os.linux.IN.MODIFY);
     }
 
     pub fn listen(self: *@This()) !bool {
@@ -35,7 +35,7 @@ const FileWatcher = struct {
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
 
-    const search_paths: []const []const u8 = &.{
+    const search_paths: []const [:0]const u8 = &.{
         "../lib/",
         "zig-out/lib/",
         "./",
@@ -44,7 +44,7 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     const lib_path: ?[]const u8 =
         for (search_paths) |path_prefix| {
             var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-            const path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ path_prefix, lib_name });
+            const path: [:0]u8 = try std.fmt.bufPrintSentinel(&buffer, "{s}{s}", .{ path_prefix, lib_name }, 0);
 
             if ((std.Io.Dir.cwd().access(io, path, .{}) catch null) != null) {
                 break @constCast(path);
@@ -92,4 +92,36 @@ pub fn reload(self: *@This()) !void {
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
     return self.dynlib.lookup(T, name) orelse error.DynlibLookup;
+}
+
+/// initialize an inotify instance
+pub fn inotify_init1(flags: u32) !i32 {
+    const rc = std.os.linux.syscall1(.inotify_init1, flags);
+    switch (std.posix.errno(rc)) {
+        .SUCCESS => return @intCast(rc),
+        .INVAL => unreachable,
+        .MFILE => return error.ProcessFdQuotaExceeded,
+        .NFILE => return error.SystemFdQuotaExceeded,
+        .NOMEM => return error.SystemResources,
+        else => |err| return std.posix.unexpectedErrno(err),
+    }
+}
+
+/// Same as `inotify_add_watch` except pathname is null-terminated.
+pub fn inotify_add_watchZ(inotify_fd: i32, pathname: [*:0]const u8, mask: u32) !i32 {
+    const rc = std.os.linux.syscall3(.inotify_add_watch, @as(usize, @bitCast(@as(isize, inotify_fd))), @intFromPtr(pathname), mask);
+    switch (std.posix.errno(rc)) {
+        .SUCCESS => return @intCast(rc),
+        .ACCES => return error.AccessDenied,
+        .BADF => unreachable,
+        .FAULT => unreachable,
+        .INVAL => unreachable,
+        .NAMETOOLONG => return error.NameTooLong,
+        .NOENT => return error.FileNotFound,
+        .NOMEM => return error.SystemResources,
+        .NOSPC => return error.UserResourceLimitReached,
+        .NOTDIR => return error.NotDir,
+        .EXIST => return error.WatchAlreadyExists,
+        else => |err| return std.posix.unexpectedErrno(err),
+    }
 }
