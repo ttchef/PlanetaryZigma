@@ -15,18 +15,30 @@ pub fn main(init: std.process.Init) !void {
 
     var system_watcher: shared.Watcher = try .init("libsystem{s}", io);
     var systems: System = undefined;
-    const systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
-    // var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
-    const systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
-    // var systemsReload = try system_watcher.lookup(System.ReloadSystems, "reload");
+    var systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
+    var systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
+    var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
+
     if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
     defer systemsDeinit(&systems, &allocator);
+    var count: usize = 0;
 
     while (true) {
-        std.debug.print("jello\n", .{});
-        const stream = try server.accept(io);
+        count += 1;
 
-        _ = io.async(handleClient, .{ io, stream });
+        std.debug.print("jello {d}\n", .{systems.number});
+        systemsUpdate(&systems, 1.0);
+        if (try system_watcher.listen()) {
+            systemsDeinit(&systems, &allocator);
+            try system_watcher.reload();
+            systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
+            systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
+            systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
+            if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
+        }
+        // const stream = try server.accept(io);
+        //
+        // _ = io.async(handleClient, .{ io, stream });
     }
 }
 

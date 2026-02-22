@@ -44,7 +44,7 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     const lib_path: ?[]const u8 =
         for (search_paths) |path_prefix| {
             var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-            const path: [:0]u8 = try std.fmt.bufPrintSentinel(&buffer, "{s}{s}", .{ path_prefix, lib_name }, 0);
+            const path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ path_prefix, lib_name });
 
             if ((std.Io.Dir.cwd().access(io, path, .{}) catch null) != null) {
                 break @constCast(path);
@@ -91,37 +91,39 @@ pub fn reload(self: *@This()) !void {
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
-    return self.dynlib.lookup(T, name) orelse error.DynlibLookup;
+    const function_pointer = self.dynlib.lookup(T, name);
+    if (function_pointer == null) return error.DynlibLookup;
+    return function_pointer.?;
 }
 
-/// initialize an inotify instance
+// /// initialize an inotify instance
 pub fn inotify_init1(flags: u32) !i32 {
     const rc = std.os.linux.syscall1(.inotify_init1, flags);
-    switch (std.posix.errno(rc)) {
-        .SUCCESS => return @intCast(rc),
+    return switch (std.posix.errno(rc)) {
+        .SUCCESS => @intCast(rc),
         .INVAL => unreachable,
-        .MFILE => return error.ProcessFdQuotaExceeded,
-        .NFILE => return error.SystemFdQuotaExceeded,
-        .NOMEM => return error.SystemResources,
-        else => |err| return std.posix.unexpectedErrno(err),
-    }
+        .MFILE => error.ProcessFdQuotaExceeded,
+        .NFILE => error.SystemFdQuotaExceeded,
+        .NOMEM => error.SystemResources,
+        else => |err| std.posix.unexpectedErrno(err),
+    };
 }
 
 /// Same as `inotify_add_watch` except pathname is null-terminated.
 pub fn inotify_add_watchZ(inotify_fd: i32, pathname: [*:0]const u8, mask: u32) !i32 {
     const rc = std.os.linux.syscall3(.inotify_add_watch, @as(usize, @bitCast(@as(isize, inotify_fd))), @intFromPtr(pathname), mask);
-    switch (std.posix.errno(rc)) {
-        .SUCCESS => return @intCast(rc),
-        .ACCES => return error.AccessDenied,
+    return switch (std.posix.errno(rc)) {
+        .SUCCESS => @intCast(rc),
+        .ACCES => error.AccessDenied,
         .BADF => unreachable,
         .FAULT => unreachable,
         .INVAL => unreachable,
-        .NAMETOOLONG => return error.NameTooLong,
-        .NOENT => return error.FileNotFound,
-        .NOMEM => return error.SystemResources,
-        .NOSPC => return error.UserResourceLimitReached,
-        .NOTDIR => return error.NotDir,
-        .EXIST => return error.WatchAlreadyExists,
-        else => |err| return std.posix.unexpectedErrno(err),
-    }
+        .NAMETOOLONG => error.NameTooLong,
+        .NOENT => error.FileNotFound,
+        .NOMEM => error.SystemResources,
+        .NOSPC => error.UserResourceLimitReached,
+        .NOTDIR => error.NotDir,
+        .EXIST => error.WatchAlreadyExists,
+        else => |err| std.posix.unexpectedErrno(err),
+    };
 }

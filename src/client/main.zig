@@ -6,6 +6,8 @@ pub fn main(init: std.process.Init) !void {
     _ = glfw.glfwInit();
     defer glfw.glfwTerminate();
 
+    std.debug.print("client\n", .{});
+
     glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE);
 
     const window: *glfw.GLFWwindow = glfw.glfwCreateWindow(900, 800, "PlanetaryZigma", null, null) orelse return error.CreateWindow;

@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    buildClient(b, target, optimize);
+    // buildClient(b, target, optimize);
     buildServer(b, target, optimize);
 }
 
@@ -55,10 +55,10 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
 
 pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const shared = b.modules.get("shared").?;
-    const zphysics = b.dependency("zphysics", .{
-        .use_double_precision = false,
-        .enable_cross_platform_determinism = true,
-    });
+    // const zphysics = b.dependency("zphysics", .{
+    //     .use_double_precision = false,
+    //     .enable_cross_platform_determinism = true,
+    // });
 
     //NOTE: hot reloading.
     const system = b.addLibrary(.{
@@ -69,12 +69,13 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                .{ .name = "zphy", .module = zphysics.module("root") },
+                // .{ .name = "zphy", .module = zphysics.module("root") },
             },
         }),
         .linkage = .dynamic,
     });
-    system.root_module.linkLibrary(zphysics.artifact("joltc"));
+    b.installArtifact(system);
+    // system.root_module.linkLibrary(zphysics.artifact("joltc"));
 
     const exe = b.addExecutable(.{
         .name = "server",
