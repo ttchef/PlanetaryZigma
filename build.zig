@@ -4,33 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const shared = b.addModule("shared", .{
+    _ = b.addModule("shared", .{
         .root_source_file = b.path("src/shared/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    // const client_step = b.step("client", "Client step");
-    const client_exe = client(b, target, optimize, shared);
-
-    // const server_step = b.step("server", "Client step");
-    const server_exe = server(b, target, optimize, shared);
-
-    const run_step = b.step("run", "Run the app");
-    const client_run_cmd = b.addRunArtifact(client_exe);
-    const server_run_cmd = b.addRunArtifact(server_exe);
-    run_step.dependOn(&client_run_cmd.step);
-    run_step.dependOn(&server_run_cmd.step);
-    client_run_cmd.step.dependOn(b.getInstallStep());
-    server_run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        client_run_cmd.addArgs(args);
-        server_run_cmd.addArgs(args);
-    }
+    buildClient(b, target, optimize);
+    buildServer(b, target, optimize);
 }
 
 // TODO(ernesto): HOT RELOADING
-pub fn client(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shared: *std.Build.Module) *std.Build.Step.Compile {
+pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const shared = b.modules.get("shared").?;
+
     const glfw_headers = b.dependency("glfw_headers", .{});
     const glfw_translate_c = b.addTranslateC(.{
         .root_source_file = glfw_headers.path("include/GLFW/glfw3.h"),
@@ -43,7 +30,7 @@ pub fn client(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
     });
 
     const exe = b.addExecutable(.{
-        .name = "server",
+        .name = "client",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/client/main.zig"),
             .target = target,
@@ -59,10 +46,37 @@ pub fn client(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
 
     b.installArtifact(exe);
 
-    return exe;
+    const run_step = b.step("run-client", "Run the client");
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_cmd.addArgs(args);
 }
 
-pub fn server(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, shared: *std.Build.Module) *std.Build.Step.Compile {
+pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const shared = b.modules.get("shared").?;
+    // const zphysics = b.dependency("zphysics", .{
+    //     .use_double_precision = false,
+    //     .enable_cross_platform_determinism = true,
+    // });
+
+    //NOTE: hot reloading.
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/server/System.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                // .{ .name = "zphy", .module = zphysics.module("root") },
+            },
+        }),
+        .linkage = .dynamic,
+    });
+    b.installArtifact(system);
+    // system.root_module.linkLibrary(zphysics.artifact("joltc"));
+
     const exe = b.addExecutable(.{
         .name = "server",
         .root_module = b.createModule(.{
@@ -71,10 +85,16 @@ pub fn server(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
+                .{ .name = "System", .module = system.root_module },
             },
         }),
     });
+
     b.installArtifact(exe);
 
-    return exe;
+    const run_step = b.step("run-server", "Run the server");
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_cmd.addArgs(args);
 }

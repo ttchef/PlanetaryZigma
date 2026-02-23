@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.2368+380ea6fb5",
+    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
     .dependencies = .{
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
@@ -19,6 +19,10 @@
         .glfw_headers = .{
             .url = "git+https://github.com/glfw/glfw#7c9ea952338b792cb2f70d7c663e498725073797",
             .hash = "N-V-__8AAAQdSgC7xfmpp3sHsMxANb6YDkz_kZ2i1tTRMRP8",
+        },
+        .zphysics = .{
+            .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
+            .hash = "zphysics-0.2.0-dev-nZDEAI_fQgAEgTR_PnmxLaBEeYAqOi4GD644fPnJ9THh",
         },
     },
     .paths = .{
