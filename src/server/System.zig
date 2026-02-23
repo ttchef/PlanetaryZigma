@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = @import("test.zig");
 // const Physics = @import("Physics.zig");
 
 // physics: *Physics,
@@ -13,9 +14,21 @@ export fn initSystems(self: *@This(), allocator: *std.mem.Allocator) u32 {
     // _ = self;
     _ = allocator;
     self.number = 0;
+    // testing.foo();
+
+    _ = std.c.write(1, "hello\n", 6);
+
+    // defer threaded.deinit();
+    // var stdout_writer_buffer: [255]u8 = undefined;
+    // var stdout_writer: std.Io.File.Writer = .init(.stdout(), io, &stdout_writer_buffer);
+    // const stdout = &stdout_writer.interface;
+    //
+    // stdout.print("hello\n", .{}) catch {};
+    // stdout.flush() catch {};
     // self.physics = Physics.init(allocator) catch |err| return @intFromError(err);
     return 0;
 }
+
 export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
     _ = self;
     _ = allocator;
@@ -39,7 +52,8 @@ export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
 }
 
 export fn update(self: *@This(), delta_time: f32) void {
-    self.number = delta_time;
-    // _ = delta_time;
+    // self.number += delta_time;
+    _ = delta_time;
+    _ = self;
     //
 }

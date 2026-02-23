@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // buildClient(b, target, optimize);
+    buildClient(b, target, optimize);
     buildServer(b, target, optimize);
 }
 
@@ -30,7 +30,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     });
 
     const exe = b.addExecutable(.{
-        .name = "server",
+        .name = "client",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/client/main.zig"),
             .target = target,
