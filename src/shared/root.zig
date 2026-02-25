@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const nz = @import("numz");
-pub const ecs = @import("ecs");
+pub const ecs = @import("ecs/ecs.zig");
 pub const Watcher = @import("watcher.zig");
 
 pub const net = struct {
