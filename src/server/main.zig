@@ -5,6 +5,8 @@ const shared = @import("shared");
 pub fn main(init: std.process.Init) !void {
     std.debug.print("server\n", .{});
 
+    // const ecs = shared.ecs.Pool
+
     var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
     defer _ = gpa.deinit();
     var allocator = gpa.allocator();
