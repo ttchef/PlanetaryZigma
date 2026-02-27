@@ -11,7 +11,6 @@ pub const UpdateSystems = *const fn (*@This(), f32) callconv(.c) void;
 export fn initSystems(self: *@This(), allocator: *std.mem.Allocator) u32 {
     _ = self;
     _ = allocator;
-    std.debug.print("hello", .{});
     return 0;
 }
 
