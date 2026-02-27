@@ -4,10 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
+    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
+
     _ = b.addModule("shared", .{
         .root_source_file = b.path("src/shared/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "ecs", .module = ec },
+            .{ .name = "numz", .module = numz },
+        },
     });
 
     buildClient(b, target, optimize);
