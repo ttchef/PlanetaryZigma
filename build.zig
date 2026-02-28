@@ -36,6 +36,9 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         .optimize = optimize,
     });
 
+    const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
+    const objc = b.dependency("zig_objc", .{ .target = target, .optimize = optimize, }).module("objc");
+
     const exe = b.addExecutable(.{
         .name = "client",
         .root_module = b.createModule(.{
@@ -45,11 +48,35 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+                .{ .name = "wasm_runtime", .module = wasm_runtime },
+                .{ .name = "objc", .module = objc },
             },
         }),
     });
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
+    if (target.result.os.tag == .macos) {
+        exe.root_module.linkFramework("Cocoa", .{});
+        exe.root_module.linkFramework("QuartzCore", .{});
+        exe.root_module.linkFramework("Metal", .{});
+        exe.root_module.linkFramework("CoreGraphics", .{});
+        exe.root_module.linkFramework("ImageIO", .{});
+        exe.root_module.addSystemIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        exe.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/local/include" });
+        exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        exe.root_module.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+
+        exe.root_module.linkSystemLibrary("shaderc_shared", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-c", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-core", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-cpp", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-glsl", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-hlsl", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-msl", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-reflect", .{});
+        exe.root_module.linkSystemLibrary("spirv-cross-util", .{});
+        exe.root_module.link_libcpp = true;
+    }
 
     b.installArtifact(exe);
 
