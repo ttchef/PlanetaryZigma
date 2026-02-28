@@ -31,6 +31,7 @@
         .zig_objc = .{
             .url = "git+https://github.com/lolzdev/zig-objc#db99ba17af2ed3b1fc05c463f86cdb46eb0aae04",
             .hash = "zig_objc-0.0.0-Ir_Sp3IfAQDUK5DWXJvWDmZqeMFjgSg26Ju7VlVhEeYz",
+            .lazy = true,
         },
     },
     .paths = .{

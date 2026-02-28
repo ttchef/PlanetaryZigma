@@ -37,7 +37,6 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     });
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
-    const objc = b.dependency("zig_objc", .{ .target = target, .optimize = optimize, }).module("objc");
 
     const exe = b.addExecutable(.{
         .name = "client",
@@ -49,10 +48,16 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 .{ .name = "shared", .module = shared },
                 .{ .name = "glfw", .module = glfw_translate_c.createModule() },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
-                .{ .name = "objc", .module = objc },
             },
         }),
     });
+    if (target.result.os.tag.isDarwin()) {
+        const objc = b.lazyDependency("zig_objc", .{
+            .target = target,
+            .optimize = optimize,
+        }).?.module("objc");
+        exe.root_module.addImport("objc", objc);
+    }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
     if (target.result.os.tag == .macos) {
