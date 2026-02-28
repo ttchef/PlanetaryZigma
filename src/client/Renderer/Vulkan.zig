@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const vk = @import("vulkan");
+pub const Func = @import("Vulkan/utils.zig").Func;
 
 pub fn init(allocator: std.mem.Allocator) !@This() {
     _ = allocator;

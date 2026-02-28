@@ -1,11 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 inner: Inner,
 
 const Metal = @import("Renderer/Metal.zig");
 const Vulkan = @import("Renderer/Vulkan.zig");
 
-pub const Inner = switch (std.builtin.os.tag) {
+pub const Inner = switch (builtin.os.tag) {
     .macos => Metal,
     else => Vulkan,
 };

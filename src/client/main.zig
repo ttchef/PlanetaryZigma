@@ -2,7 +2,6 @@ const std = @import("std");
 const glfw = @import("glfw");
 const shared = @import("shared");
 const Renderer = @import("Renderer.zig");
-const MetalRenderer = @import("rendering/MetalRenderer.zig");
 
 // const NSUInteger = c_ulong;
 //
