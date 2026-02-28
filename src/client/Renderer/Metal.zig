@@ -1,7 +1,6 @@
 const std = @import("std");
 const glfw = @import("glfw");
 const objc = @import("objc");
-const Renderer = @import("Renderer.zig");
 const shaderc = @cImport({
     @cInclude("shaderc/shaderc.h");
 });
@@ -13,6 +12,122 @@ const MetalRenderer = @This();
 
 extern fn glfwGetCocoaWindow(window: *glfw.GLFWwindow) ?*anyopaque;
 extern fn MTLCreateSystemDefaultDevice() ?*anyopaque;
+
+pub const BufferHandle = enum(u32) { invalid = 0, _ };
+pub const TextureHandle = enum(u32) { invalid = 0, _ };
+pub const SamplerHandle = enum(u32) { invalid = 0, _ };
+pub const ShaderHandle = enum(u32) { invalid = 0, _ };
+pub const PipelineHandle = enum(u32) { invalid = 0, _ };
+
+pub const Viewport = struct {
+    width: u32,
+    height: u32,
+};
+
+pub const ClearColor = struct {
+    r: f64 = 0.08,
+    g: f64 = 0.10,
+    b: f64 = 0.14,
+    a: f64 = 1.0,
+};
+
+pub const PixelFormat = enum {
+    bgra8_unorm,
+    rgba8_unorm,
+    depth32_float,
+};
+
+pub const PrimitiveTopology = enum {
+    triangle,
+    line,
+    point,
+};
+
+pub const IndexType = enum {
+    uint16,
+    uint32,
+};
+
+pub const ShaderStage = enum {
+    vertex,
+    fragment,
+    compute,
+};
+
+pub const BufferUsage = packed struct(u32) {
+    vertex: bool = false,
+    index: bool = false,
+    uniform: bool = false,
+    storage: bool = false,
+    copy_src: bool = false,
+    copy_dst: bool = false,
+    _padding: u26 = 0,
+};
+
+pub const TextureUsage = packed struct(u32) {
+    sampled: bool = false,
+    storage: bool = false,
+    render_target: bool = false,
+    copy_src: bool = false,
+    copy_dst: bool = false,
+    _padding: u27 = 0,
+};
+
+pub const SamplerFilter = enum {
+    nearest,
+    linear,
+};
+
+pub const AddressMode = enum {
+    clamp_to_edge,
+    repeat,
+};
+
+pub const BufferDesc = struct {
+    size: usize,
+    usage: BufferUsage,
+};
+
+pub const TextureDesc = struct {
+    width: u32,
+    height: u32,
+    format: PixelFormat,
+    usage: TextureUsage,
+    mip_levels: u32 = 1,
+};
+
+pub const SamplerDesc = struct {
+    min_filter: SamplerFilter = .linear,
+    mag_filter: SamplerFilter = .linear,
+    address_mode_u: AddressMode = .repeat,
+    address_mode_v: AddressMode = .repeat,
+};
+
+pub const ShaderDesc = struct {
+    stage: ShaderStage,
+    entry_point: [:0]const u8,
+    glsl_source: [:0]const u8,
+};
+
+pub const PipelineDesc = struct {
+    vertex_shader: ShaderHandle,
+    fragment_shader: ?ShaderHandle = null,
+    color_format: PixelFormat = .bgra8_unorm,
+    topology: PrimitiveTopology = .triangle,
+};
+
+pub const PassDesc = struct {
+    clear_color: ?ClearColor = null,
+};
+
+pub const TextureCopy = struct {
+    x: u32 = 0,
+    y: u32 = 0,
+    width: u32,
+    height: u32,
+    mip_level: u32 = 0,
+    bytes_per_row: usize,
+};
 
 const NSUInteger = c_ulong;
 const MTLPixelFormat = NSUInteger;
@@ -74,7 +189,7 @@ const BufferResource = struct {
 
 const TextureResource = struct {
     object: objc.Object,
-    desc: Renderer.TextureDesc,
+    desc: TextureDesc,
 };
 
 const SamplerResource = struct {
@@ -82,7 +197,7 @@ const SamplerResource = struct {
 };
 
 const ShaderResource = struct {
-    stage: Renderer.ShaderStage,
+    stage: ShaderStage,
     library: objc.Object,
     function: objc.Object,
     msl_source: [:0]u8,
@@ -95,7 +210,7 @@ const CompiledMsl = struct {
 
 const PipelineResource = struct {
     object: objc.Object,
-    topology: Renderer.PrimitiveTopology,
+    topology: PrimitiveTopology,
 };
 
 allocator: std.mem.Allocator,
@@ -103,7 +218,7 @@ window: *glfw.GLFWwindow,
 device: objc.Object,
 command_queue: objc.Object,
 metal_layer: objc.Object,
-clear_color: Renderer.ClearColor = .{},
+clear_color: ClearColor = .{},
 
 buffers: std.ArrayListUnmanaged(?BufferResource) = .{},
 textures: std.ArrayListUnmanaged(?TextureResource) = .{},
@@ -114,10 +229,10 @@ pipelines: std.ArrayListUnmanaged(?PipelineResource) = .{},
 command_buffer: ?objc.Object = null,
 drawable: ?objc.Object = null,
 encoder: ?objc.Object = null,
-active_topology: Renderer.PrimitiveTopology = .triangle,
+active_topology: PrimitiveTopology = .triangle,
 
 index_buffer: ?objc.Object = null,
-index_type: Renderer.IndexType = .uint16,
+index_type: IndexType = .uint16,
 index_offset: NSUInteger = 0,
 
 pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !MetalRenderer {
@@ -147,12 +262,12 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !MetalRender
     };
 }
 
-pub fn renderer(self: *MetalRenderer) Renderer {
-    return .{
-        .ptr = self,
-        .vtable = &vtable,
-    };
-}
+// pub fn renderer(self: *MetalRenderer) {
+//     return .{
+//         .ptr = self,
+//         .vtable = &vtable,
+//     };
+// }
 
 pub fn deinit(self: *MetalRenderer) void {
     _ = self.endPass() catch {};
@@ -190,11 +305,11 @@ pub fn deinit(self: *MetalRenderer) void {
     self.device.msgSend(void, "release", .{});
 }
 
-pub fn backend(_: *MetalRenderer) Renderer.Backend {
-    return .metal;
-}
+// pub fn backend(_: *MetalRenderer) Backend {
+//     return .metal;
+// }
 
-pub fn beginFrame(self: *MetalRenderer, viewport: Renderer.Viewport) !void {
+pub fn beginFrame(self: *MetalRenderer, viewport: Viewport) !void {
     if (self.command_buffer != null) return error.FrameAlreadyBegun;
 
     self.metal_layer.msgSend(void, "setDrawableSize:", .{CGSize{
@@ -230,7 +345,7 @@ pub fn present(self: *MetalRenderer) !void {
     self.index_offset = 0;
 }
 
-pub fn createBuffer(self: *MetalRenderer, desc: Renderer.BufferDesc) !Renderer.BufferHandle {
+pub fn createBuffer(self: *MetalRenderer, desc: BufferDesc) !BufferHandle {
     const buffer = self.device.msgSend(objc.Object, "newBufferWithLength:options:", .{
         @as(NSUInteger, @intCast(desc.size)),
         MTLResourceStorageModeShared,
@@ -238,7 +353,7 @@ pub fn createBuffer(self: *MetalRenderer, desc: Renderer.BufferDesc) !Renderer.B
     if (buffer.value == null) return error.BufferCreateFailed;
 
     return try appendHandle(
-        Renderer.BufferHandle,
+        BufferHandle,
         BufferResource,
         self.allocator,
         &self.buffers,
@@ -246,7 +361,7 @@ pub fn createBuffer(self: *MetalRenderer, desc: Renderer.BufferDesc) !Renderer.B
     );
 }
 
-pub fn createTexture(self: *MetalRenderer, desc: Renderer.TextureDesc) !Renderer.TextureHandle {
+pub fn createTexture(self: *MetalRenderer, desc: TextureDesc) !TextureHandle {
     const MTLTextureDescriptor = objc.getClass("MTLTextureDescriptor") orelse return error.NoMTLTextureDescriptor;
     const texture_descriptor = MTLTextureDescriptor.msgSend(objc.Object, "texture2DDescriptorWithPixelFormat:width:height:mipmapped:", .{
         toMTLPixelFormat(desc.format),
@@ -263,7 +378,7 @@ pub fn createTexture(self: *MetalRenderer, desc: Renderer.TextureDesc) !Renderer
     if (texture.value == null) return error.TextureCreateFailed;
 
     return try appendHandle(
-        Renderer.TextureHandle,
+        TextureHandle,
         TextureResource,
         self.allocator,
         &self.textures,
@@ -271,7 +386,7 @@ pub fn createTexture(self: *MetalRenderer, desc: Renderer.TextureDesc) !Renderer
     );
 }
 
-pub fn createSampler(self: *MetalRenderer, desc: Renderer.SamplerDesc) !Renderer.SamplerHandle {
+pub fn createSampler(self: *MetalRenderer, desc: SamplerDesc) !SamplerHandle {
     const MTLSamplerDescriptor = objc.getClass("MTLSamplerDescriptor") orelse return error.NoMTLSamplerDescriptor;
     const sampler_descriptor = MTLSamplerDescriptor.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
     defer sampler_descriptor.msgSend(void, "release", .{});
@@ -285,7 +400,7 @@ pub fn createSampler(self: *MetalRenderer, desc: Renderer.SamplerDesc) !Renderer
     if (sampler.value == null) return error.SamplerCreateFailed;
 
     return try appendHandle(
-        Renderer.SamplerHandle,
+        SamplerHandle,
         SamplerResource,
         self.allocator,
         &self.samplers,
@@ -293,7 +408,7 @@ pub fn createSampler(self: *MetalRenderer, desc: Renderer.SamplerDesc) !Renderer
     );
 }
 
-pub fn createShader(self: *MetalRenderer, desc: Renderer.ShaderDesc) !Renderer.ShaderHandle {
+pub fn createShader(self: *MetalRenderer, desc: ShaderDesc) !ShaderHandle {
     const compiled_msl = try compileGlslToMsl(self.allocator, desc.glsl_source, desc.stage, desc.entry_point);
     errdefer self.allocator.free(compiled_msl.source);
     errdefer self.allocator.free(compiled_msl.entry_point);
@@ -328,7 +443,7 @@ pub fn createShader(self: *MetalRenderer, desc: Renderer.ShaderDesc) !Renderer.S
     self.allocator.free(compiled_msl.entry_point);
 
     return try appendHandle(
-        Renderer.ShaderHandle,
+        ShaderHandle,
         ShaderResource,
         self.allocator,
         &self.shaders,
@@ -341,9 +456,9 @@ pub fn createShader(self: *MetalRenderer, desc: Renderer.ShaderDesc) !Renderer.S
     );
 }
 
-pub fn createPipeline(self: *MetalRenderer, desc: Renderer.PipelineDesc) !Renderer.PipelineHandle {
+pub fn createPipeline(self: *MetalRenderer, desc: PipelineDesc) !PipelineHandle {
     const vertex_shader = try lookup(
-        Renderer.ShaderHandle,
+        ShaderHandle,
         ShaderResource,
         &self.shaders,
         desc.vertex_shader,
@@ -352,7 +467,7 @@ pub fn createPipeline(self: *MetalRenderer, desc: Renderer.PipelineDesc) !Render
 
     const fragment_shader = if (desc.fragment_shader) |fragment_handle| blk: {
         const shader = try lookup(
-            Renderer.ShaderHandle,
+            ShaderHandle,
             ShaderResource,
             &self.shaders,
             fragment_handle,
@@ -385,7 +500,7 @@ pub fn createPipeline(self: *MetalRenderer, desc: Renderer.PipelineDesc) !Render
     }
 
     return try appendHandle(
-        Renderer.PipelineHandle,
+        PipelineHandle,
         PipelineResource,
         self.allocator,
         &self.pipelines,
@@ -396,9 +511,9 @@ pub fn createPipeline(self: *MetalRenderer, desc: Renderer.PipelineDesc) !Render
     );
 }
 
-pub fn destroyBuffer(self: *MetalRenderer, handle: Renderer.BufferHandle) !void {
+pub fn destroyBuffer(self: *MetalRenderer, handle: BufferHandle) !void {
     const entry = try lookupPtr(
-        Renderer.BufferHandle,
+        BufferHandle,
         BufferResource,
         &self.buffers,
         handle,
@@ -408,9 +523,9 @@ pub fn destroyBuffer(self: *MetalRenderer, handle: Renderer.BufferHandle) !void 
     entry.* = null;
 }
 
-pub fn destroyTexture(self: *MetalRenderer, handle: Renderer.TextureHandle) !void {
+pub fn destroyTexture(self: *MetalRenderer, handle: TextureHandle) !void {
     const entry = try lookupPtr(
-        Renderer.TextureHandle,
+        TextureHandle,
         TextureResource,
         &self.textures,
         handle,
@@ -420,9 +535,9 @@ pub fn destroyTexture(self: *MetalRenderer, handle: Renderer.TextureHandle) !voi
     entry.* = null;
 }
 
-pub fn destroySampler(self: *MetalRenderer, handle: Renderer.SamplerHandle) !void {
+pub fn destroySampler(self: *MetalRenderer, handle: SamplerHandle) !void {
     const entry = try lookupPtr(
-        Renderer.SamplerHandle,
+        SamplerHandle,
         SamplerResource,
         &self.samplers,
         handle,
@@ -432,9 +547,9 @@ pub fn destroySampler(self: *MetalRenderer, handle: Renderer.SamplerHandle) !voi
     entry.* = null;
 }
 
-pub fn destroyShader(self: *MetalRenderer, handle: Renderer.ShaderHandle) !void {
+pub fn destroyShader(self: *MetalRenderer, handle: ShaderHandle) !void {
     const entry = try lookupPtr(
-        Renderer.ShaderHandle,
+        ShaderHandle,
         ShaderResource,
         &self.shaders,
         handle,
@@ -446,9 +561,9 @@ pub fn destroyShader(self: *MetalRenderer, handle: Renderer.ShaderHandle) !void 
     entry.* = null;
 }
 
-pub fn destroyPipeline(self: *MetalRenderer, handle: Renderer.PipelineHandle) !void {
+pub fn destroyPipeline(self: *MetalRenderer, handle: PipelineHandle) !void {
     const entry = try lookupPtr(
-        Renderer.PipelineHandle,
+        PipelineHandle,
         PipelineResource,
         &self.pipelines,
         handle,
@@ -458,9 +573,9 @@ pub fn destroyPipeline(self: *MetalRenderer, handle: Renderer.PipelineHandle) !v
     entry.* = null;
 }
 
-pub fn updateBuffer(self: *MetalRenderer, handle: Renderer.BufferHandle, offset: usize, data: []const u8) !void {
+pub fn updateBuffer(self: *MetalRenderer, handle: BufferHandle, offset: usize, data: []const u8) !void {
     const buffer = try lookup(
-        Renderer.BufferHandle,
+        BufferHandle,
         BufferResource,
         &self.buffers,
         handle,
@@ -473,9 +588,9 @@ pub fn updateBuffer(self: *MetalRenderer, handle: Renderer.BufferHandle, offset:
     @memcpy(dst, data);
 }
 
-pub fn updateTexture(self: *MetalRenderer, handle: Renderer.TextureHandle, copy: Renderer.TextureCopy, data: []const u8) !void {
+pub fn updateTexture(self: *MetalRenderer, handle: TextureHandle, copy: TextureCopy, data: []const u8) !void {
     const texture = try lookup(
-        Renderer.TextureHandle,
+        TextureHandle,
         TextureResource,
         &self.textures,
         handle,
@@ -509,7 +624,7 @@ pub fn updateTexture(self: *MetalRenderer, handle: Renderer.TextureHandle, copy:
     });
 }
 
-pub fn beginPass(self: *MetalRenderer, desc: Renderer.PassDesc) !void {
+pub fn beginPass(self: *MetalRenderer, desc: PassDesc) !void {
     if (self.command_buffer == null) return error.FrameNotBegun;
     if (self.encoder != null) return error.PassAlreadyBegun;
 
@@ -551,10 +666,10 @@ pub fn endPass(self: *MetalRenderer) !void {
     }
 }
 
-pub fn setPipeline(self: *MetalRenderer, pipeline_handle: Renderer.PipelineHandle) !void {
+pub fn setPipeline(self: *MetalRenderer, pipeline_handle: PipelineHandle) !void {
     const encoder = self.encoder orelse return error.NoActivePass;
     const pipeline = try lookup(
-        Renderer.PipelineHandle,
+        PipelineHandle,
         PipelineResource,
         &self.pipelines,
         pipeline_handle,
@@ -563,10 +678,10 @@ pub fn setPipeline(self: *MetalRenderer, pipeline_handle: Renderer.PipelineHandl
     self.active_topology = pipeline.topology;
 }
 
-pub fn setVertexBuffer(self: *MetalRenderer, slot: u32, buffer_handle: Renderer.BufferHandle, offset: usize) !void {
+pub fn setVertexBuffer(self: *MetalRenderer, slot: u32, buffer_handle: BufferHandle, offset: usize) !void {
     const encoder = self.encoder orelse return error.NoActivePass;
     const buffer = try lookup(
-        Renderer.BufferHandle,
+        BufferHandle,
         BufferResource,
         &self.buffers,
         buffer_handle,
@@ -578,9 +693,9 @@ pub fn setVertexBuffer(self: *MetalRenderer, slot: u32, buffer_handle: Renderer.
     });
 }
 
-pub fn setIndexBuffer(self: *MetalRenderer, buffer_handle: Renderer.BufferHandle, index_type: Renderer.IndexType, offset: usize) !void {
+pub fn setIndexBuffer(self: *MetalRenderer, buffer_handle: BufferHandle, index_type: IndexType, offset: usize) !void {
     const buffer = try lookup(
-        Renderer.BufferHandle,
+        BufferHandle,
         BufferResource,
         &self.buffers,
         buffer_handle,
@@ -590,10 +705,10 @@ pub fn setIndexBuffer(self: *MetalRenderer, buffer_handle: Renderer.BufferHandle
     self.index_offset = @as(NSUInteger, @intCast(offset));
 }
 
-pub fn bindTexture(self: *MetalRenderer, stage: Renderer.ShaderStage, slot: u32, texture_handle: Renderer.TextureHandle) !void {
+pub fn bindTexture(self: *MetalRenderer, stage: ShaderStage, slot: u32, texture_handle: TextureHandle) !void {
     const encoder = self.encoder orelse return error.NoActivePass;
     const texture = try lookup(
-        Renderer.TextureHandle,
+        TextureHandle,
         TextureResource,
         &self.textures,
         texture_handle,
@@ -611,10 +726,10 @@ pub fn bindTexture(self: *MetalRenderer, stage: Renderer.ShaderStage, slot: u32,
     }
 }
 
-pub fn bindSampler(self: *MetalRenderer, stage: Renderer.ShaderStage, slot: u32, sampler_handle: Renderer.SamplerHandle) !void {
+pub fn bindSampler(self: *MetalRenderer, stage: ShaderStage, slot: u32, sampler_handle: SamplerHandle) !void {
     const encoder = self.encoder orelse return error.NoActivePass;
     const sampler = try lookup(
-        Renderer.SamplerHandle,
+        SamplerHandle,
         SamplerResource,
         &self.samplers,
         sampler_handle,
@@ -632,7 +747,7 @@ pub fn bindSampler(self: *MetalRenderer, stage: Renderer.ShaderStage, slot: u32,
     }
 }
 
-pub fn pushConstants(self: *MetalRenderer, stage: Renderer.ShaderStage, data: []const u8) !void {
+pub fn pushConstants(self: *MetalRenderer, stage: ShaderStage, data: []const u8) !void {
     const encoder = self.encoder orelse return error.NoActivePass;
     if (data.len > MaxPushConstantsBytes) return error.PushConstantsTooLarge;
 
@@ -681,7 +796,7 @@ pub fn dispatch(_: *MetalRenderer, _: u32, _: u32, _: u32) !void {
 fn compileGlslToMsl(
     allocator: std.mem.Allocator,
     glsl_source: [:0]const u8,
-    stage: Renderer.ShaderStage,
+    stage: ShaderStage,
     entry_point: [:0]const u8,
 ) !CompiledMsl {
     const shader_kind: shaderc.shaderc_shader_kind = switch (stage) {
@@ -832,48 +947,48 @@ fn spvcCheck(result: spvc.spvc_result, context: ?spvc.spvc_context, message: []c
     return error.SpirvCrossFailed;
 }
 
-const vtable: Renderer.VTable = .{
-    .deinit = vtableDeinit,
-    .backend = vtableBackend,
-    .begin_frame = vtableBeginFrame,
-    .end_frame = vtableEndFrame,
-    .present = vtablePresent,
-    .create_buffer = vtableCreateBuffer,
-    .create_texture = vtableCreateTexture,
-    .create_sampler = vtableCreateSampler,
-    .create_shader = vtableCreateShader,
-    .create_pipeline = vtableCreatePipeline,
-    .destroy_buffer = vtableDestroyBuffer,
-    .destroy_texture = vtableDestroyTexture,
-    .destroy_sampler = vtableDestroySampler,
-    .destroy_shader = vtableDestroyShader,
-    .destroy_pipeline = vtableDestroyPipeline,
-    .update_buffer = vtableUpdateBuffer,
-    .update_texture = vtableUpdateTexture,
-    .begin_pass = vtableBeginPass,
-    .end_pass = vtableEndPass,
-    .set_pipeline = vtableSetPipeline,
-    .set_vertex_buffer = vtableSetVertexBuffer,
-    .set_index_buffer = vtableSetIndexBuffer,
-    .bind_texture = vtableBindTexture,
-    .bind_sampler = vtableBindSampler,
-    .push_constants = vtablePushConstants,
-    .draw = vtableDraw,
-    .draw_indexed = vtableDrawIndexed,
-    .dispatch = vtableDispatch,
-};
-
+// const vtable: VTable = .{
+//     .deinit = vtableDeinit,
+//     .backend = vtableBackend,
+//     .begin_frame = vtableBeginFrame,
+//     .end_frame = vtableEndFrame,
+//     .present = vtablePresent,
+//     .create_buffer = vtableCreateBuffer,
+//     .create_texture = vtableCreateTexture,
+//     .create_sampler = vtableCreateSampler,
+//     .create_shader = vtableCreateShader,
+//     .create_pipeline = vtableCreatePipeline,
+//     .destroy_buffer = vtableDestroyBuffer,
+//     .destroy_texture = vtableDestroyTexture,
+//     .destroy_sampler = vtableDestroySampler,
+//     .destroy_shader = vtableDestroyShader,
+//     .destroy_pipeline = vtableDestroyPipeline,
+//     .update_buffer = vtableUpdateBuffer,
+//     .update_texture = vtableUpdateTexture,
+//     .begin_pass = vtableBeginPass,
+//     .end_pass = vtableEndPass,
+//     .set_pipeline = vtableSetPipeline,
+//     .set_vertex_buffer = vtableSetVertexBuffer,
+//     .set_index_buffer = vtableSetIndexBuffer,
+//     .bind_texture = vtableBindTexture,
+//     .bind_sampler = vtableBindSampler,
+//     .push_constants = vtablePushConstants,
+//     .draw = vtableDraw,
+//     .draw_indexed = vtableDrawIndexed,
+//     .dispatch = vtableDispatch,
+// };
+//
 fn vtableDeinit(ptr: *anyopaque) void {
     const self: *MetalRenderer = castSelf(ptr);
     self.deinit();
 }
 
-fn vtableBackend(ptr: *anyopaque) Renderer.Backend {
-    const self: *MetalRenderer = castSelf(ptr);
-    return self.backend();
-}
+// fn vtableBackend(ptr: *anyopaque) Backend {
+//     const self: *MetalRenderer = castSelf(ptr);
+//     return self.backend();
+// }
 
-fn vtableBeginFrame(ptr: *anyopaque, viewport: Renderer.Viewport) anyerror!void {
+fn vtableBeginFrame(ptr: *anyopaque, viewport: Viewport) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.beginFrame(viewport);
 }
@@ -888,67 +1003,67 @@ fn vtablePresent(ptr: *anyopaque) anyerror!void {
     try self.present();
 }
 
-fn vtableCreateBuffer(ptr: *anyopaque, desc: Renderer.BufferDesc) anyerror!Renderer.BufferHandle {
+fn vtableCreateBuffer(ptr: *anyopaque, desc: BufferDesc) anyerror!BufferHandle {
     const self: *MetalRenderer = castSelf(ptr);
     return try self.createBuffer(desc);
 }
 
-fn vtableCreateTexture(ptr: *anyopaque, desc: Renderer.TextureDesc) anyerror!Renderer.TextureHandle {
+fn vtableCreateTexture(ptr: *anyopaque, desc: TextureDesc) anyerror!TextureHandle {
     const self: *MetalRenderer = castSelf(ptr);
     return try self.createTexture(desc);
 }
 
-fn vtableCreateSampler(ptr: *anyopaque, desc: Renderer.SamplerDesc) anyerror!Renderer.SamplerHandle {
+fn vtableCreateSampler(ptr: *anyopaque, desc: SamplerDesc) anyerror!SamplerHandle {
     const self: *MetalRenderer = castSelf(ptr);
     return try self.createSampler(desc);
 }
 
-fn vtableCreateShader(ptr: *anyopaque, desc: Renderer.ShaderDesc) anyerror!Renderer.ShaderHandle {
+fn vtableCreateShader(ptr: *anyopaque, desc: ShaderDesc) anyerror!ShaderHandle {
     const self: *MetalRenderer = castSelf(ptr);
     return try self.createShader(desc);
 }
 
-fn vtableCreatePipeline(ptr: *anyopaque, desc: Renderer.PipelineDesc) anyerror!Renderer.PipelineHandle {
+fn vtableCreatePipeline(ptr: *anyopaque, desc: PipelineDesc) anyerror!PipelineHandle {
     const self: *MetalRenderer = castSelf(ptr);
     return try self.createPipeline(desc);
 }
 
-fn vtableDestroyBuffer(ptr: *anyopaque, handle: Renderer.BufferHandle) anyerror!void {
+fn vtableDestroyBuffer(ptr: *anyopaque, handle: BufferHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.destroyBuffer(handle);
 }
 
-fn vtableDestroyTexture(ptr: *anyopaque, handle: Renderer.TextureHandle) anyerror!void {
+fn vtableDestroyTexture(ptr: *anyopaque, handle: TextureHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.destroyTexture(handle);
 }
 
-fn vtableDestroySampler(ptr: *anyopaque, handle: Renderer.SamplerHandle) anyerror!void {
+fn vtableDestroySampler(ptr: *anyopaque, handle: SamplerHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.destroySampler(handle);
 }
 
-fn vtableDestroyShader(ptr: *anyopaque, handle: Renderer.ShaderHandle) anyerror!void {
+fn vtableDestroyShader(ptr: *anyopaque, handle: ShaderHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.destroyShader(handle);
 }
 
-fn vtableDestroyPipeline(ptr: *anyopaque, handle: Renderer.PipelineHandle) anyerror!void {
+fn vtableDestroyPipeline(ptr: *anyopaque, handle: PipelineHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.destroyPipeline(handle);
 }
 
-fn vtableUpdateBuffer(ptr: *anyopaque, handle: Renderer.BufferHandle, offset: usize, data: []const u8) anyerror!void {
+fn vtableUpdateBuffer(ptr: *anyopaque, handle: BufferHandle, offset: usize, data: []const u8) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.updateBuffer(handle, offset, data);
 }
 
-fn vtableUpdateTexture(ptr: *anyopaque, handle: Renderer.TextureHandle, copy: Renderer.TextureCopy, data: []const u8) anyerror!void {
+fn vtableUpdateTexture(ptr: *anyopaque, handle: TextureHandle, copy: TextureCopy, data: []const u8) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.updateTexture(handle, copy, data);
 }
 
-fn vtableBeginPass(ptr: *anyopaque, desc: Renderer.PassDesc) anyerror!void {
+fn vtableBeginPass(ptr: *anyopaque, desc: PassDesc) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.beginPass(desc);
 }
@@ -958,32 +1073,32 @@ fn vtableEndPass(ptr: *anyopaque) anyerror!void {
     try self.endPass();
 }
 
-fn vtableSetPipeline(ptr: *anyopaque, pipeline: Renderer.PipelineHandle) anyerror!void {
+fn vtableSetPipeline(ptr: *anyopaque, pipeline: PipelineHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.setPipeline(pipeline);
 }
 
-fn vtableSetVertexBuffer(ptr: *anyopaque, slot: u32, buffer: Renderer.BufferHandle, offset: usize) anyerror!void {
+fn vtableSetVertexBuffer(ptr: *anyopaque, slot: u32, buffer: BufferHandle, offset: usize) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.setVertexBuffer(slot, buffer, offset);
 }
 
-fn vtableSetIndexBuffer(ptr: *anyopaque, buffer: Renderer.BufferHandle, index_type: Renderer.IndexType, offset: usize) anyerror!void {
+fn vtableSetIndexBuffer(ptr: *anyopaque, buffer: BufferHandle, index_type: IndexType, offset: usize) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.setIndexBuffer(buffer, index_type, offset);
 }
 
-fn vtableBindTexture(ptr: *anyopaque, stage: Renderer.ShaderStage, slot: u32, texture: Renderer.TextureHandle) anyerror!void {
+fn vtableBindTexture(ptr: *anyopaque, stage: ShaderStage, slot: u32, texture: TextureHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.bindTexture(stage, slot, texture);
 }
 
-fn vtableBindSampler(ptr: *anyopaque, stage: Renderer.ShaderStage, slot: u32, sampler: Renderer.SamplerHandle) anyerror!void {
+fn vtableBindSampler(ptr: *anyopaque, stage: ShaderStage, slot: u32, sampler: SamplerHandle) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.bindSampler(stage, slot, sampler);
 }
 
-fn vtablePushConstants(ptr: *anyopaque, stage: Renderer.ShaderStage, data: []const u8) anyerror!void {
+fn vtablePushConstants(ptr: *anyopaque, stage: ShaderStage, data: []const u8) anyerror!void {
     const self: *MetalRenderer = castSelf(ptr);
     try self.pushConstants(stage, data);
 }
@@ -1047,7 +1162,7 @@ fn handleIndex(comptime Handle: type, handle: Handle) !usize {
     return raw - 1;
 }
 
-fn toMTLPixelFormat(format: Renderer.PixelFormat) MTLPixelFormat {
+fn toMTLPixelFormat(format: PixelFormat) MTLPixelFormat {
     return switch (format) {
         .bgra8_unorm => 80,
         .rgba8_unorm => 70,
@@ -1055,7 +1170,7 @@ fn toMTLPixelFormat(format: Renderer.PixelFormat) MTLPixelFormat {
     };
 }
 
-fn toMTLTextureUsage(usage: Renderer.TextureUsage) NSUInteger {
+fn toMTLTextureUsage(usage: TextureUsage) NSUInteger {
     var out: NSUInteger = 0;
     if (usage.sampled) out |= MTLTextureUsageShaderRead;
     if (usage.storage) out |= MTLTextureUsageShaderWrite;
@@ -1063,21 +1178,21 @@ fn toMTLTextureUsage(usage: Renderer.TextureUsage) NSUInteger {
     return out;
 }
 
-fn toMTLFilter(filter: Renderer.SamplerFilter) NSUInteger {
+fn toMTLFilter(filter: SamplerFilter) NSUInteger {
     return switch (filter) {
         .nearest => MTLSamplerMinMagFilterNearest,
         .linear => MTLSamplerMinMagFilterLinear,
     };
 }
 
-fn toMTLAddressMode(mode: Renderer.AddressMode) NSUInteger {
+fn toMTLAddressMode(mode: AddressMode) NSUInteger {
     return switch (mode) {
         .clamp_to_edge => MTLSamplerAddressModeClampToEdge,
         .repeat => MTLSamplerAddressModeRepeat,
     };
 }
 
-fn toMTLPrimitiveType(topology: Renderer.PrimitiveTopology) NSUInteger {
+fn toMTLPrimitiveType(topology: PrimitiveTopology) NSUInteger {
     return switch (topology) {
         .triangle => MTLPrimitiveTypeTriangle,
         .line => MTLPrimitiveTypeLine,
@@ -1085,7 +1200,7 @@ fn toMTLPrimitiveType(topology: Renderer.PrimitiveTopology) NSUInteger {
     };
 }
 
-fn toMTLIndexType(index_type: Renderer.IndexType) NSUInteger {
+fn toMTLIndexType(index_type: IndexType) NSUInteger {
     return switch (index_type) {
         .uint16 => MTLIndexTypeUInt16,
         .uint32 => MTLIndexTypeUInt32,

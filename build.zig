@@ -57,6 +57,17 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
         }).?.module("objc");
         exe.root_module.addImport("objc", objc);
+    } else {
+        const vulkan_header_dep = b.dependency("vulkan_headers", .{});
+        const vulkan_headers = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("c.h",
+                \\#include "vulkan/vulkan.h"
+            ),
+            .target = target,
+            .optimize = optimize,
+        }).createModule();
+        vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
+        exe.root_module.addImport("vulkan", vulkan_headers);
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
