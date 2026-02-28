@@ -37,7 +37,6 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     });
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
-    const objc = b.dependency("zig_objc", .{ .target = target, .optimize = optimize, }).module("objc");
 
     const exe = b.addExecutable(.{
         .name = "client",
@@ -49,10 +48,27 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 .{ .name = "shared", .module = shared },
                 .{ .name = "glfw", .module = glfw_translate_c.createModule() },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
-                .{ .name = "objc", .module = objc },
             },
         }),
     });
+    if (target.result.os.tag.isDarwin()) {
+        const objc = b.lazyDependency("zig_objc", .{
+            .target = target,
+            .optimize = optimize,
+        }).?.module("objc");
+        exe.root_module.addImport("objc", objc);
+    } else {
+        const vulkan_header_dep = b.dependency("vulkan_headers", .{});
+        const vulkan_headers = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("c.h",
+                \\#include "vulkan/vulkan.h"
+            ),
+            .target = target,
+            .optimize = optimize,
+        }).createModule();
+        vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
+        exe.root_module.addImport("vulkan", vulkan_headers);
+    }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
     if (target.result.os.tag == .macos) {
