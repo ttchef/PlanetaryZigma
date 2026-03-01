@@ -17,6 +17,9 @@ pub fn main(init: std.process.Init) !void {
 
     glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE);
 
+    //NOTE:NEEDED FOR VULKAN. Dont know MacOS. (Lorenzo)?
+    glfw.glfwWindowHint(glfw.GLFW_CLIENT_API, glfw.GLFW_NO_API);
+
     const window: *glfw.GLFWwindow = glfw.glfwCreateWindow(900, 800, "PlanetaryZigma", null, null) orelse return error.CreateWindow;
     defer glfw.glfwDestroyWindow(window);
 
@@ -24,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
 
-    var renderer: Renderer = try .init(allocator);
+    var renderer: Renderer = try .init(allocator, window);
     defer renderer.deinit();
 
     // const vertex_glsl = try asset_server.loadAssetZ(init.io, "shaders/colored_triangle.vert");
@@ -121,6 +124,7 @@ pub fn main(init: std.process.Init) !void {
 
     while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
         glfw.glfwPollEvents();
+        if (glfw.glfwGetKey(window, glfw.GLFW_KEY_ESCAPE) == glfw.GLFW_PRESS) break;
         try renderer.update();
 
         // var framebuffer_width: c_int = 0;

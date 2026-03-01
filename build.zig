@@ -25,13 +25,13 @@ pub fn build(b: *std.Build) void {
 pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const shared = b.modules.get("shared").?;
 
-    const glfw_headers = b.dependency("glfw_headers", .{});
+    // const glfw_headers = b.dependency("glfw_headers", .{});
     const glfw_translate_c = b.addTranslateC(.{
-        .root_source_file = glfw_headers.path("include/GLFW/glfw3.h"),
-        // b.addWriteFiles().add("c.h",
-        // \\#define GLFW_INCLUDE_NONE
-        // \\#include <GLFW/glfw3.h>
-        // ),
+        // glfw_headers.path("include/GLFW/glfw3.h"),
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#define GLFW_INCLUDE_VULKAN
+            \\#include <GLFW/glfw3.h>
+        ),
         .target = target,
         .optimize = optimize,
     });
@@ -68,6 +68,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         }).createModule();
         vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
         exe.root_module.addImport("vulkan", vulkan_headers);
+        exe.root_module.linkSystemLibrary("vulkan", .{});
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
