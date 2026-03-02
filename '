@@ -5,15 +5,12 @@ const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
 const Device = @import("Vulkan/device.zig").Logical;
-const Vma = @import("Vulkan/Vma.zig");
 pub const check = @import("Vulkan/utils.zig").check;
 
 instance: Instance,
 debug_messenger: DebugMessenger,
 surface: Surface,
 physical_device: PhysicalDevice,
-device: Device,
-vma: Vma,
 
 pub const Surface = struct {
     handle: c.VkSurfaceKHR,
@@ -23,11 +20,9 @@ pub const Surface = struct {
     }
 };
 
+
 pub const Config = struct {
     instance: struct {
-        extensions: []const [*:0]const u8,
-    },
-    device: struct {
         extensions: []const [*:0]const u8,
     },
     surface: struct {
@@ -53,17 +48,17 @@ pub fn init(
         .handle = @ptrCast(try config.surface.init.?(instance.handle, config.surface.data.?)),
     } else return error.configSurface;
     const physical_device: PhysicalDevice = try .init(instance, surface.handle);
-    const device: Device = try .init(physical_device, config.device.extensions);
-    const vma: Vma = try .init(instance, physical_device, device);
+    const device: 
 
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
         .surface = surface,
         .physical_device = physical_device,
-        .device = device,
-        .vma = vma,
     };
+    //     c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    // c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
+    // c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 }
 
 pub fn deinit(self: *@This()) void {

@@ -26,7 +26,11 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
                 .init = createVulkanSurface,
             }, .instance = .{
                 .extensions = extensions[0 .. extension_count + 1],
-            } }) };
+            }, .device = .{ .extensions = &.{
+                Vulkan.c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                Vulkan.c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
+                Vulkan.c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            } } }) };
         },
     }
 }

@@ -69,6 +69,24 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
         exe.root_module.addImport("vulkan", vulkan_headers);
         exe.root_module.linkSystemLibrary("vulkan", .{});
+
+        exe.root_module.link_libcpp = true;
+        const vma_dep = b.dependency("vma", .{});
+        const vma = b.addTranslateC(.{
+            .root_source_file = vma_dep.path("include/vk_mem_alloc.h"),
+            .target = target,
+            .optimize = optimize,
+        }).createModule();
+        vma.addIncludePath(vma_dep.path("include/"));
+        exe.root_module.addIncludePath(vma_dep.path("include/"));
+        exe.root_module.addCSourceFile(.{
+            .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#define VMA_IMPLEMENTATION
+                \\#include "vk_mem_alloc.h"
+            ),
+            .flags = &.{"-std=c++14"},
+        });
+        exe.root_module.addImport("vma", vma);
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
