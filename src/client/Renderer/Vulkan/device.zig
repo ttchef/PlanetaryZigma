@@ -1,0 +1,141 @@
+const std = @import("std");
+const c = @import("vulkan");
+const Instance = @import("Instance.zig");
+const check = @import("utils.zig").check;
+
+pub const Physical = struct {
+    handle: c.VkPhysicalDevice,
+    graphics_queue_family_index: u32,
+
+    pub fn init(instance: Instance, vk_surface: c.VkSurfaceKHR) !@This() {
+        var device_count: u32 = 0;
+        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
+        if (device_count == 0) return error.NoPhysicalDevices;
+
+        var devices: [8]c.VkPhysicalDevice = undefined;
+        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, &devices));
+
+        for (devices[0..device_count]) |device| {
+            var properties: c.VkPhysicalDeviceProperties = undefined;
+            c.vkGetPhysicalDeviceProperties(device, &properties);
+
+            var family_count: u32 = 0;
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, null);
+
+            var families: [16]c.VkQueueFamilyProperties = undefined;
+            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, &families);
+
+            for (families[0..family_count], 0..) |family, i| {
+                const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
+
+                var present_supported: c.VkBool32 = undefined;
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), vk_surface, &present_supported));
+
+                if (supports_graphics and present_supported != 0) {
+                    std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
+
+                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
+                }
+            }
+        }
+        return error.NoSuitablePhysicalDevice;
+    }
+};
+
+pub const Logical = struct {
+    handle: c.VkDevice,
+    graphics_queue: c.VkQueue,
+    command_pool: CommandPool,
+
+    pub const CommandPool = struct {
+        handle: c.VkCommandPool,
+        pub fn init(device: c.VkDevice, queue_family_index: u32) !@This() {
+            const command_pool_info: c.VkCommandPoolCreateInfo = .{
+                .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = null,
+                .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                .queueFamilyIndex = queue_family_index,
+            };
+
+            var command_pool: c.VkCommandPool = undefined;
+            try check(c.vkCreateCommandPool(device, &command_pool_info, null, &command_pool));
+            return .{ .handle = command_pool };
+        }
+        pub fn deinit(self: @This(), device: Logical) void {
+            c.vkDestroyCommandPool(device.handle, self.handle, null);
+        }
+    };
+
+    pub fn init(physical_device: Physical, extensions: []const [*:0]const u8) !@This() {
+        var extension_count: u32 = undefined;
+        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
+        var extension_properties: [516]c.VkExtensionProperties = undefined;
+        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, &extension_properties));
+        check_ext: for (extensions) |extension| {
+            for (extension_properties[0..extension_count]) |cmp_ext|
+                if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
+            std.log.err("Missing Device extention: {s}\n", .{extension});
+            return error.MissingDeviceExtension;
+        }
+
+        var queue_priority: f32 = 1.0;
+        const queue_info: c.VkDeviceQueueCreateInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = null,
+            .queueFamilyIndex = physical_device.graphics_queue_family_index,
+            .queueCount = 1,
+            .pQueuePriorities = &queue_priority,
+            .flags = 0,
+        };
+
+        var features: c.VkPhysicalDeviceFeatures = undefined;
+        c.vkGetPhysicalDeviceFeatures(physical_device.handle, &features);
+
+        var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = null,
+            .dynamicRendering = c.VK_TRUE,
+        };
+
+        var sync2_features: c.VkPhysicalDeviceSynchronization2Features = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+            .pNext = &dynamic_rendering_features,
+            .synchronization2 = c.VK_TRUE,
+        };
+
+        // var buffer_device_address_features = c.VkPhysicalDeviceBufferDeviceAddressFeatures{
+        //     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+        //     .pNext = &sync2_features,
+        //     .bufferDeviceAddress = c.VK_TRUE,
+        // };
+
+        const device_info = c.VkDeviceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &sync2_features,
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &queue_info,
+            .pEnabledFeatures = &features,
+            .enabledExtensionCount = @intCast(extensions.len),
+            .ppEnabledExtensionNames = extensions.ptr,
+        };
+
+        var device: c.VkDevice = undefined;
+        try check(c.vkCreateDevice(physical_device.handle, &device_info, null, &device));
+        var queue: c.VkQueue = undefined;
+        c.vkGetDeviceQueue(device, physical_device.graphics_queue_family_index, 0, &queue);
+
+        const command_pool: CommandPool = try .init(device, physical_device.graphics_queue_family_index);
+
+        return .{
+            .handle = device,
+            .graphics_queue = queue,
+            .command_pool = command_pool,
+        };
+    }
+
+    pub fn deinit(self: @This()) void {
+        self.command_pool.deinit(self);
+        c.vkDestroyDevice(self.handle, null);
+    }
+};
+
