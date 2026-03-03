@@ -13,6 +13,9 @@ pub const Inner = switch (builtin.os.tag) {
 };
 
 pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
+    var width: c_int = undefined;
+    var heigth: c_int = undefined;
+    glfw.glfwGetWindowSize(window, &width, &heigth);
     switch (builtin.os.tag) {
         .macos => return error.MacOsNotImplemented,
         else => {
@@ -26,11 +29,16 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
                 .init = createVulkanSurface,
             }, .instance = .{
                 .extensions = extensions[0 .. extension_count + 1],
-            }, .device = .{ .extensions = &.{
-                Vulkan.c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                Vulkan.c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
-                Vulkan.c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-            } } }) };
+            }, .device = .{
+                .extensions = &.{
+                    Vulkan.c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                    Vulkan.c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
+                    Vulkan.c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                },
+            }, .swapchain = .{
+                .width = @intCast(width),
+                .heigth = @intCast(heigth),
+            } }) };
         },
     }
 }
