@@ -1,11 +1,13 @@
 const std = @import("std");
 
 allocator: std.mem.Allocator,
+io: std.Io,
 assets_root: []u8,
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
     const root = try discoverAssetsRoot(allocator, io);
     return .{
+        .io = io,
         .allocator = allocator,
         .assets_root = root,
     };
@@ -15,11 +17,11 @@ pub fn deinit(self: *@This()) void {
     self.allocator.free(self.assets_root);
 }
 
-pub fn loadAsset(self: *@This(), io: std.Io, relative_path: []const u8) ![]u8 {
+pub fn loadAsset(self: *@This(), relative_path: []const u8) ![]u8 {
     const full_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.assets_root, relative_path });
     defer self.allocator.free(full_path);
 
-    return try cwdDir().readFileAlloc(io, full_path, self.allocator, .unlimited);
+    return try cwdDir().readFileAlloc(self.io, full_path, self.allocator, .unlimited);
 }
 
 pub fn loadAssetNullTerminated(self: *@This(), io: std.Io, relative_path: []const u8) ![:0]u8 {
