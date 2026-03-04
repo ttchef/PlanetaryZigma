@@ -21,6 +21,7 @@ vma: Vma,
 swapchain: Swapchain,
 draw_image: Image,
 depth_image: Image,
+shaders: [2]c.VkShaderEXT,
 
 pub const Config = struct {
     instance: struct {
@@ -41,7 +42,7 @@ pub const Config = struct {
 
 pub fn init(
     allocator: std.mem.Allocator,
-    asset_server: AssetServer,
+    asset_server: *AssetServer,
     config: Config,
 ) !@This() {
     const instance: Instance = try .init(config.instance.extensions);
@@ -82,6 +83,33 @@ pub fn init(
         false,
     );
 
+    const vert_data = try asset_server.loadAsset("shaders/vertex.vert.spv");
+    const frag_data = try asset_server.loadAsset("shaders/fragment.frag.spv");
+    const shader_create_info = &[_]c.VkShaderCreateInfoEXT{
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .codeSize = vert_data.len,
+            .pCode = vert_data.ptr,
+            .pName = "main",
+        },
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+            .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .codeSize = frag_data.len,
+            .pCode = frag_data.ptr,
+            .pName = "main",
+        },
+    };
+    var shaders: [2]c.VkShaderEXT = undefined;
+    const createShadersExt = try Func.Proc(.createShadersEXT).load(instance);
+    try check(createShadersExt(device.handle, 2, shader_create_info, null, &shaders));
+    // const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
+
+    // try check(c.vkCreateShadersEXT(device.handle, shader_create_info.len, shader_create_info, null, &shaders));
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -92,26 +120,8 @@ pub fn init(
         .swapchain = swapchain,
         .draw_image = draw_image,
         .depth_image = depth_image,
+        .shaders = shaders,
     };
-
-    const vert_data = try asset_server.loadAsset("vertex.vert");
-    const frag_data = try asset_server.loadAsset("fragment.frag");
-    const shader_create_info: []c.VkShaderCreateInfoEXT = &.{
-        .{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT, //TODO:(Lucas) actually compile to SPRIV and load it instead of GLSL.
-            .codeSize = vert_data.len,
-            .pCode = vert_data.ptr,
-            .pName = "main",
-        },
-        .{},
-    };
-
-    const vert_shader: c.VkShaderEXT = .{};
-
-    try std.Io.Dir.cwd().readFileAlloc(io, full_path, self.allocator, .unlimited);
 }
 
 pub fn deinit(self: *@This()) void {
@@ -146,76 +156,8 @@ pub fn update(self: *@This()) !void {
     };
     try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    var draw_image_barrier: Image.Barrier = .init(cmd_buffer, self.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
-
-    draw_image_barrier.transition(
-        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    );
-    var depth_image_barrier: Image.Barrier = .init(cmd_buffer, self.depth_image.vk_image, c.VK_IMAGE_ASPECT_DEPTH_BIT);
-    depth_image_barrier.transition(
-        c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-    );
-    var color_attachment: c.VkRenderingAttachmentInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = null,
-        .imageView = self.draw_image.vk_imageview,
-        .imageLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .resolveMode = c.VK_RESOLVE_MODE_NONE,
-        .resolveImageView = null,
-        .resolveImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = .{
-            .color = .{
-                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
-            },
-        },
-    };
-    var depth_attachment: c.VkRenderingAttachmentInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = self.depth_image.vk_imageview,
-        .imageLayout = c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = .{
-            .depthStencil = .{
-                .depth = 1,
-                .stencil = 0,
-            },
-        },
-    };
-
-    var render_info: c.VkRenderingInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .pNext = null,
-        .flags = 0,
-        .renderArea = .{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = .{
-                .height = self.draw_image.extent.height,
-                .width = self.draw_image.extent.width,
-            },
-        },
-        .layerCount = 1,
-        .viewMask = 0,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment,
-        .pDepthAttachment = &depth_attachment,
-        .pStencilAttachment = null,
-    };
-
-    c.vkCmdBeginRendering(cmd_buffer, &render_info);
-
     //TODO: RENDERING!
-
-    c.vkCmdEndRendering(cmd_buffer);
-
-    draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
-
+    try render(self, cmd_buffer);
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
     self.draw_image.copyOntoImage(
@@ -269,4 +211,107 @@ pub fn update(self: *@This()) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn drawObject(self: *@This()) !void {}
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
+    var draw_image_barrier: Image.Barrier = .init(cmd, self.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
+
+    draw_image_barrier.transition(
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    );
+    var depth_image_barrier: Image.Barrier = .init(cmd, self.depth_image.vk_image, c.VK_IMAGE_ASPECT_DEPTH_BIT);
+    depth_image_barrier.transition(
+        c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    );
+    var color_attachment: c.VkRenderingAttachmentInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = null,
+        .imageView = self.draw_image.vk_imageview,
+        .imageLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .resolveMode = c.VK_RESOLVE_MODE_NONE,
+        .resolveImageView = null,
+        .resolveImageLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{
+            .color = .{
+                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        },
+    };
+    var depth_attachment: c.VkRenderingAttachmentInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = self.depth_image.vk_imageview,
+        .imageLayout = c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = .{
+            .depthStencil = .{
+                .depth = 1,
+                .stencil = 0,
+            },
+        },
+    };
+
+    const stages = [_]c.VkShaderStageFlagBits{
+        c.VK_SHADER_STAGE_VERTEX_BIT,
+        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+
+    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1] };
+
+    const viewport: c.VkViewport = .{
+        .width = @floatFromInt(self.draw_image.extent.width),
+        .height = @floatFromInt(self.draw_image.extent.height),
+        .maxDepth = 1,
+    };
+    const scissor: c.VkRect2D = .{
+        .extent = .{
+            .width = self.draw_image.extent.width,
+            .height = self.draw_image.extent.height,
+        },
+    };
+    const vkCmdBindShadersEXT = try Func.Proc(.cmdBindShadersEXT).load(self.instance);
+    vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
+    // c.vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
+
+    c.vkCmdSetViewport(cmd, 0, 1, &viewport);
+    c.vkCmdSetScissor(cmd, 0, 1, &scissor);
+    c.vkCmdSetRasterizerDiscardEnable(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
+    c.vkCmdSetCullMode(cmd, c.VK_CULL_MODE_BACK_BIT);
+    c.vkCmdSetFrontFace(cmd, c.VK_FRONT_FACE_CLOCKWISE);
+
+    // c.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL); // if supported
+    c.vkCmdSetDepthTestEnable(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthWriteEnable(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthCompareOp(cmd, c.VK_COMPARE_OP_ALWAYS);
+    c.vkCmdSetPrimitiveTopology(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+    var render_info: c.VkRenderingInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = null,
+        .flags = 0,
+        .renderArea = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = .{
+                .height = self.draw_image.extent.height,
+                .width = self.draw_image.extent.width,
+            },
+        },
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment,
+        .pDepthAttachment = &depth_attachment,
+        .pStencilAttachment = null,
+    };
+
+    c.vkCmdBeginRendering(cmd, &render_info);
+
+    c.vkCmdDraw(cmd, 3, 1, 0, 0);
+    c.vkCmdEndRendering(cmd);
+
+    draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
+}

@@ -103,6 +103,12 @@ pub const Logical = struct {
             .synchronization2 = c.VK_TRUE,
         };
 
+        var shader_obj_features: c.VkPhysicalDeviceShaderObjectFeaturesEXT = .{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT,
+            .pNext = &sync2_features,
+            .shaderObject = c.VK_TRUE,
+        };
+
         // var buffer_device_address_features = c.VkPhysicalDeviceBufferDeviceAddressFeatures{
         //     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
         //     .pNext = &sync2_features,
@@ -111,7 +117,7 @@ pub const Logical = struct {
 
         const device_info = c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = &sync2_features,
+            .pNext = &shader_obj_features,
             .queueCreateInfoCount = 1,
             .pQueueCreateInfos = &queue_info,
             .pEnabledFeatures = &features,
@@ -138,4 +144,3 @@ pub const Logical = struct {
         c.vkDestroyDevice(self.handle, null);
     }
 };
-

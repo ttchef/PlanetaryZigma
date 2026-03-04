@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("glfw");
-
+const AssestServer = @import("shared").AssetServer;
 inner: Inner,
 
 const Metal = @import("Renderer/Metal.zig");
@@ -12,7 +12,7 @@ pub const Inner = switch (builtin.os.tag) {
     else => Vulkan,
 };
 
-pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
+pub fn init(allocator: std.mem.Allocator, asset_server: *AssestServer, window: *glfw.GLFWwindow) !@This() {
     var width: c_int = undefined;
     var heigth: c_int = undefined;
     glfw.glfwGetWindowSize(window, &width, &heigth);
@@ -24,7 +24,7 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
             var extensions: [8][*:0]const u8 = undefined;
             @memcpy(extensions[0..extension_count], glfw_extensions[0..extension_count]);
             extensions[extension_count] = Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-            return .{ .inner = try .init(allocator, .{ .surface = .{
+            return .{ .inner = try .init(allocator, asset_server, .{ .surface = .{
                 .data = window,
                 .init = createVulkanSurface,
             }, .instance = .{
@@ -34,6 +34,7 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !@This() {
                     Vulkan.c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
                     Vulkan.c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
                     Vulkan.c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                    Vulkan.c.VK_EXT_SHADER_OBJECT_EXTENSION_NAME,
                 },
             }, .swapchain = .{
                 .width = @intCast(width),

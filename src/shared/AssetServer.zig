@@ -21,6 +21,8 @@ pub fn loadAsset(self: *@This(), relative_path: []const u8) ![]u8 {
     const full_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.assets_root, relative_path });
     defer self.allocator.free(full_path);
 
+    std.debug.print("loadAsset: {s}\n", .{full_path});
+
     return try cwdDir().readFileAlloc(self.io, full_path, self.allocator, .unlimited);
 }
 
