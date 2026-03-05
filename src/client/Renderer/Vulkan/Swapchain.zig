@@ -81,6 +81,7 @@ pub fn deinit(
 
 pub fn recreate(
     self: *@This(),
+    allocator: std.mem.Allocator,
     physical_device: PhysicalDevice,
     device: Device,
     surface: Surface,
@@ -92,7 +93,7 @@ pub fn recreate(
 
     const actual_extent = try getSurfaceExtent(physical_device, surface, width, height);
 
-    const surface_format = try getSurfaceFormat(physical_device, surface);
+    const surface_format = try getSurfaceFormat(allocator, physical_device, surface);
     const swapchain = try createSwapchain(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
     self.swapchain = swapchain;
 
