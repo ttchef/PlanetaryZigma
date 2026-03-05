@@ -26,6 +26,7 @@ shaders: [2]c.VkShaderEXT,
 pub const Config = struct {
     instance: struct {
         extensions: []const [*:0]const u8,
+        layers: []const [*:0]const u8,
     },
     device: struct {
         extensions: []const [*:0]const u8,
@@ -45,7 +46,7 @@ pub fn init(
     asset_server: *AssetServer,
     config: Config,
 ) !@This() {
-    const instance: Instance = try .init(config.instance.extensions);
+    const instance: Instance = try .init(config.instance.extensions, config.instance.layers);
     const debug_messenger: DebugMessenger = try .init(instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -132,7 +133,7 @@ pub fn update(self: *@This()) !void {
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
-    try check(c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
+    // std.debug.print("------------ {d} \n", .{image_index});
     const aquire_result = c.vkAcquireNextImageKHR(
         self.device.handle,
         self.swapchain.swapchain,
@@ -141,9 +142,15 @@ pub fn update(self: *@This()) !void {
         null,
         &image_index,
     );
-    if (aquire_result == c.VK_ERROR_OUT_OF_DATE_KHR or aquire_result == c.VK_SUBOPTIMAL_KHR) {
-        return;
+    // std.debug.print("Acquire result={d} image_index={d}\n", .{ aquire_result, image_index });
+    switch (aquire_result) {
+        c.VK_ERROR_OUT_OF_DATE_KHR,
+        c.VK_SUBOPTIMAL_KHR,
+        => return,
+        c.VK_TIMEOUT, c.VK_NOT_READY => return,
+        else => {},
     }
+    try check(c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
     const render_semaphore: c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     // try current_frame.descriptor.clearPools(self.device);
     // current_frame.gpu_scene.deinit(self.vma.handle);
@@ -158,6 +165,7 @@ pub fn update(self: *@This()) !void {
 
     //TODO: RENDERING!
     try render(self, cmd_buffer);
+
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
     self.draw_image.copyOntoImage(
@@ -206,8 +214,8 @@ pub fn update(self: *@This()) !void {
 
     if (present_result == c.VK_ERROR_OUT_OF_DATE_KHR or present_result == c.VK_SUBOPTIMAL_KHR) {
         return;
+        // self.swapchain.recreate(self.physical_device, self.device, self.surface, )
     }
-
     self.swapchain.current_frame_inflight += 1;
 }
 
@@ -277,13 +285,31 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
     // c.vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
 
+    c.vkCmdSetStencilTestEnable(cmd, c.VK_FALSE);
+
+    c.vkCmdSetStencilOp(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_COMPARE_OP_ALWAYS);
+
+    c.vkCmdSetStencilCompareMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
+    c.vkCmdSetStencilWriteMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0x00);
+    c.vkCmdSetStencilReference(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+
     c.vkCmdSetViewport(cmd, 0, 1, &viewport);
     c.vkCmdSetScissor(cmd, 0, 1, &scissor);
     c.vkCmdSetRasterizerDiscardEnable(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
     c.vkCmdSetCullMode(cmd, c.VK_CULL_MODE_BACK_BIT);
     c.vkCmdSetFrontFace(cmd, c.VK_FRONT_FACE_CLOCKWISE);
+    // Depth bias: explicitly OFF
+    c.vkCmdSetDepthBiasEnable(cmd, c.VK_FALSE);
+    // (If you ever enable it, also set the parameters)
+    c.vkCmdSetDepthBias(cmd, 0, 0, 0);
 
-    // c.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL); // if supported
+    const vkCmdSetPolygonModeEXT = try Func.Proc(.cmdSetPolygonModeEXT).load(self.instance);
+    vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL); // if supported
+
+    const vkCmdSetRasterizationSamplesEXT = try Func.Proc(.cmdSetRasterizationSamplesEXT).load(self.instance);
+    // c.vkCmdSetRasterizationSamplesEXT(gcc, rasterizationSamples: c_uint)
+    vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
+
     c.vkCmdSetDepthTestEnable(cmd, c.VK_FALSE);
     c.vkCmdSetDepthWriteEnable(cmd, c.VK_FALSE);
     c.vkCmdSetDepthCompareOp(cmd, c.VK_COMPARE_OP_ALWAYS);
@@ -314,4 +340,20 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     c.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
+}
+
+pub fn reCreateSwapchain(self: *@This(), allocator: std.mem.Allocator, width: usize, height: usize) !void {
+    try self.swapchain.recreate(
+        allocator,
+        self.physical_device,
+        self.device,
+        self.surface,
+        @intCast(width),
+        @intCast(height),
+    );
+
+    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.extent.height)));
+    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.extent.width)));
+    self.draw_image.extent.height = @intFromFloat(scaled_height);
+    self.draw_image.extent.width = @intFromFloat(scaled_width);
 }

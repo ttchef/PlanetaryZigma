@@ -49,6 +49,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 .{ .name = "glfw", .module = glfw_translate_c.createModule() },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
             },
+            .link_libc = true,
         }),
     });
     if (target.result.os.tag.isDarwin()) {
