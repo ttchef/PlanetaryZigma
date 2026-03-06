@@ -59,10 +59,8 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     var file_watcher: FileWatcher = try .init();
     try file_watcher.addFile("zig-out/lib/");
 
-    std.debug.print("PATH: {s}\n", .{lib_path.?});
-
     const dynlib: std.DynLib = try .open(lib_path.?);
-    std.log.debug("PATH {s}\n", .{lib_path.?});
+    std.log.debug("PATH {s}", .{lib_path.?});
 
     var self: @This() = .{
         .lib_path_len = lib_path.?.len,

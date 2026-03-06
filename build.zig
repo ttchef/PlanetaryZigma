@@ -26,15 +26,17 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     const shared = b.modules.get("shared").?;
 
     // const glfw_headers = b.dependency("glfw_headers", .{});
-    const glfw_translate_c = b.addTranslateC(.{
-        // glfw_headers.path("include/GLFW/glfw3.h"),
-        .root_source_file = b.addWriteFiles().add("c.h",
-            \\#define GLFW_INCLUDE_VULKAN
-            \\#include <GLFW/glfw3.h>
-        ),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const glfw_translate_c = b.addTranslateC(.{
+    //     // glfw_headers.path("include/GLFW/glfw3.h"),
+    //     .root_source_file = b.addWriteFiles().add("c.h",
+    //         \\#define GLFW_INCLUDE_VULKAN
+    //         \\#include <GLFW/glfw3.h>
+    //     ),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
 
@@ -46,9 +48,10 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+                .{ .name = "yes", .module = yes },
             },
         }),
+        .linkage = .dynamic,
     });
 
     const exe = b.addExecutable(.{
@@ -60,7 +63,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 .{ .name = "system", .module = system.root_module },
-                .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+                .{ .name = "yes", .module = yes },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
             },
             .link_libc = true,

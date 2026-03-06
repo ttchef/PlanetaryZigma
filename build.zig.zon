@@ -20,6 +20,10 @@
             .url = "git+https://github.com/glfw/glfw#7c9ea952338b792cb2f70d7c663e498725073797",
             .hash = "N-V-__8AAAQdSgC7xfmpp3sHsMxANb6YDkz_kZ2i1tTRMRP8",
         },
+        .yes = .{
+            .url = "git+https://github.com/HaraldWik/yes/#16ab81c51876a8b0021fa302be8f11a7b49672da",
+            .hash = "yes-0.0.0-pN7MXS92AQAGF8GWlPqI4B43apUIQJYsV_YWoRuF2DRL",
+        },
         .volk = .{
             .url = "git+https://github.com/zeux/volk.git#87f4f07894d9fa44667031d2906dcf32c47b137c",
             .hash = "N-V-__8AAIo1CAD2cRRyPmDAEB16zIh7TZ2kuFk6HK9gNG7l",

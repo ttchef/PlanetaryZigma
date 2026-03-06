@@ -1,7 +1,7 @@
 const std = @import("std");
 const shared = @import("shared");
+const yes = @import("yes");
 
-const glfw = @import("glfw");
 const AssetServer = @import("shared").AssetServer;
 
 pub const Renderer = @import("Renderer.zig");
@@ -12,12 +12,13 @@ pub const Context = struct {
     pub const Data = struct {
         allocator: std.mem.Allocator,
         asset_server: *AssetServer,
-        window: *glfw.GLFWwindow,
+        platform: yes.Platform,
+        window: *yes.Platform.Window,
     };
 
     pub fn init(data: Data) !@This() {
         return .{
-            .renderer = try .init(data.allocator, data.asset_server, data.window),
+            .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
         };
     }
 
@@ -31,9 +32,9 @@ pub const Context = struct {
     }
 };
 
-// comptime {
-//     _ = ffi;
-// }
+comptime {
+    _ = ffi;
+}
 
 pub const ffi = struct {
     pub const Table = struct {
@@ -43,19 +44,24 @@ pub const ffi = struct {
     };
 
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
+        std.log.debug("system context init", .{});
         context.* = Context.init(data.*) catch |err| {
-            std.log.err("context init: {}", .{@errorName(err)});
+            std.log.err("context init: {any}", .{@errorName(err)});
+            return;
         };
     }
 
     pub export fn systemContextDeinit(context: *Context) void {
+        std.log.debug("system context deinit", .{});
         context.deinit();
         context.* = undefined;
     }
 
     pub export fn systemContextUpdate(context: *Context, detla_time: f32) void {
+        std.log.debug("system context update", .{});
         context.update(detla_time) catch |err| {
-            std.log.err("context update: {}", .{@errorName(err)});
+            std.log.err("context update: {any}", .{@errorName(err)});
+            return;
         };
     }
 };

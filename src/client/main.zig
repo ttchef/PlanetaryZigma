@@ -1,7 +1,8 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const shared = @import("shared");
 const system = @import("system");
-const glfw = @import("glfw");
+const yes = @import("yes");
 
 // const NSUInteger = c_ulong;
 //
@@ -12,23 +13,30 @@ const glfw = @import("glfw");
 // };
 
 pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
     const io = init.io;
-    if (glfw.glfwInit() != glfw.GLFW_TRUE) return error.GlfwInitFailed;
-    defer glfw.glfwTerminate();
 
-    glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE);
+    var platform_impl = switch (builtin.os.tag) {
+        .windows => try yes.Platform.Win32.get(allocator),
+        .macos => @compileError("lorenzo fix this idk, figure it out"),
+        else => try yes.Platform.Xlib.init(),
+    };
+    const platform = platform_impl.platform();
 
-    //NOTE:NEEDED FOR VULKAN. Dont know MacOS. (Lorenzo)?
-    glfw.glfwWindowHint(glfw.GLFW_CLIENT_API, glfw.GLFW_NO_API);
+    var window_impl: @TypeOf(platform_impl).Window = .{};
+    const window = &window_impl.interface;
+    try window.open(platform, .{
+        .title = "PlanetaryZigma",
+        .size = .{ .width = 900, .height = 800 },
+        .min_size = .{ .width = 400, .height = 300 },
+        .surface_type = .{ .vulkan = .{ .major = 0, .minor = 0, .patch = 0 } },
+    });
+    defer window.close(platform);
 
-    const window: *glfw.GLFWwindow = glfw.glfwCreateWindow(900, 800, "PlanetaryZigma", null, null) orelse return error.CreateWindow;
-    defer glfw.glfwDestroyWindow(window);
-
-    const allocator = std.heap.c_allocator;
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
 
-    const watcher: shared.Watcher = try .init("system", io);
+    var watcher: shared.Watcher = try .init("system", io);
     defer watcher.deinit();
 
     // const vertex_glsl = try asset_server.loadAssetZ(init.io, "shaders/colored_triangle.vert");
@@ -124,25 +132,50 @@ pub fn main(init: std.process.Init) !void {
     // defer renderer.destroySampler(sampler) catch {};
 
     var system_context: system.Context = undefined;
-    var system_table: ?system.ffi.Table = null;
-    defer system_table.?.systemContextDeinit(&system_context);
+    var system_table: system.ffi.Table = undefined;
 
-    while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
-        glfw.glfwPollEvents();
-        if (glfw.glfwGetKey(window, glfw.GLFW_KEY_ESCAPE) == glfw.GLFW_PRESS) break;
+    var dynlib: std.DynLib = try .openZ("zig-out/lib/libsystem.so");
+    defer dynlib.close();
 
-        if (try watcher.check()) {
-            for (std.meta.fields(system.ffi.Table)) |field| @field(system_table, field.name) = try watcher.lookup(field.type, field.name);
-            if (system_table == null) {
-                system_table.?.systemContextInit(&system_context, &system.Context.Data{
-                    .allocator = allocator,
-                    .asset_server = &asset_server,
-                    .window = window,
-                });
-            }
-        }
+    inline for (std.meta.fields(system.ffi.Table)) |field| @field(system_table, field.name) = try watcher.lookup(field.type, field.name);
 
-        try system_table.?.systemContextUpdate(&system_context, 0.016);
+    system_table.systemContextInit(&system_context, &system.Context.Data{
+        .allocator = allocator,
+        .asset_server = &asset_server,
+        .platform = platform,
+        .window = window,
+    });
+
+    main_loop: while (true) {
+        while (try window.poll(platform)) |event| switch (event) {
+            .close => break :main_loop,
+            .resize => |size| {
+                std.log.info("resize: {d}x{d}", .{ size.width, size.height });
+            },
+            .key => |key| {
+                if (key.state == .released and key.sym == .escape) break :main_loop;
+            },
+            else => {},
+        };
+
+        // if (system_table == null or try watcher.check()) {
+        //     std.log.debug("file watcher detected change or init", .{});
+        //     if (system_table) |table| table.systemContextDeinit(&system_context);
+        //     system_table = undefined;
+        //     const init2 = try watcher.lookup(*const fn (*system.Context, data: *const system.Context.Data) void, "systemContextInit");
+        //     _ = init2;
+        //     inline for (std.meta.fields(system.ffi.Table)) |field| @field(system_table.?, field.name) = try watcher.lookup(field.type, field.name);
+        //     if (system_table == null) {
+        //         system_table.?.systemContextInit(&system_context, &system.Context.Data{
+        //             .allocator = allocator,
+        //             .asset_server = &asset_server,
+        //             .platform = platform,
+        //             .window = window,
+        //         });
+        //     }
+        // }
+
+        // try system_table.?.systemContextUpdate(&system_context, 0.016);
 
         // var framebuffer_width: c_int = 0;
         // var framebuffer_height: c_int = 0;

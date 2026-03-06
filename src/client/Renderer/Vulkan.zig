@@ -391,14 +391,14 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
 
-pub fn reCreateSwapchain(self: *@This(), allocator: std.mem.Allocator, width: usize, height: usize) !void {
+pub fn resize(self: *@This(), allocator: std.mem.Allocator, width: u32, height: u32) !void {
     try self.swapchain.recreate(
         allocator,
         self.physical_device,
         self.device,
         self.surface,
-        @intCast(width),
-        @intCast(height),
+        width,
+        height,
     );
 
     const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.extent.height)));
