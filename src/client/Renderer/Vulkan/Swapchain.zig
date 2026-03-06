@@ -27,8 +27,8 @@ pub fn init(
     width: u32,
     height: u32,
 ) !@This() {
-    const surface_format = try getSurfaceFormat(allocator, physical_device, surface);
-    const swapchain = try createSwapchain(physical_device, device, surface, surface_format, width, height);
+    const surface_format = try surface.getFormat(allocator, physical_device);
+    const swapchain = try create(physical_device, device, surface, surface_format, width, height);
 
     var image_count: u32 = undefined;
     try check(c.vkGetSwapchainImagesKHR.?(device.handle, swapchain, &image_count, null));
@@ -53,7 +53,7 @@ pub fn init(
         // std.debug.print("PTR: {*}\n", .{&frame.gpu_scene.buffer});
     }
 
-    const actual_extent: c.VkExtent2D = try getSurfaceExtent(physical_device, surface, width, height);
+    const actual_extent: c.VkExtent2D = try surface.getExtent(physical_device, width, height);
 
     return .{
         .swapchain = swapchain,
@@ -78,35 +78,7 @@ pub fn deinit(
     c.vkDestroySwapchainKHR.?(device.handle, self.swapchain, null);
 }
 
-pub fn recreate(
-    self: *@This(),
-    allocator: std.mem.Allocator,
-    physical_device: PhysicalDevice,
-    device: Device,
-    surface: Surface,
-    width: u32,
-    height: u32,
-) !void {
-    try check(c.vkDeviceWaitIdle.?(device.handle));
-    c.vkDestroySwapchainKHR.?(device.handle, self.swapchain, null);
-
-    const actual_extent = try getSurfaceExtent(physical_device, surface, width, height);
-
-    const surface_format = try getSurfaceFormat(allocator, physical_device, surface);
-    const swapchain = try createSwapchain(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
-    self.swapchain = swapchain;
-
-    self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
-    var image_count: u32 = undefined;
-    try check(c.vkGetSwapchainImagesKHR.?(device.handle, swapchain, &image_count, null));
-    if (image_count > 16) @panic("More than 16 VkImages\n");
-
-    var vk_images: [16]c.VkImage = undefined;
-    try check(c.vkGetSwapchainImagesKHR.?(device.handle, swapchain, &image_count, &vk_images[0]));
-    self.vk_images = vk_images;
-}
-
-fn createSwapchain(
+fn create(
     physical_device: PhysicalDevice,
     device: Device,
     surface: Surface,
@@ -119,7 +91,7 @@ fn createSwapchain(
     var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
     try check(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR.?(physical_device.handle, surface.handle, &capabilities));
 
-    const actual_extent: c.VkExtent2D = try getSurfaceExtent(physical_device, surface, width, height);
+    const actual_extent: c.VkExtent2D = try surface.getExtent(physical_device, width, height);
 
     var swapchain_info: c.VkSwapchainCreateInfoKHR = .{
         .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -142,43 +114,32 @@ fn createSwapchain(
     return swapchain;
 }
 
-fn getSurfaceFormat(allocator: std.mem.Allocator, physical_device: PhysicalDevice, surface: Surface) !c.VkSurfaceFormatKHR {
-    var format_count: u32 = 0;
-    try check(c.vkGetPhysicalDeviceSurfaceFormatsKHR.?(physical_device.handle, surface.handle, &format_count, null));
-
-    const formats = try allocator.alloc(c.VkSurfaceFormatKHR, format_count);
-    defer allocator.free(formats);
-    try check(c.vkGetPhysicalDeviceSurfaceFormatsKHR.?(physical_device.handle, surface.handle, &format_count, formats.ptr));
-
-    var chosen_format: c.VkSurfaceFormatKHR = formats[0];
-    for (0..format_count) |i| {
-        if (formats[i].format == c.VK_FORMAT_R8G8B8A8_UNORM) {
-            chosen_format = formats[i];
-            break;
-        }
-    }
-    return chosen_format;
-}
-
-fn getSurfaceExtent(
+pub fn recreate(
+    self: *@This(),
+    allocator: std.mem.Allocator,
     physical_device: PhysicalDevice,
+    device: Device,
     surface: Surface,
     width: u32,
     height: u32,
-) !c.VkExtent2D {
-    var capabilities: c.VkSurfaceCapabilitiesKHR = undefined;
-    try check(c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR.?(physical_device.handle, surface.handle, &capabilities));
+) !void {
+    try check(c.vkDeviceWaitIdle.?(device.handle));
+    c.vkDestroySwapchainKHR.?(device.handle, self.swapchain, null);
 
-    const actual_extent: c.VkExtent2D = if (capabilities.currentExtent.width != std.math.maxInt(u32) and
-        capabilities.currentExtent.height != std.math.maxInt(u32))
-        capabilities.currentExtent
-    else
-        .{
-            .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
-            .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
-        };
+    const actual_extent = try surface.getExtent(physical_device, width, height);
 
-    return actual_extent;
+    const surface_format = try surface.getFormat(allocator, physical_device);
+    const swapchain = try create(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
+    self.swapchain = swapchain;
+
+    self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
+    var image_count: u32 = undefined;
+    try check(c.vkGetSwapchainImagesKHR.?(device.handle, swapchain, &image_count, null));
+    if (image_count > 16) @panic("More than 16 VkImages\n");
+
+    var vk_images: [16]c.VkImage = undefined;
+    try check(c.vkGetSwapchainImagesKHR.?(device.handle, swapchain, &image_count, &vk_images[0]));
+    self.vk_images = vk_images;
 }
 
 const FrameData = struct {

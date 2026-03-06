@@ -4,48 +4,49 @@ const check = @import("utils.zig").check;
 
 handle: c.VkInstance,
 
-pub fn init(extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
-    var extension_count: u32 = undefined;
-    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &extension_count, null));
-    var extension_properties: [128]c.VkExtensionProperties = undefined;
-    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &extension_count, &extension_properties));
-    check_ext: for (extensions) |extension| {
-        std.debug.print("ext: {s}\n", .{extension});
-        for (extension_properties[0..extension_count]) |cmp_ext| {
-            if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
+pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
+    var version: u32 = undefined;
+    try check(c.vkEnumerateInstanceVersion.?(&version));
+    if (c.VK_API_VERSION_MAJOR(version) < 1 or c.VK_API_VERSION_MINOR(version) < 3) return error.DynamicRenderingUnsupported;
+
+    var count: u32 = undefined;
+    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &count, null));
+
+    const enum_extensions: []c.VkExtensionProperties = try allocator.alloc(c.VkExtensionProperties, count);
+    defer allocator.free(enum_extensions);
+
+    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &count, enum_extensions.ptr));
+
+    var found: usize = 0;
+
+    for (enum_extensions) |enum_extension| {
+        const extension_name_len = std.mem.findScalar(u8, enum_extension.extensionName[0..], 0).?;
+        for (required_extensions) |required_extension| {
+            if (!std.mem.eql(u8, std.mem.span(required_extension), (enum_extension.extensionName[0..extension_name_len]))) continue;
+            std.log.info("found ext: [{d}/{d}] {s}", .{ found + 1, required_extensions.len, required_extension });
+            found += 1;
         }
-        std.log.err("Missing instance extention: {s}\n", .{extension});
-        return error.MissingInstanceExtension;
     }
+    if (found != required_extensions.len) return error.ExtensionsNotFound;
 
-    var layer_count: u32 = undefined;
-    try check(c.vkEnumerateInstanceLayerProperties.?(&layer_count, null));
-    var layer_properties: [128]c.VkLayerProperties = undefined;
-    try check(c.vkEnumerateInstanceLayerProperties.?(&layer_count, &layer_properties));
-    check_layer: for (layers) |layer| {
-        for (layer_properties[0..layer_count]) |cmp_layer|
-            if (std.mem.eql(u8, std.mem.span(layer), std.mem.sliceTo(&cmp_layer.layerName, 0))) continue :check_layer;
-        std.log.err("Missing instance layer: {s}\n", .{layer});
-        return error.MissingInstanceLayer;
-    }
-
-    var create_info: c.VkInstanceCreateInfo = .{
+    const instane_create_info: *const c.VkInstanceCreateInfo = &.{
         .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .ppEnabledExtensionNames = extensions.ptr,
-        .enabledExtensionCount = @intCast(extensions.len),
-        .ppEnabledLayerNames = layers.ptr,
-        .enabledLayerCount = @intCast(layers.len),
-
         .pApplicationInfo = &.{
             .sType = c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .pApplicationName = "PlanetaryZigma",
-            .pEngineName = "Engine",
+            .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
+            .pEngineName = "Zigma",
+            .engineVersion = c.VK_MAKE_VERSION(1, 0, 0),
             .apiVersion = c.VK_API_VERSION_1_4,
         },
+        .enabledExtensionCount = @intCast(required_extensions.len),
+        .ppEnabledExtensionNames = required_extensions.ptr,
+        .enabledLayerCount = @intCast(layers.len),
+        .ppEnabledLayerNames = layers.ptr,
     };
 
     var instance: c.VkInstance = undefined;
-    try check(c.vkCreateInstance.?(&create_info, null, &instance));
+    try check(c.vkCreateInstance.?(instane_create_info, null, @ptrCast(&instance)));
     return .{ .handle = instance };
 }
 

@@ -7,7 +7,7 @@ pub const Physical = struct {
     handle: c.VkPhysicalDevice,
     graphics_queue_family_index: u32,
 
-    pub fn init(instance: Instance, vk_surface: c.VkSurfaceKHR) !@This() {
+    pub fn pick(instance: Instance, surface: c.VkSurfaceKHR) !@This() {
         var device_count: u32 = 0;
         try check(c.vkEnumeratePhysicalDevices.?(instance.handle, &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
@@ -15,26 +15,26 @@ pub const Physical = struct {
         var devices: [8]c.VkPhysicalDevice = undefined;
         try check(c.vkEnumeratePhysicalDevices.?(instance.handle, &device_count, &devices));
 
-        for (devices[0..device_count]) |physical_device| {
+        for (devices[0..device_count]) |device| {
             var properties: c.VkPhysicalDeviceProperties = undefined;
-            c.vkGetPhysicalDeviceProperties.?(physical_device, &properties);
+            c.vkGetPhysicalDeviceProperties.?(device, &properties);
 
             var family_count: u32 = 0;
-            c.vkGetPhysicalDeviceQueueFamilyProperties.?(physical_device, &family_count, null);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, null);
 
             var families: [16]c.VkQueueFamilyProperties = undefined;
-            c.vkGetPhysicalDeviceQueueFamilyProperties.?(physical_device, &family_count, &families);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, &families);
 
             for (families[0..family_count], 0..) |family, i| {
                 const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
 
                 var present_supported: c.VkBool32 = undefined;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR.?(physical_device, @intCast(i), vk_surface, &present_supported));
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR.?(device, @intCast(i), surface, &present_supported));
 
                 if (supports_graphics and present_supported != 0) {
-                    std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
+                    std.log.info("found physical device: {s}, queue family: {d}", .{ properties.deviceName, i });
 
-                    return .{ .handle = physical_device, .graphics_queue_family_index = @intCast(i) };
+                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
                 }
             }
         }
@@ -74,7 +74,7 @@ pub const Logical = struct {
         check_ext: for (extensions) |extension| {
             for (extension_properties[0..extension_count]) |cmp_ext|
                 if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
-            std.log.err("Missing Device extention: {s}\n", .{extension});
+            std.log.err("Missing Device extention: {s}", .{extension});
             return error.MissingDeviceExtension;
         }
 

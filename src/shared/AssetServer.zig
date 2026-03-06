@@ -1,62 +1,45 @@
 const std = @import("std");
 
+dir: std.Io.Dir,
 allocator: std.mem.Allocator,
 io: std.Io,
-assets_root: []u8,
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
-    const root = try discoverAssetsRoot(allocator, io);
-    return .{
-        .io = io,
-        .allocator = allocator,
-        .assets_root = root,
-    };
-}
-
-pub fn deinit(self: *@This()) void {
-    self.allocator.free(self.assets_root);
-}
-
-pub fn loadAsset(self: *@This(), relative_path: []const u8) ![]u8 {
-    const full_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.assets_root, relative_path });
-    defer self.allocator.free(full_path);
-
-    std.debug.print("loadAsset: {s}\n", .{full_path});
-
-    return try cwdDir().readFileAlloc(self.io, full_path, self.allocator, .unlimited);
-}
-
-pub fn loadAssetNullTerminated(self: *@This(), io: std.Io, relative_path: []const u8) ![:0]u8 {
-    const bytes = try self.loadAsset(io, relative_path);
-    defer self.allocator.free(bytes);
-    return try self.allocator.dupeZ(u8, bytes);
-}
-
-fn discoverAssetsRoot(allocator: std.mem.Allocator, io: std.Io) ![]u8 {
-    const candidates: []const []const u8 = &.{
+    const asset_paths: []const []const u8 = &.{
         "assets",
         "../assets",
         "../../assets",
     };
 
-    for (candidates) |candidate| {
-        cwdDir().access(io, candidate, .{}) catch continue;
-        return try allocator.dupe(u8, candidate);
-    }
+    const found_path: []const u8 = path: for (asset_paths) |path| {
+        std.Io.Dir.cwd().access(io, path, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
+        break :path path;
+    } else return error.NoAssetDir;
 
-    return error.AssetsFolderNotFound;
+    const dir = try std.Io.Dir.cwd().openDir(io, found_path, .{ .iterate = true });
+
+    return .{
+        .dir = dir,
+        .allocator = allocator,
+        .io = io,
+    };
 }
 
-fn cwdDir() std.Io.Dir {
-    if (@hasDecl(std.Io, "cwd")) return std.Io.cwd();
-    return std.Io.Dir.cwd();
+pub fn deinit(self: *@This()) void {
+    self.dir.close(self.io);
+    self.* = undefined;
 }
-const TextureImage = struct {
-    pixels: []u8,
-    width: u32,
-    height: u32,
-    bytes_per_row: usize,
-};
+
+pub fn loadAsset(self: *@This(), sub_path: []const u8) std.Io.Dir.ReadFileAllocError![]u8 {
+    return self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), null);
+}
+
+pub fn loadAssetZ(self: *@This(), sub_path: []const u8) std.Io.Dir.ReadFileAllocError![:0]u8 {
+    return self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), 0);
+}
 
 // fn loadTextureRgba8(
 //     self: *@This(),

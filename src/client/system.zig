@@ -38,9 +38,15 @@ comptime {
 
 pub const ffi = struct {
     pub const Table = struct {
-        systemContextInit: *const fn (*Context, data: *const Context.Data) void,
-        systemContextDeinit: *const fn (*Context) void,
-        systemContextUpdate: *const fn (*Context, detla_time: f32) void,
+        systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
+        systemContextDeinit: *const fn (*Context) callconv(.c) void,
+        systemContextUpdate: *const fn (*Context, detla_time: f32) callconv(.c) void,
+
+        pub fn load(dynlib: *std.DynLib) !@This() {
+            var self: @This() = undefined;
+            inline for (@typeInfo(@This()).@"struct".fields) |field| @field(self, field.name) = dynlib.lookup(field.type, field.name) orelse return error.DynlibLookup;
+            return self;
+        }
     };
 
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {

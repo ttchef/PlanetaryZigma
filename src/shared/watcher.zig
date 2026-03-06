@@ -27,6 +27,7 @@ const FileWatcher = struct {
         var buffer: [max_event_size]u8 align(@alignOf(std.os.linux.inotify_event)) = undefined;
 
         const read = std.posix.read(self.inotify_fd, &buffer) catch return false;
+        std.debug.print("listen: {any}\n", .{buffer[0..read]});
         if (read > 0) return true;
         return false;
     }

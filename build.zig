@@ -97,6 +97,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
 
         vulkan.addCSourceFile(.{
             .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#define VOLK_IMPLEMENTATION
                 \\#include <volk.h>
                 \\#define VMA_STATIC_VULKAN_FUNCTIONS 0
                 \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
@@ -104,10 +105,6 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 \\#include <vk_mem_alloc.h>
             ),
             .flags = &.{"-std=c++17"},
-        });
-        vulkan.addCSourceFile(.{
-            .file = volk_dep.path("volk.c"),
-            .flags = &.{"-std=c99"},
         });
 
         system.root_module.addImport("vulkan", vulkan);
@@ -137,6 +134,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.link_libcpp = true;
     }
 
+    b.installArtifact(system);
     b.installArtifact(exe);
 
     const run_step = b.step("run-client", "Run the client");

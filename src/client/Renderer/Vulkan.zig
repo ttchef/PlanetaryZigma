@@ -28,7 +28,7 @@ const Vertex = extern struct {
     uv: [4]f32,
 };
 
-pub const Config = struct {
+pub const InitOptions = struct {
     instance: struct {
         extensions: []const [*:0]const u8,
         layers: []const [*:0]const u8,
@@ -46,13 +46,9 @@ pub const Config = struct {
     },
 };
 
-pub fn init(
-    allocator: std.mem.Allocator,
-    asset_server: *AssetServer,
-    config: Config,
-) !@This() {
+pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !@This() {
     try check(c.volkInitialize());
-    const instance: Instance = try .init(config.instance.extensions, config.instance.layers);
+    const instance: Instance = try .init(allocator, options.instance.extensions, options.instance.layers);
     c.volkLoadInstance(instance.handle);
     const debug_messenger: DebugMessenger = try .init(instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
@@ -62,14 +58,14 @@ pub fn init(
             .info = true,
         },
     });
-    const surface: Surface = if (config.surface.init != null and config.surface.data != null) .{
-        .handle = @ptrCast(try config.surface.init.?(instance.handle, config.surface.data.?)),
+    const surface: Surface = if (options.surface.init != null and options.surface.data != null) .{
+        .handle = @ptrCast(try options.surface.init.?(instance.handle, options.surface.data.?)),
     } else return error.configSurface;
-    const physical_device: PhysicalDevice = try .init(instance, surface.handle);
-    const device: Device = try .init(physical_device, config.device.extensions);
+    const physical_device: PhysicalDevice = try .pick(instance, surface.handle);
+    const device: Device = try .init(physical_device, options.device.extensions);
     c.volkLoadDevice(device.handle);
     const vma: Vma = try .init(instance, physical_device, device);
-    const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+    const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, options.swapchain.width, options.swapchain.heigth);
     const draw_image: Image = try .init(
         vma.handle,
         device,
@@ -92,29 +88,31 @@ pub fn init(
         false,
     );
 
-    const vert_data = try asset_server.loadAsset("shaders/vertex.vert.spv");
-    const frag_data = try asset_server.loadAsset("shaders/fragment.frag.spv");
-    const shader_create_info = &[_]c.VkShaderCreateInfoEXT{
+    const vertex_source = try asset_server.loadAsset("shaders/vertex.vert.spv");
+    defer asset_server.allocator.free(vertex_source);
+    const fragment_source = try asset_server.loadAsset("shaders/fragment.frag.spv");
+    defer asset_server.allocator.free(fragment_source);
+    const shader_create_info: []const c.VkShaderCreateInfoEXT = &.{
         .{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = vert_data.len,
-            .pCode = vert_data.ptr,
+            .codeSize = vertex_source.len,
+            .pCode = vertex_source.ptr,
             .pName = "main",
         },
         .{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = frag_data.len,
-            .pCode = frag_data.ptr,
+            .codeSize = fragment_source.len,
+            .pCode = fragment_source.ptr,
             .pName = "main",
         },
     };
     var shaders: [2]c.VkShaderEXT = undefined;
-    try check(c.vkCreateShadersEXT.?(device.handle, 2, shader_create_info, null, &shaders));
+    try check(c.vkCreateShadersEXT.?(device.handle, 2, shader_create_info.ptr, null, &shaders));
 
     return .{
         .instance = instance,

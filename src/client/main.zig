@@ -13,7 +13,9 @@ const yes = @import("yes");
 // };
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = gpa.deinit();
+    const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
     const io = init.io;
 
     var platform_impl = switch (builtin.os.tag) {
@@ -27,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
     const window = &window_impl.interface;
     try window.open(platform, .{
         .title = "PlanetaryZigma",
-        .size = .{ .width = 900, .height = 800 },
+        .size = .{ .width = 670, .height = 400 },
         .min_size = .{ .width = 400, .height = 300 },
         .surface_type = .{ .vulkan = .{ .major = 0, .minor = 0, .patch = 0 } },
     });
@@ -35,9 +37,6 @@ pub fn main(init: std.process.Init) !void {
 
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
-
-    var watcher: shared.Watcher = try .init("system", io);
-    defer watcher.deinit();
 
     // const vertex_glsl = try asset_server.loadAssetZ(init.io, "shaders/colored_triangle.vert");
     // defer allocator.free(vertex_glsl);
@@ -131,13 +130,11 @@ pub fn main(init: std.process.Init) !void {
     // });
     // defer renderer.destroySampler(sampler) catch {};
 
+    var watcher: shared.Watcher = try .init("system", io);
+    defer watcher.deinit();
+
     var system_context: system.Context = undefined;
-    var system_table: system.ffi.Table = undefined;
-
-    var dynlib: std.DynLib = try .openZ("zig-out/lib/libsystem.so");
-    defer dynlib.close();
-
-    inline for (std.meta.fields(system.ffi.Table)) |field| @field(system_table, field.name) = try watcher.lookup(field.type, field.name);
+    var system_table: system.ffi.Table = try .load(&watcher.dynlib);
 
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .allocator = allocator,
@@ -151,6 +148,7 @@ pub fn main(init: std.process.Init) !void {
             .close => break :main_loop,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
+                try system_context.renderer.resize(allocator, window);
             },
             .key => |key| {
                 if (key.state == .released and key.sym == .escape) break :main_loop;
@@ -158,22 +156,11 @@ pub fn main(init: std.process.Init) !void {
             else => {},
         };
 
-        // if (system_table == null or try watcher.check()) {
-        //     std.log.debug("file watcher detected change or init", .{});
-        //     if (system_table) |table| table.systemContextDeinit(&system_context);
-        //     system_table = undefined;
-        //     const init2 = try watcher.lookup(*const fn (*system.Context, data: *const system.Context.Data) void, "systemContextInit");
-        //     _ = init2;
-        //     inline for (std.meta.fields(system.ffi.Table)) |field| @field(system_table.?, field.name) = try watcher.lookup(field.type, field.name);
-        //     if (system_table == null) {
-        //         system_table.?.systemContextInit(&system_context, &system.Context.Data{
-        //             .allocator = allocator,
-        //             .asset_server = &asset_server,
-        //             .platform = platform,
-        //             .window = window,
-        //         });
-        //     }
-        // }
+        if (try watcher.check()) {
+            std.log.debug("system table updated", .{});
+            try watcher.reload();
+            system_table = try .load(&watcher.dynlib);
+        }
 
         // try system_table.?.systemContextUpdate(&system_context, 0.016);
 
