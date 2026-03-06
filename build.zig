@@ -59,17 +59,29 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         }).?.module("objc");
         exe.root_module.addImport("objc", objc);
     } else {
-        const vulkan_header_dep = b.dependency("vulkan_headers", .{});
-        const vulkan_headers = b.addTranslateC(.{
+        const volk_dep = b.dependency("volk", .{});
+        const volk = b.addTranslateC(.{
             .root_source_file = b.addWriteFiles().add("c.h",
-                \\#include "vulkan/vulkan.h"
+                \\#include "volk.h"
             ),
             .target = target,
             .optimize = optimize,
         }).createModule();
-        vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
-        exe.root_module.addImport("vulkan", vulkan_headers);
-        exe.root_module.linkSystemLibrary("vulkan", .{});
+        // const vulkan_header_dep = b.dependency("vulkan_headers", .{});
+        // const vulkan_headers = b.addTranslateC(.{
+        //     .root_source_file = b.addWriteFiles().add("c.h",
+        //         \\#include "vulkan/vulkan.h"
+        //     ),
+        //     .target = target,
+        //     .optimize = optimize,
+        // }).createModule();
+        volk.addIncludePath(volk_dep.path("include/"));
+        exe.root_module.addImport("vulkan", volk);
+        exe.root_module.addCSourceFile(.{
+            .file = volk_dep.path("volk.c"),
+            .flags = &.{"-std=c99"},
+        });
+        // exe.root_module.linkSystemLibrary("vulkan", .{});
 
         exe.root_module.link_libcpp = true;
         const vma_dep = b.dependency("vma", .{});
@@ -82,6 +94,9 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.addIncludePath(vma_dep.path("include/"));
         exe.root_module.addCSourceFile(.{
             .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#include "volk.h"
+                \\#define VMA_STATIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
                 \\#define VMA_IMPLEMENTATION
                 \\#include "vk_mem_alloc.h"
             ),

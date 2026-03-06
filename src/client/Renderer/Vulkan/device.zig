@@ -9,27 +9,27 @@ pub const Physical = struct {
 
     pub fn init(instance: Instance, vk_surface: c.VkSurfaceKHR) !@This() {
         var device_count: u32 = 0;
-        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, null));
+        try check(c.vkEnumeratePhysicalDevices.?(instance.handle, &device_count, null));
         if (device_count == 0) return error.NoPhysicalDevices;
 
         var devices: [8]c.VkPhysicalDevice = undefined;
-        try check(c.vkEnumeratePhysicalDevices(instance.handle, &device_count, &devices));
+        try check(c.vkEnumeratePhysicalDevices.?(instance.handle, &device_count, &devices));
 
         for (devices[0..device_count]) |device| {
             var properties: c.VkPhysicalDeviceProperties = undefined;
-            c.vkGetPhysicalDeviceProperties(device, &properties);
+            c.vkGetPhysicalDeviceProperties.?(device, &properties);
 
             var family_count: u32 = 0;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, null);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, null);
 
             var families: [16]c.VkQueueFamilyProperties = undefined;
-            c.vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, &families);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, &families);
 
             for (families[0..family_count], 0..) |family, i| {
                 const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
 
                 var present_supported: c.VkBool32 = undefined;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR(device, @intCast(i), vk_surface, &present_supported));
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR.?(device, @intCast(i), vk_surface, &present_supported));
 
                 if (supports_graphics and present_supported != 0) {
                     std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
@@ -58,19 +58,19 @@ pub const Logical = struct {
             };
 
             var command_pool: c.VkCommandPool = undefined;
-            try check(c.vkCreateCommandPool(device, &command_pool_info, null, &command_pool));
+            try check(c.vkCreateCommandPool.?(device, &command_pool_info, null, &command_pool));
             return .{ .handle = command_pool };
         }
         pub fn deinit(self: @This(), device: Logical) void {
-            c.vkDestroyCommandPool(device.handle, self.handle, null);
+            c.vkDestroyCommandPool.?(device.handle, self.handle, null);
         }
     };
 
     pub fn init(physical_device: Physical, extensions: []const [*:0]const u8) !@This() {
         var extension_count: u32 = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, null));
+        try check(c.vkEnumerateDeviceExtensionProperties.?(physical_device.handle, null, &extension_count, null));
         var extension_properties: [516]c.VkExtensionProperties = undefined;
-        try check(c.vkEnumerateDeviceExtensionProperties(physical_device.handle, null, &extension_count, &extension_properties));
+        try check(c.vkEnumerateDeviceExtensionProperties.?(physical_device.handle, null, &extension_count, &extension_properties));
         check_ext: for (extensions) |extension| {
             for (extension_properties[0..extension_count]) |cmp_ext|
                 if (std.mem.eql(u8, std.mem.span(extension), std.mem.sliceTo(&cmp_ext.extensionName, 0))) continue :check_ext;
@@ -89,7 +89,7 @@ pub const Logical = struct {
         };
 
         var features: c.VkPhysicalDeviceFeatures = undefined;
-        c.vkGetPhysicalDeviceFeatures(physical_device.handle, &features);
+        c.vkGetPhysicalDeviceFeatures.?(physical_device.handle, &features);
 
         var dynamic_rendering_features: c.VkPhysicalDeviceDynamicRenderingFeatures = .{
             .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
@@ -126,9 +126,9 @@ pub const Logical = struct {
         };
 
         var device: c.VkDevice = undefined;
-        try check(c.vkCreateDevice(physical_device.handle, &device_info, null, &device));
+        try check(c.vkCreateDevice.?(physical_device.handle, &device_info, null, &device));
         var queue: c.VkQueue = undefined;
-        c.vkGetDeviceQueue(device, physical_device.graphics_queue_family_index, 0, &queue);
+        c.vkGetDeviceQueue.?(device, physical_device.graphics_queue_family_index, 0, &queue);
 
         const command_pool: CommandPool = try .init(device, physical_device.graphics_queue_family_index);
 
@@ -141,6 +141,6 @@ pub const Logical = struct {
 
     pub fn deinit(self: @This()) void {
         self.command_pool.deinit(self);
-        c.vkDestroyDevice(self.handle, null);
+        c.vkDestroyDevice.?(self.handle, null);
     }
 };

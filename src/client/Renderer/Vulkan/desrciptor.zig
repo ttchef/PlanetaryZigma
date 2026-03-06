@@ -15,11 +15,11 @@ pub const Layout = struct {
         };
 
         var set: c.VkDescriptorSetLayout = undefined;
-        try check(c.vkCreateDescriptorSetLayout(device.handle, &info, null, &set));
+        try check(c.vkCreateDescriptorSetLayout.?(device.handle, &info, null, &set));
         return .{ .handle = set };
     }
 
     pub fn deinit(self: @This(), device: Device) void {
-        c.vkDestroyDescriptorSetLayout(device.handle, self.handle, null);
+        c.vkDestroyDescriptorSetLayout.?(device.handle, self.handle, null);
     }
 };

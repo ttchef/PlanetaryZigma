@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const c = @import("vma");
+// const vulkanC = @import("vulkan");
 const Instance = @import("Instance.zig");
 const PhysicalDevice = @import("device.zig").Physical;
 const Device = @import("device.zig").Logical;
@@ -18,6 +19,10 @@ pub fn init(instance: Instance, physical_device: PhysicalDevice, device: Device)
         .instance = @ptrCast(instance.handle),
         .flags = c.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
     };
+
+    var vulkan_volk_functions: c.VmaVulkanFunctions = undefined;
+    check(c.vmaImportVulkanFunctionsFromVolk(&vma_info, &vulkan_volk_functions));
+    vma_info.pVulkanFunctions = &vulkan_volk_functions;
 
     var vulkan_mem_alloc: c.VmaAllocator = undefined;
     try check(c.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));

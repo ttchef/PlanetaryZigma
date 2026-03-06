@@ -44,6 +44,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssestServer, window: *
                 .device = .{
                     .extensions = &.{
                         Vulkan.c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                        Vulkan.c.VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
                         Vulkan.c.VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
                         Vulkan.c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
                         Vulkan.c.VK_EXT_SHADER_OBJECT_EXTENSION_NAME,

@@ -70,7 +70,7 @@ pub fn init(
     };
 
     var image_view: c.VkImageView = undefined;
-    try check(c.vkCreateImageView(device.handle, &image_view_info, null, &image_view));
+    try check(c.vkCreateImageView.?(device.handle, &image_view_info, null, &image_view));
 
     return .{
         .format = format,
@@ -83,7 +83,7 @@ pub fn init(
 }
 
 pub fn deinit(self: @This(), vulkan_mem_alloc: Vma, device: Device) void {
-    c.vkDestroyImageView(device.handle, self.vk_imageview, null);
+    c.vkDestroyImageView.?(device.handle, self.vk_imageview, null);
     Vma.c.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.vk_image), self.vma_allocation);
 }
 
@@ -127,7 +127,8 @@ pub fn uploadDataToImage(self: *@This(), device: Device, vma: Vma.Allocator, dat
         .imageExtent = self.extent,
     };
 
-    c.vkCmdCopyBufferToImage(
+    c.vkCmdCopyBufferToImage.?(
+
         cmd,
         upload_buffer.buffer,
         self.vk_image,
@@ -224,7 +225,7 @@ fn generateMipmaps(self: *@This(), cmd_buffer: c.VkCommandBuffer, image_size: c.
             .regionCount = 1,
         };
 
-        c.vkCmdBlitImage2(cmd_buffer, &blit_info);
+        c.vkCmdBlitImage2.?(cmd_buffer, &blit_info);
 
         size = half_size;
     }
@@ -282,7 +283,7 @@ pub fn copyOntoImage(
         .pRegions = &blit_region,
     };
 
-    c.vkCmdBlitImage2(cmd, &blit_info);
+    c.vkCmdBlitImage2.?(cmd, &blit_info);
 }
 
 pub const Barrier = struct {
@@ -326,7 +327,7 @@ pub const Barrier = struct {
                 .layerCount = 1,
             },
         };
-        c.vkCmdPipelineBarrier(self.cmd, self.src_stage, stage, 0, 0, null, 0, null, 1, &new);
+        c.vkCmdPipelineBarrier.?(self.cmd, self.src_stage, stage, 0, 0, null, 0, null, 1, &new);
         self.*.old_layout = layout;
         self.*.src_stage = stage;
         self.*.src_access = access;
@@ -366,7 +367,7 @@ pub const Barrier = struct {
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &new,
         };
-        c.vkCmdPipelineBarrier2(self.cmd, &dep);
+        c.vkCmdPipelineBarrier2.?(self.cmd, &dep);
         self.*.old_layout = new_layout;
         self.*.src_stage = dst_stage;
         self.*.src_access = dst_access;

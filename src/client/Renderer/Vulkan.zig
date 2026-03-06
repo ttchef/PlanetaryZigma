@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetServer = @import("shared").AssetServer;
 pub const c = @import("vulkan");
-pub const Func = @import("Vulkan/utils.zig").Func;
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
@@ -46,7 +45,9 @@ pub fn init(
     asset_server: *AssetServer,
     config: Config,
 ) !@This() {
+    try check(c.volkInitialize());
     const instance: Instance = try .init(config.instance.extensions, config.instance.layers);
+    c.volkLoadInstance(instance.handle);
     const debug_messenger: DebugMessenger = try .init(instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -60,6 +61,7 @@ pub fn init(
     } else return error.configSurface;
     const physical_device: PhysicalDevice = try .init(instance, surface.handle);
     const device: Device = try .init(physical_device, config.device.extensions);
+    c.volkLoadDevice(device.handle);
     const vma: Vma = try .init(instance, physical_device, device);
     const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
     const draw_image: Image = try .init(
@@ -106,11 +108,8 @@ pub fn init(
         },
     };
     var shaders: [2]c.VkShaderEXT = undefined;
-    const createShadersExt = try Func.Proc(.createShadersEXT).load(instance);
-    try check(createShadersExt(device.handle, 2, shader_create_info, null, &shaders));
-    // const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
+    try check(c.vkCreateShadersEXT.?(device.handle, 2, shader_create_info, null, &shaders));
 
-    // try check(c.vkCreateShadersEXT(device.handle, shader_create_info.len, shader_create_info, null, &shaders));
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -132,9 +131,9 @@ pub fn deinit(self: *@This()) void {
 pub fn update(self: *@This()) !void {
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
-    try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
+    try check(c.vkWaitForFences.?(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     // std.debug.print("------------ {d} \n", .{image_index});
-    const aquire_result = c.vkAcquireNextImageKHR(
+    const aquire_result = c.vkAcquireNextImageKHR.?(
         self.device.handle,
         self.swapchain.swapchain,
         1000000000,
@@ -150,18 +149,18 @@ pub fn update(self: *@This()) !void {
         c.VK_TIMEOUT, c.VK_NOT_READY => return,
         else => {},
     }
-    try check(c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
+    try check(c.vkResetFences.?(self.device.handle, 1, &current_frame.render_fence));
     const render_semaphore: c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     // try current_frame.descriptor.clearPools(self.device);
     // current_frame.gpu_scene.deinit(self.vma.handle);
 
     const cmd_buffer = current_frame.command_buffer;
-    try check(c.vkResetCommandBuffer(cmd_buffer, 0));
+    try check(c.vkResetCommandBuffer.?(cmd_buffer, 0));
     var cmd_begin_info: c.VkCommandBufferBeginInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
+    try check(c.vkBeginCommandBuffer.?(cmd_buffer, &cmd_begin_info));
 
     //TODO: RENDERING!
     try render(self, cmd_buffer);
@@ -174,7 +173,7 @@ pub fn update(self: *@This()) !void {
     );
 
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
-    try check(c.vkEndCommandBuffer(cmd_buffer));
+    try check(c.vkEndCommandBuffer.?(cmd_buffer));
 
     var submit_info: c.VkSubmitInfo2 = .{
         .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
@@ -199,7 +198,7 @@ pub fn update(self: *@This()) !void {
         },
     };
 
-    try check(c.vkQueueSubmit2(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
+    try check(c.vkQueueSubmit2.?(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
 
     var present_info: c.VkPresentInfoKHR = .{
         .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -210,7 +209,7 @@ pub fn update(self: *@This()) !void {
         .pImageIndices = &image_index,
     };
 
-    const present_result = c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
+    const present_result = c.vkQueuePresentKHR.?(self.device.graphics_queue, &present_info);
 
     if (present_result == c.VK_ERROR_OUT_OF_DATE_KHR or present_result == c.VK_SUBOPTIMAL_KHR) {
         return;
@@ -281,39 +280,34 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
             .height = self.draw_image.extent.height,
         },
     };
-    const vkCmdBindShadersEXT = try Func.Proc(.cmdBindShadersEXT).load(self.instance);
-    vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
-    // c.vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
+    c.vkCmdBindShadersEXT.?(cmd, 2, &stages, &bound);
 
-    c.vkCmdSetStencilTestEnable(cmd, c.VK_FALSE);
+    c.vkCmdSetStencilTestEnable.?(cmd, c.VK_FALSE);
 
-    c.vkCmdSetStencilOp(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_COMPARE_OP_ALWAYS);
+    c.vkCmdSetStencilOp.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_COMPARE_OP_ALWAYS);
 
-    c.vkCmdSetStencilCompareMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
-    c.vkCmdSetStencilWriteMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0x00);
-    c.vkCmdSetStencilReference(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+    c.vkCmdSetStencilCompareMask.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
+    c.vkCmdSetStencilWriteMask.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0x00);
+    c.vkCmdSetStencilReference.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0);
 
-    c.vkCmdSetViewport(cmd, 0, 1, &viewport);
-    c.vkCmdSetScissor(cmd, 0, 1, &scissor);
-    c.vkCmdSetRasterizerDiscardEnable(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
-    c.vkCmdSetCullMode(cmd, c.VK_CULL_MODE_BACK_BIT);
-    c.vkCmdSetFrontFace(cmd, c.VK_FRONT_FACE_CLOCKWISE);
+    c.vkCmdSetViewport.?(cmd, 0, 1, &viewport);
+    c.vkCmdSetScissor.?(cmd, 0, 1, &scissor);
+    c.vkCmdSetRasterizerDiscardEnable.?(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
+    c.vkCmdSetCullMode.?(cmd, c.VK_CULL_MODE_BACK_BIT);
+    c.vkCmdSetFrontFace.?(cmd, c.VK_FRONT_FACE_CLOCKWISE);
     // Depth bias: explicitly OFF
-    c.vkCmdSetDepthBiasEnable(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthBiasEnable.?(cmd, c.VK_FALSE);
     // (If you ever enable it, also set the parameters)
-    c.vkCmdSetDepthBias(cmd, 0, 0, 0);
+    c.vkCmdSetDepthBias.?(cmd, 0, 0, 0);
 
-    const vkCmdSetPolygonModeEXT = try Func.Proc(.cmdSetPolygonModeEXT).load(self.instance);
-    vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL); // if supported
+    c.vkCmdSetPolygonModeEXT.?(cmd, c.VK_POLYGON_MODE_FILL); // if supported
 
-    const vkCmdSetRasterizationSamplesEXT = try Func.Proc(.cmdSetRasterizationSamplesEXT).load(self.instance);
-    // c.vkCmdSetRasterizationSamplesEXT(gcc, rasterizationSamples: c_uint)
-    vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
+    c.vkCmdSetRasterizationSamplesEXT.?(cmd, c.VK_SAMPLE_COUNT_1_BIT);
 
-    c.vkCmdSetDepthTestEnable(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthWriteEnable(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthCompareOp(cmd, c.VK_COMPARE_OP_ALWAYS);
-    c.vkCmdSetPrimitiveTopology(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    c.vkCmdSetDepthTestEnable.?(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthWriteEnable.?(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthCompareOp.?(cmd, c.VK_COMPARE_OP_ALWAYS);
+    c.vkCmdSetPrimitiveTopology.?(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -334,10 +328,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
         .pStencilAttachment = null,
     };
 
-    c.vkCmdBeginRendering(cmd, &render_info);
+    c.vkCmdBeginRendering.?(cmd, &render_info);
 
-    c.vkCmdDraw(cmd, 3, 1, 0, 0);
-    c.vkCmdEndRendering(cmd);
+    c.vkCmdDraw.?(cmd, 3, 1, 0, 0);
+    c.vkCmdEndRendering.?(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
