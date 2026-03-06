@@ -22,6 +22,12 @@ draw_image: Image,
 depth_image: Image,
 shaders: [2]c.VkShaderEXT,
 
+const Vertex = extern struct {
+    position: [4]f32,
+    color: [4]f32,
+    uv: [4]f32,
+};
+
 pub const Config = struct {
     instance: struct {
         extensions: []const [*:0]const u8,
@@ -125,7 +131,18 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    _ = self;
+    check(c.vkDeviceWaitIdle.?(self.device.handle)) catch {};
+
+    c.vkDestroyShaderEXT.?(self.device.handle, self.shaders[0], null);
+    c.vkDestroyShaderEXT.?(self.device.handle, self.shaders[1], null);
+    self.depth_image.deinit(self.vma, self.device);
+    self.draw_image.deinit(self.vma, self.device);
+    self.swapchain.deinit(self.device);
+    self.vma.deinit();
+    self.device.deinit();
+    self.surface.deinit(self.instance);
+    self.debug_messenger.deinit(self.instance);
+    self.instance.deinit();
 }
 
 pub fn update(self: *@This()) !void {
@@ -314,8 +331,38 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     c.vkCmdSetAlphaToOneEnableEXT.?(cmd, c.VK_FALSE);
     c.vkCmdSetLogicOpEnableEXT.?(cmd, c.VK_FALSE);
 
-    // Empty vertex input - no attributes or bindings
-    c.vkCmdSetVertexInputEXT.?(cmd, 0, null, 0, null);
+    const vertexInputBinding: c.VkVertexInputBindingDescription2EXT = .{
+        .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
+        .binding = 0,
+        .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+        .stride = @sizeOf(Vertex),
+        .divisor = 1,
+    };
+    const vertexAttributes = &[_]c.VkVertexInputAttributeDescription2EXT{
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 0,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = 0,
+        },
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 1,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = @sizeOf([4]f32),
+        },
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 2,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32A32_SFLOAT,
+            .offset = 2 * @sizeOf([4]f32),
+        },
+    };
+
+    c.vkCmdSetVertexInputEXT.?(cmd, 1, &vertexInputBinding, 3, vertexAttributes);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,

@@ -15,26 +15,26 @@ pub const Physical = struct {
         var devices: [8]c.VkPhysicalDevice = undefined;
         try check(c.vkEnumeratePhysicalDevices.?(instance.handle, &device_count, &devices));
 
-        for (devices[0..device_count]) |device| {
+        for (devices[0..device_count]) |physical_device| {
             var properties: c.VkPhysicalDeviceProperties = undefined;
-            c.vkGetPhysicalDeviceProperties.?(device, &properties);
+            c.vkGetPhysicalDeviceProperties.?(physical_device, &properties);
 
             var family_count: u32 = 0;
-            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, null);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(physical_device, &family_count, null);
 
             var families: [16]c.VkQueueFamilyProperties = undefined;
-            c.vkGetPhysicalDeviceQueueFamilyProperties.?(device, &family_count, &families);
+            c.vkGetPhysicalDeviceQueueFamilyProperties.?(physical_device, &family_count, &families);
 
             for (families[0..family_count], 0..) |family, i| {
                 const supports_graphics = (family.queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0;
 
                 var present_supported: c.VkBool32 = undefined;
-                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR.?(device, @intCast(i), vk_surface, &present_supported));
+                try check(c.vkGetPhysicalDeviceSurfaceSupportKHR.?(physical_device, @intCast(i), vk_surface, &present_supported));
 
                 if (supports_graphics and present_supported != 0) {
                     std.log.info("Picked device: {s}, queue family: {d}\n", .{ properties.deviceName, i });
 
-                    return .{ .handle = device, .graphics_queue_family_index = @intCast(i) };
+                    return .{ .handle = physical_device, .graphics_queue_family_index = @intCast(i) };
                 }
             }
         }

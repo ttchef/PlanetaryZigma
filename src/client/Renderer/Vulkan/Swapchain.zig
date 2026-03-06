@@ -69,10 +69,9 @@ pub fn init(
 
 pub fn deinit(
     self: *@This(),
-    vma: Vma,
     device: Device,
 ) void {
-    for (&self.frames) |*frame| frame.deinit(vma, device);
+    for (&self.frames) |*frame| frame.deinit(device);
     for (0..self.image_count) |i| {
         c.vkDestroySemaphore.?(device.handle, self.render_semaphores[i], null);
     }
@@ -175,9 +174,9 @@ fn getSurfaceExtent(
         capabilities.currentExtent
     else
         .{
-        .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
-        .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
-    };
+            .width = @max(capabilities.minImageExtent.width, @min(capabilities.maxImageExtent.width, width)),
+            .height = @max(capabilities.minImageExtent.height, @min(capabilities.maxImageExtent.height, height)),
+        };
 
     return actual_extent;
 }
@@ -231,11 +230,10 @@ const FrameData = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), vma: Vma, device: Device) void {
+    pub fn deinit(self: *@This(), device: Device) void {
         c.vkDestroySemaphore.?(device.handle, self.swapchain_semaphore, null);
         c.vkDestroyFence.?(device.handle, self.render_fence, null);
         c.vkFreeCommandBuffers.?(device.handle, device.command_pool.handle, 1, &self.command_buffer);
-        self.descriptor.deinit(device);
-        self.gpu_scene.deinit(vma.handle);
+        // self.gpu_scene.deinit(vma.handle);
     }
 };
