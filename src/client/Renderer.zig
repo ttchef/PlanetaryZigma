@@ -17,48 +17,6 @@ const GlfwUserData = struct {
     allocator: std.mem.Allocator,
 };
 
-//TODO: HARALD fix yes? <3 😼🔥
-// pub const UpdateRenderer = *const fn (*@This(), f32) callconv(.c) void;
-// pub const InitRenderer = *const fn (*@This(), *std.mem.Allocator, *AssetServer) callconv(.c) u32;
-// pub const DeinitRenderer = *const fn (*@This(), *std.mem.Allocator) callconv(.c) void;
-// // pub const ReloadRenderer = *const fn (*@This(), *std.mem.Allocator, .Config, bool) callconv(.c) void;
-//
-// export fn initSystems(self: *@This(), allocator: *std.mem.Allocator, asset_server: *AssetServer) u32 {
-//
-//     std.debug.print("hello", .{});
-//     self.inner = try init(allocator, asset_server, )
-//
-//
-//     self.renderer = Renderer.init(allocator.*, renderer_config.*) catch |err| return @intFromError(err);
-//     initEcs(allocator.*, world, &self.renderer) catch |err| return @intFromError(err);
-//     self.physics_system = Physics.init(allocator, world) catch |err| return @intFromError(err);
-//     return 0;
-// }
-// export fn deinit(self: *@This(), allocator: *std.mem.Allocator) void {
-//     var query = world.query(&.{ecs.Collider});
-//     while (query.next()) |entry| {
-//         var collider = entry.getPtr(ecs.Collider, world).?;
-//         if (collider.shape == .mesh) {
-//             collider.shape.mesh.vertices.deinit(allocator.*);
-//             collider.shape.mesh.indices.deinit(allocator.*);
-//         }
-//     }
-//
-//     self.physics_system.deinit(allocator.*);
-//     allocator.destroy(self.physics_system);
-//     self.renderer.deinit(allocator.*);
-//
-//
-// }
-//
-// export fn update(self: *@This(), delta_time: f32) u32 {
-//     self.physics_system.update(world, &self.renderer, delta_time);
-//     player.update(@ptrCast(world), @ptrCast(self.physics_system.physics_system), delta_time) catch @panic("\n\nMake a better panix xd,\n\n");
-//
-//     self.renderer.draw(world, delta_time) catch |err| return @intFromError(err);
-//     return 0;
-// }
-
 pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, window: *glfw.GLFWwindow) !@This() {
     var width: c_int = undefined;
     var heigth: c_int = undefined;

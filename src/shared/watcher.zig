@@ -33,7 +33,7 @@ const FileWatcher = struct {
 };
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
+    const lib_name = "lib" ++ library_name ++ comptime builtin.target.dynamicLibSuffix();
 
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
@@ -79,7 +79,7 @@ pub fn deinit(self: *@This()) void {
     self.dynlib.close();
 }
 
-pub fn listen(self: *@This()) !bool {
+pub fn check(self: *@This()) !bool {
     return try self.file_watcher.listen();
 }
 

@@ -38,6 +38,19 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
 
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/client/system.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+            },
+        }),
+    });
+
     const exe = b.addExecutable(.{
         .name = "client",
         .root_module = b.createModule(.{
@@ -46,12 +59,14 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
+                .{ .name = "system", .module = system.root_module },
                 .{ .name = "glfw", .module = glfw_translate_c.createModule() },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
             },
             .link_libc = true,
         }),
     });
+
     if (target.result.os.tag.isDarwin()) {
         const objc = b.lazyDependency("zig_objc", .{
             .target = target,
@@ -60,46 +75,39 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.addImport("objc", objc);
     } else {
         const volk_dep = b.dependency("volk", .{});
-        const volk = b.addTranslateC(.{
-            .root_source_file = b.addWriteFiles().add("c.h",
-                \\#include "volk.h"
+        const vma_dep = b.dependency("vma", .{});
+
+        const vulkan_translate_c = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("vma_volk.h",
+                \\#include <volk.h>
+                \\#include <vk_mem_alloc.h>
             ),
             .target = target,
             .optimize = optimize,
-        }).createModule();
-        volk.addIncludePath(volk_dep.path("include/"));
-        exe.root_module.addImport("vulkan", volk);
-        exe.root_module.addCSourceFile(.{
+        });
+        vulkan_translate_c.addIncludePath(volk_dep.path("."));
+        vulkan_translate_c.addIncludePath(vma_dep.path("include/"));
+
+        const vulkan = vulkan_translate_c.createModule();
+        vulkan.link_libcpp = true;
+        for (vulkan_translate_c.include_dirs.items) |include_dir| vulkan.addIncludePath(include_dir.path);
+
+        vulkan.addCSourceFile(.{
+            .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#include <volk.h>
+                \\#define VMA_STATIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_IMPLEMENTATION
+                \\#include <vk_mem_alloc.h>
+            ),
+            .flags = &.{"-std=c++17"},
+        });
+        vulkan.addCSourceFile(.{
             .file = volk_dep.path("volk.c"),
             .flags = &.{"-std=c99"},
         });
 
-        exe.root_module.link_libcpp = true;
-        const vma_dep = b.dependency("vma", .{});
-        const vma_wrapper = b.addWriteFiles().add("vma_volk.h",
-            \\#include "volk.h"
-            \\#include "vk_mem_alloc.h"
-        );
-        const vma_translate_c = b.addTranslateC(.{
-            .root_source_file = vma_wrapper,
-            .target = target,
-            .optimize = optimize,
-        });
-        vma_translate_c.addIncludePath(vma_dep.path("include/"));
-        vma_translate_c.addIncludePath(volk_dep.path("include/"));
-        const vma = vma_translate_c.createModule();
-        exe.root_module.addIncludePath(vma_dep.path("include/"));
-        exe.root_module.addCSourceFile(.{
-            .file = b.addWriteFiles().add("vma_impl.cpp",
-                \\#include "volk.h"
-                \\#define VMA_STATIC_VULKAN_FUNCTIONS 0
-                \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
-                \\#define VMA_IMPLEMENTATION
-                \\#include "vk_mem_alloc.h"
-            ),
-            .flags = &.{"-std=c++17"},
-        });
-        exe.root_module.addImport("vma", vma);
+        system.root_module.addImport("vulkan", vulkan);
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));

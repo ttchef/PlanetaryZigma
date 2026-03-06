@@ -24,10 +24,6 @@
             .url = "git+https://github.com/zeux/volk.git#87f4f07894d9fa44667031d2906dcf32c47b137c",
             .hash = "N-V-__8AAIo1CAD2cRRyPmDAEB16zIh7TZ2kuFk6HK9gNG7l",
         },
-        .vulkan_headers = .{
-            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
-            .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
-        },
         .vma = .{
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
             .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",

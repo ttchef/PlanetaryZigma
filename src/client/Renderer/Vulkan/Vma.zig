@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const c = @import("vma");
+pub const c = @import("vulkan");
 // const vulkanC = @import("vulkan");
 const Instance = @import("Instance.zig");
 const PhysicalDevice = @import("device.zig").Physical;

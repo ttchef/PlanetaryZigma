@@ -1,7 +1,7 @@
 const std = @import("std");
-const glfw = @import("glfw");
 const shared = @import("shared");
-const Renderer = @import("Renderer.zig");
+const system = @import("system");
+const glfw = @import("glfw");
 
 // const NSUInteger = c_ulong;
 //
@@ -12,6 +12,7 @@ const Renderer = @import("Renderer.zig");
 // };
 
 pub fn main(init: std.process.Init) !void {
+    const io = init.io;
     if (glfw.glfwInit() != glfw.GLFW_TRUE) return error.GlfwInitFailed;
     defer glfw.glfwTerminate();
 
@@ -27,8 +28,8 @@ pub fn main(init: std.process.Init) !void {
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
 
-    var renderer: Renderer = try .init(allocator, &asset_server, window);
-    defer renderer.deinit();
+    const watcher: shared.Watcher = try .init("system", io);
+    defer watcher.deinit();
 
     // const vertex_glsl = try asset_server.loadAssetZ(init.io, "shaders/colored_triangle.vert");
     // defer allocator.free(vertex_glsl);
@@ -122,10 +123,26 @@ pub fn main(init: std.process.Init) !void {
     // });
     // defer renderer.destroySampler(sampler) catch {};
 
+    var system_context: system.Context = undefined;
+    var system_table: ?system.ffi.Table = null;
+    defer system_table.?.systemContextDeinit(&system_context);
+
     while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
         glfw.glfwPollEvents();
         if (glfw.glfwGetKey(window, glfw.GLFW_KEY_ESCAPE) == glfw.GLFW_PRESS) break;
-        try renderer.update();
+
+        if (try watcher.check()) {
+            for (std.meta.fields(system.ffi.Table)) |field| @field(system_table, field.name) = try watcher.lookup(field.type, field.name);
+            if (system_table == null) {
+                system_table.?.systemContextInit(&system_context, &system.Context.Data{
+                    .allocator = allocator,
+                    .asset_server = &asset_server,
+                    .window = window,
+                });
+            }
+        }
+
+        try system_table.?.systemContextUpdate(&system_context, 0.016);
 
         // var framebuffer_width: c_int = 0;
         // var framebuffer_height: c_int = 0;
