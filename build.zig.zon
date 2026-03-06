@@ -30,7 +30,7 @@
         },
         .vma = .{
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
-            .hash = "N-V-__8AAHeWOQABqWHSzsYkiKh9vr8y4hszFdUU0OKecnjX",
+            .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
         },
         .zphysics = .{
             .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",

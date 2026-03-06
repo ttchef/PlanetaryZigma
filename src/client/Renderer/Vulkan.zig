@@ -265,9 +265,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     const stages = [_]c.VkShaderStageFlagBits{
         c.VK_SHADER_STAGE_VERTEX_BIT,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        c.VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        c.VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        c.VK_SHADER_STAGE_GEOMETRY_BIT,
     };
 
-    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1] };
+    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1], null, null, null };
 
     const viewport: c.VkViewport = .{
         .width = @floatFromInt(self.draw_image.extent.width),
@@ -280,34 +283,39 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
             .height = self.draw_image.extent.height,
         },
     };
-    c.vkCmdBindShadersEXT.?(cmd, 2, &stages, &bound);
+    c.vkCmdBindShadersEXT.?(cmd, stages.len, &stages, &bound);
 
-    c.vkCmdSetStencilTestEnable.?(cmd, c.VK_FALSE);
-
-    c.vkCmdSetStencilOp.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_COMPARE_OP_ALWAYS);
-
-    c.vkCmdSetStencilCompareMask.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
-    c.vkCmdSetStencilWriteMask.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0x00);
-    c.vkCmdSetStencilReference.?(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0);
-
-    c.vkCmdSetViewport.?(cmd, 0, 1, &viewport);
-    c.vkCmdSetScissor.?(cmd, 0, 1, &scissor);
-    c.vkCmdSetRasterizerDiscardEnable.?(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
-    c.vkCmdSetCullMode.?(cmd, c.VK_CULL_MODE_BACK_BIT);
-    c.vkCmdSetFrontFace.?(cmd, c.VK_FRONT_FACE_CLOCKWISE);
-    // Depth bias: explicitly OFF
-    c.vkCmdSetDepthBiasEnable.?(cmd, c.VK_FALSE);
-    // (If you ever enable it, also set the parameters)
-    c.vkCmdSetDepthBias.?(cmd, 0, 0, 0);
-
-    c.vkCmdSetPolygonModeEXT.?(cmd, c.VK_POLYGON_MODE_FILL); // if supported
-
+    c.vkCmdSetViewportWithCountEXT.?(cmd, 1, &viewport);
+    c.vkCmdSetScissorWithCountEXT.?(cmd, 1, &scissor);
+    c.vkCmdSetCullModeEXT.?(cmd, c.VK_CULL_MODE_NONE);
+    c.vkCmdSetFrontFaceEXT.?(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    c.vkCmdSetDepthTestEnableEXT.?(cmd, c.VK_TRUE);
+    c.vkCmdSetDepthWriteEnableEXT.?(cmd, c.VK_TRUE);
+    c.vkCmdSetDepthCompareOpEXT.?(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
+    c.vkCmdSetPrimitiveTopologyEXT.?(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    c.vkCmdSetRasterizerDiscardEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetPolygonModeEXT.?(cmd, c.VK_POLYGON_MODE_FILL);
     c.vkCmdSetRasterizationSamplesEXT.?(cmd, c.VK_SAMPLE_COUNT_1_BIT);
+    c.vkCmdSetAlphaToCoverageEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthBiasEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetStencilTestEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetPrimitiveRestartEnableEXT.?(cmd, c.VK_FALSE);
 
-    c.vkCmdSetDepthTestEnable.?(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthWriteEnable.?(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthCompareOp.?(cmd, c.VK_COMPARE_OP_ALWAYS);
-    c.vkCmdSetPrimitiveTopology.?(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    const sample_mask: u32 = 0xFF;
+    c.vkCmdSetSampleMaskEXT.?(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);
+
+    const color_blend_enables: c.VkBool32 = c.VK_FALSE;
+    const color_blend_component_flags: c.VkColorComponentFlags = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT;
+    c.vkCmdSetColorBlendEnableEXT.?(cmd, 0, 1, &color_blend_enables);
+    c.vkCmdSetColorWriteMaskEXT.?(cmd, 0, 1, &color_blend_component_flags);
+
+    c.vkCmdSetDepthBoundsTestEnable.?(cmd, c.VK_FALSE);
+    c.vkCmdSetDepthClampEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetAlphaToOneEnableEXT.?(cmd, c.VK_FALSE);
+    c.vkCmdSetLogicOpEnableEXT.?(cmd, c.VK_FALSE);
+
+    // Empty vertex input - no attributes or bindings
+    c.vkCmdSetVertexInputEXT.?(cmd, 0, null, 0, null);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,

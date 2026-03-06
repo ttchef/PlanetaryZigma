@@ -67,30 +67,27 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .target = target,
             .optimize = optimize,
         }).createModule();
-        // const vulkan_header_dep = b.dependency("vulkan_headers", .{});
-        // const vulkan_headers = b.addTranslateC(.{
-        //     .root_source_file = b.addWriteFiles().add("c.h",
-        //         \\#include "vulkan/vulkan.h"
-        //     ),
-        //     .target = target,
-        //     .optimize = optimize,
-        // }).createModule();
         volk.addIncludePath(volk_dep.path("include/"));
         exe.root_module.addImport("vulkan", volk);
         exe.root_module.addCSourceFile(.{
             .file = volk_dep.path("volk.c"),
             .flags = &.{"-std=c99"},
         });
-        // exe.root_module.linkSystemLibrary("vulkan", .{});
 
         exe.root_module.link_libcpp = true;
         const vma_dep = b.dependency("vma", .{});
-        const vma = b.addTranslateC(.{
-            .root_source_file = vma_dep.path("include/vk_mem_alloc.h"),
+        const vma_wrapper = b.addWriteFiles().add("vma_volk.h",
+            \\#include "volk.h"
+            \\#include "vk_mem_alloc.h"
+        );
+        const vma_translate_c = b.addTranslateC(.{
+            .root_source_file = vma_wrapper,
             .target = target,
             .optimize = optimize,
-        }).createModule();
-        vma.addIncludePath(vma_dep.path("include/"));
+        });
+        vma_translate_c.addIncludePath(vma_dep.path("include/"));
+        vma_translate_c.addIncludePath(volk_dep.path("include/"));
+        const vma = vma_translate_c.createModule();
         exe.root_module.addIncludePath(vma_dep.path("include/"));
         exe.root_module.addCSourceFile(.{
             .file = b.addWriteFiles().add("vma_impl.cpp",
@@ -100,7 +97,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 \\#define VMA_IMPLEMENTATION
                 \\#include "vk_mem_alloc.h"
             ),
-            .flags = &.{"-std=c++14"},
+            .flags = &.{"-std=c++17"},
         });
         exe.root_module.addImport("vma", vma);
     }

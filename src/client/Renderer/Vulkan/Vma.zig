@@ -21,7 +21,7 @@ pub fn init(instance: Instance, physical_device: PhysicalDevice, device: Device)
     };
 
     var vulkan_volk_functions: c.VmaVulkanFunctions = undefined;
-    check(c.vmaImportVulkanFunctionsFromVolk(&vma_info, &vulkan_volk_functions));
+    try check(c.vmaImportVulkanFunctionsFromVolk(&vma_info, &vulkan_volk_functions));
     vma_info.pVulkanFunctions = &vulkan_volk_functions;
 
     var vulkan_mem_alloc: c.VmaAllocator = undefined;
