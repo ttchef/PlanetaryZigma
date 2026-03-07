@@ -82,11 +82,34 @@ pub fn check(self: *@This()) !bool {
     return try self.file_watcher.listen();
 }
 
-pub fn reload(self: *@This()) !void {
-    std.log.debug("Reloaded dynamic lib:\nLEN: {}, PATH {s}\n", .{ self.lib_path_len, self.lib_path_buffer[0..self.lib_path_len] });
+const max_retries = 50;
+const retry_delay_ns = 100_000_000; // 100ms
+
+pub fn reload(self: *@This(), io: std.Io) !void {
     self.dynlib.close();
-    self.dynlib = try std.DynLib.open(self.lib_path_buffer[0..self.lib_path_len]);
-    try self.file_watcher.addFile("zig-out/lib/");
+
+    var retries: usize = 0;
+    while (retries < max_retries) : (retries += 1) {
+        self.dynlib = std.DynLib.open(self.lib_path_buffer[0..self.lib_path_len]) catch |err| {
+            std.log.debug("Retry {}/{}: failed to open library: {}", .{ retries + 1, max_retries, err });
+            _ = try io.sleep(.{ .nanoseconds = retry_delay_ns }, .real);
+            continue;
+        };
+
+        // Verify symbols are accessible
+        const test_symbol = self.dynlib.lookup(*const fn() void, "systemContextInit");
+        if (test_symbol == null) {
+            std.log.debug("Retry {}/{}: library opened but symbols not available yet", .{ retries + 1, max_retries });
+            self.dynlib.close();
+            _ = try io.sleep(.{ .nanoseconds = retry_delay_ns }, .real);
+            continue;
+        }
+
+        std.log.debug("Reloaded dynamic lib:\nLEN: {}, PATH {s}\n", .{ self.lib_path_len, self.lib_path_buffer[0..self.lib_path_len] });
+        try self.file_watcher.addFile("zig-out/lib/");
+        return;
+    }
+    return error.DynlibOpenFailed;
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
