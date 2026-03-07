@@ -18,11 +18,8 @@ pub fn init(instance: Instance, physical_device: PhysicalDevice, device: Device)
         .device = @ptrCast(device.handle),
         .instance = @ptrCast(instance.handle),
         .flags = c.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+        .pVulkanFunctions = null,
     };
-
-    var vulkan_volk_functions: c.VmaVulkanFunctions = undefined;
-    try check(c.vmaImportVulkanFunctionsFromVolk(&vma_info, &vulkan_volk_functions));
-    vma_info.pVulkanFunctions = &vulkan_volk_functions;
 
     var vulkan_mem_alloc: c.VmaAllocator = undefined;
     try check(c.vmaCreateAllocator(&vma_info, &vulkan_mem_alloc));

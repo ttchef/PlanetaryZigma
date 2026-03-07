@@ -6,16 +6,16 @@ handle: c.VkInstance,
 
 pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
     var version: u32 = undefined;
-    try check(c.vkEnumerateInstanceVersion.?(&version));
+    try check(c.vkEnumerateInstanceVersion(&version));
     if (c.VK_API_VERSION_MAJOR(version) < 1 or c.VK_API_VERSION_MINOR(version) < 3) return error.DynamicRenderingUnsupported;
 
     var count: u32 = undefined;
-    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &count, null));
+    try check(c.vkEnumerateInstanceExtensionProperties(null, &count, null));
 
     const enum_extensions: []c.VkExtensionProperties = try allocator.alloc(c.VkExtensionProperties, count);
     defer allocator.free(enum_extensions);
 
-    try check(c.vkEnumerateInstanceExtensionProperties.?(null, &count, enum_extensions.ptr));
+    try check(c.vkEnumerateInstanceExtensionProperties(null, &count, enum_extensions.ptr));
 
     var found: usize = 0;
 
@@ -46,10 +46,10 @@ pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]cons
     };
 
     var instance: c.VkInstance = undefined;
-    try check(c.vkCreateInstance.?(instane_create_info, null, @ptrCast(&instance)));
+    try check(c.vkCreateInstance(instane_create_info, null, @ptrCast(&instance)));
     return .{ .handle = instance };
 }
 
 pub fn deinit(self: @This()) void {
-    c.vkDestroyInstance.?(self.handle, null);
+    c.vkDestroyInstance(self.handle, null);
 }

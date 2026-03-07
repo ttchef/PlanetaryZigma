@@ -77,29 +77,27 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         }).?.module("objc");
         exe.root_module.addImport("objc", objc);
     } else {
-        const volk_dep = b.dependency("volk", .{});
-        const vma_dep = b.dependency("vma", .{});
+        const vulkandeps = b.dependency("vulkan_headers", .{});
+        const vmadep = b.dependency("vma", .{});
 
-        const vulkan_translate_c = b.addTranslateC(.{
-            .root_source_file = b.addWriteFiles().add("vma_volk.h",
-                \\#include <volk.h>
+        const vulkan_c = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("vma_vulkan.h",
+                \\#include <vulkan/vulkan.h>
                 \\#include <vk_mem_alloc.h>
             ),
             .target = target,
             .optimize = optimize,
         });
-        vulkan_translate_c.addIncludePath(volk_dep.path("."));
-        vulkan_translate_c.addIncludePath(vma_dep.path("include/"));
+        vulkan_c.addIncludePath(vulkandeps.path("include/"));
+        vulkan_c.addIncludePath(vmadep.path("include/"));
 
-        const vulkan = vulkan_translate_c.createModule();
+        const vulkan = vulkan_c.createModule();
         vulkan.link_libcpp = true;
-        for (vulkan_translate_c.include_dirs.items) |include_dir| vulkan.addIncludePath(include_dir.path);
+        for (vulkan_c.include_dirs.items) |include_dir| vulkan.addIncludePath(include_dir.path);
 
         vulkan.addCSourceFile(.{
             .file = b.addWriteFiles().add("vma_impl.cpp",
-                \\#define VOLK_IMPLEMENTATION
-                \\#include <volk.h>
-                \\#define VMA_STATIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_STATIC_VULKAN_FUNCTIONS 1
                 \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
                 \\#define VMA_IMPLEMENTATION
                 \\#include <vk_mem_alloc.h>
@@ -108,6 +106,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         });
 
         system.root_module.addImport("vulkan", vulkan);
+        exe.root_module.linkSystemLibrary("vulkan", .{});
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));

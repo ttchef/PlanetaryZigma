@@ -10,6 +10,7 @@ const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
 const Image = @import("Vulkan/Image.zig");
 pub const check = @import("Vulkan/utils.zig").check;
+const ext = @import("Vulkan/ExtensionFunctions.zig");
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -47,9 +48,8 @@ pub const InitOptions = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !@This() {
-    try check(c.volkInitialize());
     const instance: Instance = try .init(allocator, options.instance.extensions, options.instance.layers);
-    c.volkLoadInstance(instance.handle);
+    ext.loadInstanceFunctions(instance.handle);
     const debug_messenger: DebugMessenger = try .init(instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -63,7 +63,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     } else return error.configSurface;
     const physical_device: PhysicalDevice = try .pick(instance, surface.handle);
     const device: Device = try .init(physical_device, options.device.extensions);
-    c.volkLoadDevice(device.handle);
+    ext.loadDeviceFunctions(device.handle);
     const vma: Vma = try .init(instance, physical_device, device);
     const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, options.swapchain.width, options.swapchain.heigth);
     const draw_image: Image = try .init(
@@ -112,7 +112,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         },
     };
     var shaders: [2]c.VkShaderEXT = undefined;
-    try check(c.vkCreateShadersEXT.?(device.handle, 2, shader_create_info.ptr, null, &shaders));
+    try check(ext.vkCreateShadersEXT(device.handle, 2, &shader_create_info[0], null, &shaders[0]));
 
     return .{
         .instance = instance,
@@ -129,10 +129,10 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
 }
 
 pub fn deinit(self: *@This()) void {
-    check(c.vkDeviceWaitIdle.?(self.device.handle)) catch {};
+    check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    c.vkDestroyShaderEXT.?(self.device.handle, self.shaders[0], null);
-    c.vkDestroyShaderEXT.?(self.device.handle, self.shaders[1], null);
+    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
+    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
     self.depth_image.deinit(self.vma, self.device);
     self.draw_image.deinit(self.vma, self.device);
     self.swapchain.deinit(self.device);
@@ -146,9 +146,9 @@ pub fn deinit(self: *@This()) void {
 pub fn update(self: *@This()) !void {
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
-    try check(c.vkWaitForFences.?(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
+    try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
     // std.debug.print("------------ {d} \n", .{image_index});
-    const aquire_result = c.vkAcquireNextImageKHR.?(
+    const aquire_result = c.vkAcquireNextImageKHR(
         self.device.handle,
         self.swapchain.swapchain,
         1000000000,
@@ -164,18 +164,18 @@ pub fn update(self: *@This()) !void {
         c.VK_TIMEOUT, c.VK_NOT_READY => return,
         else => {},
     }
-    try check(c.vkResetFences.?(self.device.handle, 1, &current_frame.render_fence));
+    try check(c.vkResetFences(self.device.handle, 1, &current_frame.render_fence));
     const render_semaphore: c.VkSemaphore = self.swapchain.render_semaphores[image_index];
     // try current_frame.descriptor.clearPools(self.device);
     // current_frame.gpu_scene.deinit(self.vma.handle);
 
     const cmd_buffer = current_frame.command_buffer;
-    try check(c.vkResetCommandBuffer.?(cmd_buffer, 0));
+    try check(c.vkResetCommandBuffer(cmd_buffer, 0));
     var cmd_begin_info: c.VkCommandBufferBeginInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    try check(c.vkBeginCommandBuffer.?(cmd_buffer, &cmd_begin_info));
+    try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
     //TODO: RENDERING!
     try render(self, cmd_buffer);
@@ -188,7 +188,7 @@ pub fn update(self: *@This()) !void {
     );
 
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
-    try check(c.vkEndCommandBuffer.?(cmd_buffer));
+    try check(c.vkEndCommandBuffer(cmd_buffer));
 
     var submit_info: c.VkSubmitInfo2 = .{
         .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
@@ -213,7 +213,7 @@ pub fn update(self: *@This()) !void {
         },
     };
 
-    try check(c.vkQueueSubmit2.?(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
+    try check(c.vkQueueSubmit2(self.device.graphics_queue, 1, &submit_info, current_frame.render_fence));
 
     var present_info: c.VkPresentInfoKHR = .{
         .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -224,7 +224,7 @@ pub fn update(self: *@This()) !void {
         .pImageIndices = &image_index,
     };
 
-    const present_result = c.vkQueuePresentKHR.?(self.device.graphics_queue, &present_info);
+    const present_result = c.vkQueuePresentKHR(self.device.graphics_queue, &present_info);
 
     if (present_result == c.VK_ERROR_OUT_OF_DATE_KHR or present_result == c.VK_SUBOPTIMAL_KHR) {
         return;
@@ -298,36 +298,36 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
             .height = self.draw_image.extent.height,
         },
     };
-    c.vkCmdBindShadersEXT.?(cmd, stages.len, &stages, &bound);
+    ext.vkCmdBindShadersEXT(cmd, stages.len, &stages[0], &bound[0]);
 
-    c.vkCmdSetViewportWithCountEXT.?(cmd, 1, &viewport);
-    c.vkCmdSetScissorWithCountEXT.?(cmd, 1, &scissor);
-    c.vkCmdSetCullModeEXT.?(cmd, c.VK_CULL_MODE_NONE);
-    c.vkCmdSetFrontFaceEXT.?(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
-    c.vkCmdSetDepthTestEnableEXT.?(cmd, c.VK_TRUE);
-    c.vkCmdSetDepthWriteEnableEXT.?(cmd, c.VK_TRUE);
-    c.vkCmdSetDepthCompareOpEXT.?(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
-    c.vkCmdSetPrimitiveTopologyEXT.?(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    c.vkCmdSetRasterizerDiscardEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetPolygonModeEXT.?(cmd, c.VK_POLYGON_MODE_FILL);
-    c.vkCmdSetRasterizationSamplesEXT.?(cmd, c.VK_SAMPLE_COUNT_1_BIT);
-    c.vkCmdSetAlphaToCoverageEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthBiasEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetStencilTestEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetPrimitiveRestartEnableEXT.?(cmd, c.VK_FALSE);
+    ext.vkCmdSetViewportWithCountEXT(cmd, 1, &viewport);
+    ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
+    ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
+    ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_TRUE);
+    ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
+    ext.vkCmdSetPrimitiveTopologyEXT(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
+    ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
+    ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetStencilTestEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetPrimitiveRestartEnableEXT(cmd, c.VK_FALSE);
 
     const sample_mask: u32 = 0xFF;
-    c.vkCmdSetSampleMaskEXT.?(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);
+    ext.vkCmdSetSampleMaskEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);
 
     const color_blend_enables: c.VkBool32 = c.VK_FALSE;
     const color_blend_component_flags: c.VkColorComponentFlags = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT;
-    c.vkCmdSetColorBlendEnableEXT.?(cmd, 0, 1, &color_blend_enables);
-    c.vkCmdSetColorWriteMaskEXT.?(cmd, 0, 1, &color_blend_component_flags);
+    ext.vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &color_blend_enables);
+    ext.vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &color_blend_component_flags);
 
-    c.vkCmdSetDepthBoundsTestEnable.?(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthClampEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetAlphaToOneEnableEXT.?(cmd, c.VK_FALSE);
-    c.vkCmdSetLogicOpEnableEXT.?(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthBoundsTestEnable(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthClampEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetAlphaToOneEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetLogicOpEnableEXT(cmd, c.VK_FALSE);
 
     const vertexInputBinding: c.VkVertexInputBindingDescription2EXT = .{
         .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
@@ -360,7 +360,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
         },
     };
 
-    c.vkCmdSetVertexInputEXT.?(cmd, 1, &vertexInputBinding, 3, vertexAttributes);
+    ext.vkCmdSetVertexInputEXT(cmd, 1, &vertexInputBinding, 3, &vertexAttributes[0]);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -381,10 +381,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
         .pStencilAttachment = null,
     };
 
-    c.vkCmdBeginRendering.?(cmd, &render_info);
+    ext.vkCmdBeginRendering(cmd, &render_info);
 
-    c.vkCmdDraw.?(cmd, 3, 1, 0, 0);
-    c.vkCmdEndRendering.?(cmd);
+    c.vkCmdDraw(cmd, 3, 1, 0, 0);
+    ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }

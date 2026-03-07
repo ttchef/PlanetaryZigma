@@ -84,5 +84,5 @@ pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, plat
 }
 
 fn createVulkanSurface(instance: *yes.vulkan.Instance, user_data: *const YesSurfaceCreateUserData) !*yes.vulkan.Surface {
-    return yes.vulkan.Surface.create(user_data.platform, user_data.window, instance, null, @ptrCast(Vulkan.c.vkGetInstanceProcAddr));
+    return yes.vulkan.Surface.create(user_data.platform, user_data.window, instance, null, @ptrCast(&Vulkan.c.vkGetInstanceProcAddr));
 }
