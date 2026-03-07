@@ -159,8 +159,17 @@ pub fn main(init: std.process.Init) !void {
 
         if (try watcher.check()) {
             std.log.debug("system table updated", .{});
-            try watcher.reload();
+            system_table.systemContextDeinit(&system_context);
+            try watcher.reload(io);
+
             system_table = try .load(&watcher.dynlib);
+
+            system_table.systemContextInit(&system_context, &system.Context.Data{
+                .allocator = allocator,
+                .asset_server = &asset_server,
+                .platform = platform,
+                .window = window,
+            });
         }
 
         // try system_table.?.systemContextUpdate(&system_context, 0.016);

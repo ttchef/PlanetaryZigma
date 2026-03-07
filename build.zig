@@ -50,6 +50,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
                 .{ .name = "shared", .module = shared },
                 .{ .name = "yes", .module = yes },
             },
+            .link_libc = true,
         }),
         .linkage = .dynamic,
     });

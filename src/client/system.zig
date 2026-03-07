@@ -44,7 +44,16 @@ pub const ffi = struct {
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
-            inline for (@typeInfo(@This()).@"struct".fields) |field| @field(self, field.name) = dynlib.lookup(field.type, field.name) orelse return error.DynlibLookup;
+            inline for (@typeInfo(@This()).@"struct".fields) |field| {
+                std.log.debug("Looking up symbol: {s}", .{field.name});
+                const ptr = dynlib.lookup(field.type, field.name);
+                if (ptr) |p| {
+                    @field(self, field.name) = p;
+                } else {
+                    std.log.err("Failed to lookup symbol: {s}", .{field.name});
+                    return error.DynlibLookup;
+                }
+            }
             return self;
         }
     };
