@@ -1,8 +1,8 @@
 const std = @import("std");
 const c = @import("vulkan");
 const Instance = @import("Instance.zig");
-const Func = @import("utils.zig").Func;
 const check = @import("utils.zig").check;
+const ext = @import("ExtensionFunctions.zig");
 
 handle: c.VkDebugUtilsMessengerEXT,
 
@@ -37,15 +37,13 @@ pub fn init(instance: Instance, config: Config) !@This() {
     };
 
     var messenger: c.VkDebugUtilsMessengerEXT = undefined;
-    const createDebugUtilsMessengerExt = try Func.Proc(.createDebugUtilsMessengerEXT).load(instance);
-    try check(createDebugUtilsMessengerExt(instance.handle, &create_info, null, &messenger));
+    try check(ext.vkCreateDebugUtilsMessengerEXT(instance.handle, &create_info, null, &messenger));
 
     return .{ .handle = messenger };
 }
 
 pub fn deinit(self: @This(), instance: Instance) void {
-    const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
-    destroyDebugUtilsMessenger(instance.handle, self.handle, null);
+    ext.vkDestroyDebugUtilsMessengerEXT(instance.handle, self.handle, null);
 }
 
 fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {

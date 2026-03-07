@@ -1,7 +1,8 @@
 const std = @import("std");
-const glfw = @import("glfw");
+const builtin = @import("builtin");
 const shared = @import("shared");
-const Renderer = @import("Renderer.zig");
+const system = @import("system");
+const yes = @import("yes");
 
 // const NSUInteger = c_ulong;
 //
@@ -12,23 +13,30 @@ const Renderer = @import("Renderer.zig");
 // };
 
 pub fn main(init: std.process.Init) !void {
-    if (glfw.glfwInit() != glfw.GLFW_TRUE) return error.GlfwInitFailed;
-    defer glfw.glfwTerminate();
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = gpa.deinit();
+    const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
+    const io = init.io;
 
-    glfw.glfwWindowHint(glfw.GLFW_NO_API, glfw.GLFW_TRUE);
+    var platform_impl = switch (builtin.os.tag) {
+        .windows => try yes.Platform.Win32.get(allocator),
+        .macos => @compileError("lorenzo fix this idk, figure it out"),
+        else => try yes.Platform.Xlib.init(),
+    };
+    const platform = platform_impl.platform();
 
-    //NOTE:NEEDED FOR VULKAN. Dont know MacOS. (Lorenzo)?
-    glfw.glfwWindowHint(glfw.GLFW_CLIENT_API, glfw.GLFW_NO_API);
+    var window_impl: @TypeOf(platform_impl).Window = .{};
+    const window = &window_impl.interface;
+    try window.open(platform, .{
+        .title = "PlanetaryZigma",
+        .size = .{ .width = 670, .height = 400 },
+        .min_size = .{ .width = 400, .height = 300 },
+        .surface_type = .vulkan,
+    });
+    defer window.close(platform);
 
-    const window: *glfw.GLFWwindow = glfw.glfwCreateWindow(900, 800, "PlanetaryZigma", null, null) orelse return error.CreateWindow;
-    defer glfw.glfwDestroyWindow(window);
-
-    const allocator = std.heap.c_allocator;
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
-
-    var renderer: Renderer = try .init(allocator, &asset_server, window);
-    defer renderer.deinit();
 
     // const vertex_glsl = try asset_server.loadAssetZ(init.io, "shaders/colored_triangle.vert");
     // defer allocator.free(vertex_glsl);
@@ -122,10 +130,40 @@ pub fn main(init: std.process.Init) !void {
     // });
     // defer renderer.destroySampler(sampler) catch {};
 
-    while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
-        glfw.glfwPollEvents();
-        if (glfw.glfwGetKey(window, glfw.GLFW_KEY_ESCAPE) == glfw.GLFW_PRESS) break;
-        try renderer.update();
+    var watcher: shared.Watcher = try .init("system", io);
+    defer watcher.deinit(io);
+
+    var system_context: system.Context = undefined;
+    var system_table: system.ffi.Table = try .load(&watcher.dynlib);
+
+    system_table.systemContextInit(&system_context, &system.Context.Data{
+        .allocator = allocator,
+        .asset_server = &asset_server,
+        .platform = platform,
+        .window = window,
+    });
+
+    main_loop: while (true) {
+        while (try window.poll(platform)) |event| switch (event) {
+            .close => break :main_loop,
+            .resize => |size| {
+                std.log.info("resize: {d}x{d}", .{ size.width, size.height });
+                try system_context.renderer.resize(allocator, window);
+            },
+            .key => |key| {
+                if (key.state == .released and key.sym == .escape) break :main_loop;
+            },
+            else => {},
+        };
+        system_table.systemContextUpdate(&system_context, 0.0167);
+
+        if (try watcher.check()) {
+            std.log.debug("system table updated", .{});
+            try watcher.reload();
+            system_table = try .load(&watcher.dynlib);
+        }
+
+        // try system_table.?.systemContextUpdate(&system_context, 0.016);
 
         // var framebuffer_width: c_int = 0;
         // var framebuffer_height: c_int = 0;

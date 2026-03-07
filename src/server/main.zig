@@ -38,7 +38,7 @@ pub fn main(init: std.process.Init) !void {
 
         std.debug.print("eneties: {d}\n", .{world.ec.generation.items.len});
         systemsUpdate(&systems, 1.0);
-        if (try system_watcher.listen()) {
+        if (try system_watcher.check()) {
             systemsDeinit(&systems, &allocator);
             try system_watcher.reload();
             systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");

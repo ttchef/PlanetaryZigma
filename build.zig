@@ -26,17 +26,33 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     const shared = b.modules.get("shared").?;
 
     // const glfw_headers = b.dependency("glfw_headers", .{});
-    const glfw_translate_c = b.addTranslateC(.{
-        // glfw_headers.path("include/GLFW/glfw3.h"),
-        .root_source_file = b.addWriteFiles().add("c.h",
-            \\#define GLFW_INCLUDE_VULKAN
-            \\#include <GLFW/glfw3.h>
-        ),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const glfw_translate_c = b.addTranslateC(.{
+    //     // glfw_headers.path("include/GLFW/glfw3.h"),
+    //     .root_source_file = b.addWriteFiles().add("c.h",
+    //         \\#define GLFW_INCLUDE_VULKAN
+    //         \\#include <GLFW/glfw3.h>
+    //     ),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
+
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/client/system.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                .{ .name = "yes", .module = yes },
+            },
+        }),
+        .linkage = .dynamic,
+    });
 
     const exe = b.addExecutable(.{
         .name = "client",
@@ -46,12 +62,14 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+                .{ .name = "system", .module = system.root_module },
+                .{ .name = "yes", .module = yes },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
             },
             .link_libc = true,
         }),
     });
+
     if (target.result.os.tag.isDarwin()) {
         const objc = b.lazyDependency("zig_objc", .{
             .target = target,
@@ -59,35 +77,36 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         }).?.module("objc");
         exe.root_module.addImport("objc", objc);
     } else {
-        const vulkan_header_dep = b.dependency("vulkan_headers", .{});
-        const vulkan_headers = b.addTranslateC(.{
-            .root_source_file = b.addWriteFiles().add("c.h",
-                \\#include "vulkan/vulkan.h"
-            ),
-            .target = target,
-            .optimize = optimize,
-        }).createModule();
-        vulkan_headers.addIncludePath(vulkan_header_dep.path("include/"));
-        exe.root_module.addImport("vulkan", vulkan_headers);
-        exe.root_module.linkSystemLibrary("vulkan", .{});
+        const vulkandeps = b.dependency("vulkan_headers", .{});
+        const vmadep = b.dependency("vma", .{});
 
-        exe.root_module.link_libcpp = true;
-        const vma_dep = b.dependency("vma", .{});
-        const vma = b.addTranslateC(.{
-            .root_source_file = vma_dep.path("include/vk_mem_alloc.h"),
+        const vulkan_c = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("vma_vulkan.h",
+                \\#include <vulkan/vulkan.h>
+                \\#include <vk_mem_alloc.h>
+            ),
             .target = target,
             .optimize = optimize,
-        }).createModule();
-        vma.addIncludePath(vma_dep.path("include/"));
-        exe.root_module.addIncludePath(vma_dep.path("include/"));
-        exe.root_module.addCSourceFile(.{
-            .file = b.addWriteFiles().add("vma_impl.cpp",
-                \\#define VMA_IMPLEMENTATION
-                \\#include "vk_mem_alloc.h"
-            ),
-            .flags = &.{"-std=c++14"},
         });
-        exe.root_module.addImport("vma", vma);
+        vulkan_c.addIncludePath(vulkandeps.path("include/"));
+        vulkan_c.addIncludePath(vmadep.path("include/"));
+
+        const vulkan = vulkan_c.createModule();
+        vulkan.link_libcpp = true;
+        for (vulkan_c.include_dirs.items) |include_dir| vulkan.addIncludePath(include_dir.path);
+
+        vulkan.addCSourceFile(.{
+            .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#define VMA_STATIC_VULKAN_FUNCTIONS 1
+                \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_IMPLEMENTATION
+                \\#include <vk_mem_alloc.h>
+            ),
+            .flags = &.{"-std=c++17"},
+        });
+
+        system.root_module.addImport("vulkan", vulkan);
+        exe.root_module.linkSystemLibrary("vulkan", .{});
     }
 
     exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
@@ -114,6 +133,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.link_libcpp = true;
     }
 
+    b.installArtifact(system);
     b.installArtifact(exe);
 
     const run_step = b.step("run-client", "Run the client");

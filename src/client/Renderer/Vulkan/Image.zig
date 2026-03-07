@@ -128,6 +128,7 @@ pub fn uploadDataToImage(self: *@This(), device: Device, vma: Vma.Allocator, dat
     };
 
     c.vkCmdCopyBufferToImage(
+
         cmd,
         upload_buffer.buffer,
         self.vk_image,

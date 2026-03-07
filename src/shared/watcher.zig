@@ -14,8 +14,8 @@ const FileWatcher = struct {
         return .{ .inotify_fd = fd };
     }
 
-    pub fn deinit(self: @This()) void {
-        std.posix.close(self.inotify_fd);
+    pub fn deinit(self: @This(), io: std.Io) void {
+        std.Io.Dir.close(.{ .handle = self.inotify_fd }, io);
     }
 
     pub fn addFile(self: *@This(), path: [:0]const u8) !void {
@@ -27,13 +27,14 @@ const FileWatcher = struct {
         var buffer: [max_event_size]u8 align(@alignOf(std.os.linux.inotify_event)) = undefined;
 
         const read = std.posix.read(self.inotify_fd, &buffer) catch return false;
+        std.debug.print("listen: {any}\n", .{buffer[0..read]});
         if (read > 0) return true;
         return false;
     }
 };
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
+    const lib_name = "lib" ++ library_name ++ comptime builtin.target.dynamicLibSuffix();
 
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
@@ -59,10 +60,8 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     var file_watcher: FileWatcher = try .init();
     try file_watcher.addFile("zig-out/lib/");
 
-    std.debug.print("PATH: {s}\n", .{lib_path.?});
-
     const dynlib: std.DynLib = try .open(lib_path.?);
-    std.log.debug("PATH {s}\n", .{lib_path.?});
+    std.log.debug("PATH {s}", .{lib_path.?});
 
     var self: @This() = .{
         .lib_path_len = lib_path.?.len,
@@ -74,12 +73,12 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     return self;
 }
 
-pub fn deinit(self: *@This()) void {
-    self.file_watcher.deinit();
+pub fn deinit(self: *@This(), io: std.Io) void {
+    self.file_watcher.deinit(io);
     self.dynlib.close();
 }
 
-pub fn listen(self: *@This()) !bool {
+pub fn check(self: *@This()) !bool {
     return try self.file_watcher.listen();
 }
 

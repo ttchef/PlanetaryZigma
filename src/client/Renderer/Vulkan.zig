@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetServer = @import("shared").AssetServer;
 pub const c = @import("vulkan");
-pub const Func = @import("Vulkan/utils.zig").Func;
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
@@ -11,6 +10,7 @@ const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
 const Image = @import("Vulkan/Image.zig");
 pub const check = @import("Vulkan/utils.zig").check;
+const ext = @import("Vulkan/ExtensionFunctions.zig");
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -23,7 +23,13 @@ draw_image: Image,
 depth_image: Image,
 shaders: [2]c.VkShaderEXT,
 
-pub const Config = struct {
+const Vertex = extern struct {
+    position: [4]f32,
+    color: [4]f32,
+    uv: [4]f32,
+};
+
+pub const InitOptions = struct {
     instance: struct {
         extensions: []const [*:0]const u8,
         layers: []const [*:0]const u8,
@@ -41,12 +47,9 @@ pub const Config = struct {
     },
 };
 
-pub fn init(
-    allocator: std.mem.Allocator,
-    asset_server: *AssetServer,
-    config: Config,
-) !@This() {
-    const instance: Instance = try .init(config.instance.extensions, config.instance.layers);
+pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !@This() {
+    const instance: Instance = try .init(allocator, options.instance.extensions, options.instance.layers);
+    ext.loadInstanceFunctions(instance.handle);
     const debug_messenger: DebugMessenger = try .init(instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -55,13 +58,14 @@ pub fn init(
             .info = true,
         },
     });
-    const surface: Surface = if (config.surface.init != null and config.surface.data != null) .{
-        .handle = @ptrCast(try config.surface.init.?(instance.handle, config.surface.data.?)),
+    const surface: Surface = if (options.surface.init != null and options.surface.data != null) .{
+        .handle = @ptrCast(try options.surface.init.?(instance.handle, options.surface.data.?)),
     } else return error.configSurface;
-    const physical_device: PhysicalDevice = try .init(instance, surface.handle);
-    const device: Device = try .init(physical_device, config.device.extensions);
+    const physical_device: PhysicalDevice = try .pick(instance, surface.handle);
+    const device: Device = try .init(physical_device, options.device.extensions);
+    ext.loadDeviceFunctions(device.handle);
     const vma: Vma = try .init(instance, physical_device, device);
-    const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, config.swapchain.width, config.swapchain.heigth);
+    const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, options.swapchain.width, options.swapchain.heigth);
     const draw_image: Image = try .init(
         vma.handle,
         device,
@@ -84,33 +88,32 @@ pub fn init(
         false,
     );
 
-    const vert_data = try asset_server.loadAsset("shaders/vertex.vert.spv");
-    const frag_data = try asset_server.loadAsset("shaders/fragment.frag.spv");
-    const shader_create_info = &[_]c.VkShaderCreateInfoEXT{
+    const vertex_source = try asset_server.loadAsset("shaders/vertex.vert.spv");
+    defer asset_server.allocator.free(vertex_source);
+    const fragment_source = try asset_server.loadAsset("shaders/fragment.frag.spv");
+    defer asset_server.allocator.free(fragment_source);
+    const shader_create_info: []const c.VkShaderCreateInfoEXT = &.{
         .{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = vert_data.len,
-            .pCode = vert_data.ptr,
+            .codeSize = vertex_source.len,
+            .pCode = vertex_source.ptr,
             .pName = "main",
         },
         .{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = frag_data.len,
-            .pCode = frag_data.ptr,
+            .codeSize = fragment_source.len,
+            .pCode = fragment_source.ptr,
             .pName = "main",
         },
     };
     var shaders: [2]c.VkShaderEXT = undefined;
-    const createShadersExt = try Func.Proc(.createShadersEXT).load(instance);
-    try check(createShadersExt(device.handle, 2, shader_create_info, null, &shaders));
-    // const destroyDebugUtilsMessenger = Func.Proc(.destroyDebugUtilsMessengerEXT).load(instance) catch unreachable;
+    try check(ext.vkCreateShadersEXT(device.handle, 2, &shader_create_info[0], null, &shaders[0]));
 
-    // try check(c.vkCreateShadersEXT(device.handle, shader_create_info.len, shader_create_info, null, &shaders));
     return .{
         .instance = instance,
         .debug_messenger = debug_messenger,
@@ -126,7 +129,18 @@ pub fn init(
 }
 
 pub fn deinit(self: *@This()) void {
-    _ = self;
+    check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
+
+    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
+    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
+    self.depth_image.deinit(self.vma, self.device);
+    self.draw_image.deinit(self.vma, self.device);
+    self.swapchain.deinit(self.device);
+    self.vma.deinit();
+    self.device.deinit();
+    self.surface.deinit(self.instance);
+    self.debug_messenger.deinit(self.instance);
+    self.instance.deinit();
 }
 
 pub fn update(self: *@This()) !void {
@@ -266,9 +280,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     const stages = [_]c.VkShaderStageFlagBits{
         c.VK_SHADER_STAGE_VERTEX_BIT,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        c.VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        c.VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        c.VK_SHADER_STAGE_GEOMETRY_BIT,
     };
 
-    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1] };
+    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1], null, null, null };
 
     const viewport: c.VkViewport = .{
         .width = @floatFromInt(self.draw_image.extent.width),
@@ -281,39 +298,69 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
             .height = self.draw_image.extent.height,
         },
     };
-    const vkCmdBindShadersEXT = try Func.Proc(.cmdBindShadersEXT).load(self.instance);
-    vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
-    // c.vkCmdBindShadersEXT(cmd, 2, &stages, &bound);
+    ext.vkCmdBindShadersEXT(cmd, stages.len, &stages[0], &bound[0]);
 
-    c.vkCmdSetStencilTestEnable(cmd, c.VK_FALSE);
+    ext.vkCmdSetViewportWithCountEXT(cmd, 1, &viewport);
+    ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
+    ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
+    ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_TRUE);
+    ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
+    ext.vkCmdSetPrimitiveTopologyEXT(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
+    ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
+    ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetStencilTestEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetPrimitiveRestartEnableEXT(cmd, c.VK_FALSE);
 
-    c.vkCmdSetStencilOp(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_STENCIL_OP_KEEP, c.VK_COMPARE_OP_ALWAYS);
+    const sample_mask: u32 = 0xFF;
+    ext.vkCmdSetSampleMaskEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);
 
-    c.vkCmdSetStencilCompareMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0xFF);
-    c.vkCmdSetStencilWriteMask(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0x00);
-    c.vkCmdSetStencilReference(cmd, c.VK_STENCIL_FACE_FRONT_AND_BACK, 0);
+    const color_blend_enables: c.VkBool32 = c.VK_FALSE;
+    const color_blend_component_flags: c.VkColorComponentFlags = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT;
+    ext.vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &color_blend_enables);
+    ext.vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &color_blend_component_flags);
 
-    c.vkCmdSetViewport(cmd, 0, 1, &viewport);
-    c.vkCmdSetScissor(cmd, 0, 1, &scissor);
-    c.vkCmdSetRasterizerDiscardEnable(cmd, c.VK_FALSE); // if you use EXT_extended_dynamic_state3
-    c.vkCmdSetCullMode(cmd, c.VK_CULL_MODE_BACK_BIT);
-    c.vkCmdSetFrontFace(cmd, c.VK_FRONT_FACE_CLOCKWISE);
-    // Depth bias: explicitly OFF
-    c.vkCmdSetDepthBiasEnable(cmd, c.VK_FALSE);
-    // (If you ever enable it, also set the parameters)
-    c.vkCmdSetDepthBias(cmd, 0, 0, 0);
+    ext.vkCmdSetDepthBoundsTestEnable(cmd, c.VK_FALSE);
+    ext.vkCmdSetDepthClampEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetAlphaToOneEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetLogicOpEnableEXT(cmd, c.VK_FALSE);
 
-    const vkCmdSetPolygonModeEXT = try Func.Proc(.cmdSetPolygonModeEXT).load(self.instance);
-    vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL); // if supported
+    const vertexInputBinding: c.VkVertexInputBindingDescription2EXT = .{
+        .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
+        .binding = 0,
+        .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
+        .stride = @sizeOf(Vertex),
+        .divisor = 1,
+    };
+    const vertexAttributes = &[_]c.VkVertexInputAttributeDescription2EXT{
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 0,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = 0,
+        },
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 1,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+            .offset = @sizeOf([4]f32),
+        },
+        .{
+            .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
+            .location = 2,
+            .binding = 0,
+            .format = c.VK_FORMAT_R32G32B32A32_SFLOAT,
+            .offset = 2 * @sizeOf([4]f32),
+        },
+    };
 
-    const vkCmdSetRasterizationSamplesEXT = try Func.Proc(.cmdSetRasterizationSamplesEXT).load(self.instance);
-    // c.vkCmdSetRasterizationSamplesEXT(gcc, rasterizationSamples: c_uint)
-    vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
-
-    c.vkCmdSetDepthTestEnable(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthWriteEnable(cmd, c.VK_FALSE);
-    c.vkCmdSetDepthCompareOp(cmd, c.VK_COMPARE_OP_ALWAYS);
-    c.vkCmdSetPrimitiveTopology(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    ext.vkCmdSetVertexInputEXT(cmd, 1, &vertexInputBinding, 3, &vertexAttributes[0]);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -334,22 +381,22 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
         .pStencilAttachment = null,
     };
 
-    c.vkCmdBeginRendering(cmd, &render_info);
+    ext.vkCmdBeginRendering(cmd, &render_info);
 
     c.vkCmdDraw(cmd, 3, 1, 0, 0);
-    c.vkCmdEndRendering(cmd);
+    ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
 
-pub fn reCreateSwapchain(self: *@This(), allocator: std.mem.Allocator, width: usize, height: usize) !void {
+pub fn resize(self: *@This(), allocator: std.mem.Allocator, width: u32, height: u32) !void {
     try self.swapchain.recreate(
         allocator,
         self.physical_device,
         self.device,
         self.surface,
-        @intCast(width),
-        @intCast(height),
+        width,
+        height,
     );
 
     const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.extent.height)));
