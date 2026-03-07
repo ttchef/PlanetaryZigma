@@ -19,6 +19,8 @@ pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]cons
 
     var found: usize = 0;
 
+    std.debug.print("amount: {d}\n", .{count});
+
     for (enum_extensions) |enum_extension| {
         const extension_name_len = std.mem.findScalar(u8, enum_extension.extensionName[0..], 0).?;
         for (required_extensions) |required_extension| {
@@ -27,7 +29,7 @@ pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]cons
             found += 1;
         }
     }
-    if (found != required_extensions.len) return error.ExtensionsNotFound;
+    if (found < required_extensions.len) return error.ExtensionsNotFound;
 
     const instane_create_info: *const c.VkInstanceCreateInfo = &.{
         .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,

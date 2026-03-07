@@ -316,7 +316,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     ext.vkCmdSetStencilTestEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetPrimitiveRestartEnableEXT(cmd, c.VK_FALSE);
 
-    std.debug.print("he\n", .{});
+    std.debug.print("he1\n", .{});
 
     const sample_mask: u32 = 0xFF;
     ext.vkCmdSetSampleMaskEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);

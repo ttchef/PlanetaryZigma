@@ -61,7 +61,8 @@ pub const ffi = struct {
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
         std.log.debug("system context init", .{});
         context.* = Context.init(data.*) catch |err| {
-            std.log.err("context init: {any}", .{@errorName(err)});
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            std.log.err("context init: {s}", .{@errorName(err)});
             return;
         };
     }
@@ -75,6 +76,7 @@ pub const ffi = struct {
     pub export fn systemContextUpdate(context: *Context, detla_time: f32) void {
         std.log.debug("system context update", .{});
         context.update(detla_time) catch |err| {
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
             return;
         };
