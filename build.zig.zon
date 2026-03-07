@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.2565+684032671",
+    .minimum_zig_version = "0.16.0-dev.2682+02142a54d",
     .dependencies = .{
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
@@ -21,8 +21,8 @@
             .hash = "N-V-__8AAAQdSgC7xfmpp3sHsMxANb6YDkz_kZ2i1tTRMRP8",
         },
         .yes = .{
-            .url = "git+https://github.com/HaraldWik/yes/#16ab81c51876a8b0021fa302be8f11a7b49672da",
-            .hash = "yes-0.0.0-pN7MXS92AQAGF8GWlPqI4B43apUIQJYsV_YWoRuF2DRL",
+            .url = "git+https://github.com/HaraldWik/yes/#fa2d7186e5dc1acc181bd7602d6531f876ba82cc",
+            .hash = "yes-0.0.0-pN7MXVR5AQDaeTDsaCYw6XGtVbhNxJYTPeA07qSf4Mns",
         },
         .volk = .{
             .url = "git+https://github.com/zeux/volk.git#87f4f07894d9fa44667031d2906dcf32c47b137c",

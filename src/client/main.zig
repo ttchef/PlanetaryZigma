@@ -31,7 +31,7 @@ pub fn main(init: std.process.Init) !void {
         .title = "PlanetaryZigma",
         .size = .{ .width = 670, .height = 400 },
         .min_size = .{ .width = 400, .height = 300 },
-        .surface_type = .{ .vulkan = .{ .major = 0, .minor = 0, .patch = 0 } },
+        .surface_type = .vulkan,
     });
     defer window.close(platform);
 
@@ -131,7 +131,7 @@ pub fn main(init: std.process.Init) !void {
     // defer renderer.destroySampler(sampler) catch {};
 
     var watcher: shared.Watcher = try .init("system", io);
-    defer watcher.deinit();
+    defer watcher.deinit(io);
 
     var system_context: system.Context = undefined;
     var system_table: system.ffi.Table = try .load(&watcher.dynlib);
@@ -155,6 +155,7 @@ pub fn main(init: std.process.Init) !void {
             },
             else => {},
         };
+        system_table.systemContextUpdate(&system_context, 0.0167);
 
         if (try watcher.check()) {
             std.log.debug("system table updated", .{});

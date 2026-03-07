@@ -14,8 +14,8 @@ const FileWatcher = struct {
         return .{ .inotify_fd = fd };
     }
 
-    pub fn deinit(self: @This()) void {
-        std.posix.close(self.inotify_fd);
+    pub fn deinit(self: @This(), io: std.Io) void {
+        std.Io.Dir.close(.{ .handle = self.inotify_fd }, io);
     }
 
     pub fn addFile(self: *@This(), path: [:0]const u8) !void {
@@ -73,8 +73,8 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     return self;
 }
 
-pub fn deinit(self: *@This()) void {
-    self.file_watcher.deinit();
+pub fn deinit(self: *@This(), io: std.Io) void {
+    self.file_watcher.deinit(io);
     self.dynlib.close();
 }
 
