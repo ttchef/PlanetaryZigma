@@ -30,8 +30,8 @@ pub fn deinit(self: *@This()) void {
     self.inner.deinit();
 }
 
-pub fn update(self: *@This()) !void {
-    try self.inner.update();
+pub fn update(self: *@This(), time: f32) !void {
+    try self.inner.update(time);
 }
 
 pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Platform.Window) !void {

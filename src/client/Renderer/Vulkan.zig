@@ -9,6 +9,7 @@ const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
 const Image = @import("Vulkan/Image.zig");
+const descriptor = @import("Vulkan/desrciptor.zig");
 pub const check = @import("Vulkan/utils.zig").check;
 const ext = @import("Vulkan/ExtensionFunctions.zig");
 
@@ -21,7 +22,11 @@ vma: Vma,
 swapchain: Swapchain,
 draw_image: Image,
 depth_image: Image,
+
+//Temporary
 shaders: [2]c.VkShaderEXT,
+layout: descriptor.Layout,
+elapsed_time: f32 = 0,
 
 const Vertex = extern struct {
     position: [4]f32,
@@ -88,6 +93,16 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         false,
     );
 
+    // const layout: descriptor.Layout = try .init(
+    //     Device,
+    //     &.{
+    //         .{
+
+    //         }
+
+    //     }
+    // );
+
     const vertex_source = try asset_server.loadAsset("shaders/vertex.vert.spv");
     defer asset_server.allocator.free(vertex_source);
     const fragment_source = try asset_server.loadAsset("shaders/fragment.frag.spv");
@@ -125,6 +140,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         .draw_image = draw_image,
         .depth_image = depth_image,
         .shaders = shaders,
+        .layout = undefined,
     };
 }
 
@@ -143,7 +159,7 @@ pub fn deinit(self: *@This()) void {
     self.instance.deinit();
 }
 
-pub fn update(self: *@This()) !void {
+pub fn update(self: *@This(), time: f32) !void {
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
@@ -178,7 +194,7 @@ pub fn update(self: *@This()) !void {
     try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
     //TODO: RENDERING!
-    try render(self, cmd_buffer);
+    try render(self, cmd_buffer, time);
 
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -233,7 +249,7 @@ pub fn update(self: *@This()) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     var draw_image_barrier: Image.Barrier = .init(cmd, self.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
     draw_image_barrier.transition(
@@ -302,7 +318,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
 
     ext.vkCmdSetViewportWithCountEXT(cmd, 1, &viewport);
     ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
-    ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+
+    self.elapsed_time += time;
+    std.debug.print("time: {d}\n", .{self.elapsed_time});
+    const tmp: i32 = @intFromFloat(self.elapsed_time / 100);
+    // std.debug.print("fixed-time: {d}\n", .{tmp});
+    if (@mod(tmp, 2) == 1) {
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+    } else {
+        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+    }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_TRUE);
@@ -311,12 +337,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer) !void {
     ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
     ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
-    ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_FALSE);
+    ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetStencilTestEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetPrimitiveRestartEnableEXT(cmd, c.VK_FALSE);
-
-    std.debug.print("he1\n", .{});
 
     const sample_mask: u32 = 0xFF;
     ext.vkCmdSetSampleMaskEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT, &sample_mask);

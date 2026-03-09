@@ -27,8 +27,7 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), detla_time: f32) !void {
-        _ = detla_time;
-        try self.renderer.update();
+        try self.renderer.update(detla_time);
     }
 };
 
