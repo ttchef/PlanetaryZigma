@@ -3,20 +3,47 @@ const std = @import("std");
 dir: std.Io.Dir,
 allocator: std.mem.Allocator,
 io: std.Io,
-metadata: std.ArrayList(Metadata) = .empty,
-
-pub const Metadata = struct {
-    path: []const u8,
-    mtime: std.Io.Timestamp,
-    callback: Callback,
-    pub const Callback = *const fn (*anyopaque, path: []const u8) anyerror!void;
-};
+listeners: std.ArrayList(Listener) = .empty,
 
 pub const Listener = struct {
     user_data: *anyopaque,
-    dir_path: []const u8,
     dir: std.Io.Dir,
-    metadata: std.ArrayList(Metadata) = .empty,
+    callback: Callback,
+    assets: std.AutoArrayHashMapUnmanaged(u16, Asset) = .empty,
+
+    pub const Callback = *const fn (*anyopaque, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) anyerror!void;
+
+    pub const Asset = struct {
+        mtime: std.Io.Timestamp,
+
+        pub const Key = enum(u16) {
+            _,
+
+            pub fn fromSlice(s: []const u8) @This() {
+                var hash: u16 = 0;
+                for (s) |c| hash = @intCast(hash *% 31 +% c);
+                return hash;
+            }
+        };
+    };
+
+    pub fn listen(self: *@This(), io: std.Io, allocator: std.mem.Allocator) !void {
+        var it = self.dir.iterate();
+        while (try it.next()) |entry| if (entry.kind == .file) {
+            const entry_stat = try self.dir.statFile(io, entry.name, .{});
+
+            if (self.assets.getPtr(entry.name)) |asset| {
+                if (entry_stat.mtime >= asset.mtime) continue;
+                asset.mtime = entry_stat.mtime;
+
+                const file = try self.dir.openFile(io, entry.name, .{});
+                defer file.close(io);
+                try self.callback(self.user_data, io, allocator, file);
+            } else { // Doesnt exist
+                try self.assets.put(allocator, .fromSlice(entry.name), .{ .mtime = entry_stat.mtime });
+            }
+        };
+    }
 };
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
@@ -49,38 +76,22 @@ pub fn deinit(self: *@This()) void {
     self.* = undefined;
 }
 
-// pub fn addListener(self: *@This(), comptime UserData: type, user_data: *UserData, sub_path: []const u8) !void {
-//     const listener: Metadata = .{
-//         .user_data = @ptrCast(@alignCast(user_data)),
-//         .dir = try self.dir.openDir(self.io, sub_path, .{ .iterate = true, .access_sub_paths = true }),
-//         .dir_path = sub_path,
-//         // .callback = callback,
-//     };
-//     try self.listeners.append(self.allocator, listener);
-// }
-
-// pub fn addMetadata(self: *@This(), path: []const u8, callback: Listener.Callback) !void {}
-
-pub fn loadAsset(self: *@This(), sub_path: []const u8, callback: Metadata.Callback) !void {
-    var metadata: ?*Metadata = null;
-    for (self.metadata.items) |*meta| {
-        if (std.mem.eql(u8, meta.path, sub_path) == true) metadata = meta;
-    }
-    if (metadata == null) {
-        self.metadata.append(self.allocator, .{
-            .callback = callback,
-            .mtime = undefined,
-            .path = sub_path,
-        });
-    }
-
-    callback(data, metadata);
-    // const data = self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), null);
-
+pub fn addListener(self: *@This(), comptime UserData: type, user_data: *UserData, sub_path: []const u8, callback: Listener.Callback) !void {
+    const listener: Listener = .{
+        .user_data = @ptrCast(@alignCast(user_data)),
+        .dir = try self.dir.openDir(self.io, sub_path, .{ .iterate = true, .access_sub_paths = true }),
+        .callback = callback,
+    };
+    try self.listeners.append(self.allocator, listener);
 }
 
-pub fn loadAssetZ(self: *@This(), sub_path: []const u8) std.Io.Dir.ReadFileAllocError![:0]u8 {
-    return self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), 0);
+pub fn listen(self: *@This()) !void {
+    for (self.listeners.items) |*listener| try listener.listen(self.io, self.allocator);
+}
+
+/// Deprecated: use the asset server as intended
+pub fn loadAsset(self: *@This(), sub_path: []const u8) ![]u8 {
+    return self.dir.readFileAlloc(self.io, sub_path, self.allocator, .unlimited);
 }
 
 // fn loadTextureRgba8(
