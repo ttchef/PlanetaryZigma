@@ -28,6 +28,34 @@ shaders: [2]c.VkShaderEXT,
 layout: descriptor.Layout,
 elapsed_time: f32 = 0,
 
+// vec2 positions[3] = vec2[](
+//   vec2( 0.0, -0.5),
+//   vec2( 0.5,  0.5),
+//   vec2(-0.5,  0.5)
+// );
+
+// vec3 colors[3] = vec3[](
+//   vec3(1,0,0),
+//   vec3(0,1,0),
+//   vec3(0,0,1)
+// );
+const vertex_array = [_]Vertex.{
+    .{
+        .position = .{0,-0.5,0,0},
+        .color = .{1,0,0,1}.
+    },
+    .{
+        .position = .{0.5,0.5,0,0},
+        .color = .{1,0,0,1}.
+    },
+
+    .{
+        .position = .{-0.5,0.5,0,0},
+        .color = .{1,0,0,1}.
+    },
+};
+
+
 const Vertex = extern struct {
     position: [4]f32,
     color: [4]f32,
@@ -71,37 +99,18 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     ext.loadDeviceFunctions(device.handle);
     const vma: Vma = try .init(instance, physical_device, device);
     const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, options.swapchain.width, options.swapchain.heigth);
-    const draw_image: Image = try .init(
-        vma.handle,
-        device,
-        c.VK_FORMAT_R16G16B16A16_SFLOAT,
-        swapchain.extent,
-        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-            c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            c.VK_IMAGE_USAGE_STORAGE_BIT |
-            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        c.VK_IMAGE_ASPECT_COLOR_BIT,
-        false,
-    );
-    const depth_image: Image = try .init(
-        vma.handle,
-        device,
-        c.VK_FORMAT_D32_SFLOAT,
-        swapchain.extent,
-        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        c.VK_IMAGE_ASPECT_DEPTH_BIT,
-        false,
-    );
+    const draw_image: Image = try .init(vma.handle, device, c.VK_FORMAT_R16G16B16A16_SFLOAT, swapchain.extent, c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        c.VK_IMAGE_USAGE_STORAGE_BIT |
+        c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
+    const depth_image: Image = try .init(vma.handle, device, c.VK_FORMAT_D32_SFLOAT, swapchain.extent, c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, c.VK_IMAGE_ASPECT_DEPTH_BIT, false);
 
-    // const layout: descriptor.Layout = try .init(
-    //     Device,
-    //     &.{
-    //         .{
-
-    //         }
-
-    //     }
-    // );
+    const layout: descriptor.Layout = try .init(device, &.{.{
+        .binding = 0,
+        .descriptorCount = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    }});
 
     const vertex_source = try asset_server.loadAsset("shaders/vertex.vert.spv");
     defer asset_server.allocator.free(vertex_source);
@@ -115,6 +124,8 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
             .codeSize = vertex_source.len,
             .pCode = vertex_source.ptr,
+            .setLayoutCount = 1,
+            .pSetLayouts = layout.handle,
             .pName = "main",
         },
         .{
@@ -140,7 +151,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         .draw_image = draw_image,
         .depth_image = depth_image,
         .shaders = shaders,
-        .layout = undefined,
+        .layout = layout,
     };
 }
 
