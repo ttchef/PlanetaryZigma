@@ -28,34 +28,6 @@ shaders: [2]c.VkShaderEXT,
 layout: descriptor.Layout,
 elapsed_time: f32 = 0,
 
-// vec2 positions[3] = vec2[](
-//   vec2( 0.0, -0.5),
-//   vec2( 0.5,  0.5),
-//   vec2(-0.5,  0.5)
-// );
-
-// vec3 colors[3] = vec3[](
-//   vec3(1,0,0),
-//   vec3(0,1,0),
-//   vec3(0,0,1)
-// );
-const vertex_array = [_]Vertex.{
-    .{
-        .position = .{0,-0.5,0,0},
-        .color = .{1,0,0,1}.
-    },
-    .{
-        .position = .{0.5,0.5,0,0},
-        .color = .{1,0,0,1}.
-    },
-
-    .{
-        .position = .{-0.5,0.5,0,0},
-        .color = .{1,0,0,1}.
-    },
-};
-
-
 const Vertex = extern struct {
     position: [4]f32,
     color: [4]f32,
@@ -80,10 +52,11 @@ pub const InitOptions = struct {
     },
 };
 
-pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !@This() {
-    const instance: Instance = try .init(allocator, options.instance.extensions, options.instance.layers);
-    ext.loadInstanceFunctions(instance.handle);
-    const debug_messenger: DebugMessenger = try .init(instance, .{
+pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
+    const self = try allocator.create(@This());
+    self.instance = try .init(allocator, options.instance.extensions, options.instance.layers);
+    ext.loadInstanceFunctions(self.instance.handle);
+    self.debug_messenger = try .init(self.instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
             .verbose = true,
@@ -91,68 +64,76 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
             .info = true,
         },
     });
-    const surface: Surface = if (options.surface.init != null and options.surface.data != null) .{
-        .handle = @ptrCast(try options.surface.init.?(instance.handle, options.surface.data.?)),
+    self.surface = if (options.surface.init != null and options.surface.data != null) .{
+        .handle = @ptrCast(try options.surface.init.?(self.instance.handle, options.surface.data.?)),
     } else return error.configSurface;
-    const physical_device: PhysicalDevice = try .pick(instance, surface.handle);
-    const device: Device = try .init(physical_device, options.device.extensions);
-    ext.loadDeviceFunctions(device.handle);
-    const vma: Vma = try .init(instance, physical_device, device);
-    const swapchain: Swapchain = try .init(allocator, vma, physical_device, device, surface, options.swapchain.width, options.swapchain.heigth);
-    const draw_image: Image = try .init(vma.handle, device, c.VK_FORMAT_R16G16B16A16_SFLOAT, swapchain.extent, c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-        c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-        c.VK_IMAGE_USAGE_STORAGE_BIT |
-        c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, c.VK_IMAGE_ASPECT_COLOR_BIT, false);
-    const depth_image: Image = try .init(vma.handle, device, c.VK_FORMAT_D32_SFLOAT, swapchain.extent, c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, c.VK_IMAGE_ASPECT_DEPTH_BIT, false);
+    self.physical_device = try .pick(self.instance, self.surface.handle);
+    self.device = try .init(self.physical_device, options.device.extensions);
+    ext.loadDeviceFunctions(self.device.handle);
+    self.vma = try .init(self.instance, self.physical_device, self.device);
+    self.swapchain = try .init(allocator, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
+    self.draw_image = try .init(
+        self.vma.handle,
+        self.device,
+        c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        self.swapchain.extent,
+        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            c.VK_IMAGE_USAGE_STORAGE_BIT |
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    self.depth_image = try .init(
+        self.vma.handle,
+        self.device,
+        c.VK_FORMAT_D32_SFLOAT,
+        self.swapchain.extent,
+        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_DEPTH_BIT,
+        false,
+    );
 
-    const layout: descriptor.Layout = try .init(device, &.{.{
-        .binding = 0,
-        .descriptorCount = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    }});
+    try asset_server.loadAsset(@This(), self, "shaders/vertex.vert.spv", loadShader);
+    try asset_server.loadAsset(@This(), self, "shaders/fragment.frag.spv", loadShader);
 
-    const vertex_source = try asset_server.loadAsset("shaders/vertex.vert.spv");
-    defer asset_server.allocator.free(vertex_source);
-    const fragment_source = try asset_server.loadAsset("shaders/fragment.frag.spv");
-    defer asset_server.allocator.free(fragment_source);
-    const shader_create_info: []const c.VkShaderCreateInfoEXT = &.{
-        .{
+    // self.shaders = .{ null, null };
+    self.layout = undefined;
+    self.elapsed_time = 0;
+    return self;
+}
+
+fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) !void {
+    const self: *@This() = @ptrCast(@alignCast(user_data));
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+    const content = try reader.interface.allocRemaining(allocator, .unlimited);
+    defer allocator.free(content);
+
+    if (std.mem.eql(u8, path, "shaders/vertex.vert.spv")) {
+        const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = vertex_source.len,
-            .pCode = vertex_source.ptr,
-            .setLayoutCount = 1,
-            .pSetLayouts = layout.handle,
+            .codeSize = content.len,
+            .pCode = content.ptr,
             .pName = "main",
-        },
-        .{
+        };
+
+        try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[0]));
+    } else if (std.mem.eql(u8, path, "shaders/fragment.frag.spv")) {
+        const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = fragment_source.len,
-            .pCode = fragment_source.ptr,
+            .codeSize = content.len,
+            .pCode = content.ptr,
             .pName = "main",
-        },
-    };
-    var shaders: [2]c.VkShaderEXT = undefined;
-    try check(ext.vkCreateShadersEXT(device.handle, 2, &shader_create_info[0], null, &shaders[0]));
+        };
 
-    return .{
-        .instance = instance,
-        .debug_messenger = debug_messenger,
-        .surface = surface,
-        .physical_device = physical_device,
-        .device = device,
-        .vma = vma,
-        .swapchain = swapchain,
-        .draw_image = draw_image,
-        .depth_image = depth_image,
-        .shaders = shaders,
-        .layout = layout,
-    };
+        try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[1]));
+    }
 }
 
 pub fn deinit(self: *@This()) void {
