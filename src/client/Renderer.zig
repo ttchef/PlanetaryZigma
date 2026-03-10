@@ -4,7 +4,7 @@ const shared = @import("shared");
 const yes = @import("yes");
 const AssetServer = shared.AssetServer;
 
-inner: Inner,
+inner: *Inner,
 
 const Metal = @import("Renderer/Metal.zig");
 const Vulkan = @import("Renderer/Vulkan.zig");
@@ -55,7 +55,7 @@ pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, plat
 
     var yes_surface_create_user_data: YesSurfaceCreateUserData = .{ .platform = platform, .window = window };
 
-    const vulkan_renderer: Vulkan = try .init(allocator, asset_server, .{
+    const vulkan_renderer: *Vulkan = try .init(allocator, asset_server, .{
         .surface = .{
             .data = @ptrCast(@alignCast(&yes_surface_create_user_data)),
             .init = @ptrCast(&createVulkanSurface),

@@ -3,6 +3,48 @@ const std = @import("std");
 dir: std.Io.Dir,
 allocator: std.mem.Allocator,
 io: std.Io,
+metadata: std.ArrayList(Metadata) = .empty,
+
+pub const Metadata = struct {
+    user_data: *anyopaque,
+    path: []const u8,
+    callback: Callback,
+    // assets: std.AutoArrayHashMapUnmanaged(u16, Asset) = .empty,
+
+    pub const Callback = *const fn (*anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) anyerror!void;
+
+    // pub const Asset = struct {
+    //     mtime: std.Io.Timestamp,
+
+    //     pub const Key = enum(u16) {
+    //         _,
+
+    //         pub fn fromSlice(s: []const u8) @This() {
+    //             var hash: u16 = 0;
+    //             for (s) |c| hash = @intCast(hash *% 31 +% c);
+    //             return hash;
+    //         }
+    //     };
+    // };
+
+    // pub fn listen(self: *@This(), io: std.Io, allocator: std.mem.Allocator) !void {
+    //     var it = self.dir.iterate();
+    //     while (try it.next()) |entry| if (entry.kind == .file) {
+    //         const entry_stat = try self.dir.statFile(io, entry.name, .{});
+
+    //         if (self.assets.getPtr(entry.name)) |asset| {
+    //             if (entry_stat.mtime >= asset.mtime) continue;
+    //             asset.mtime = entry_stat.mtime;
+
+    //             const file = try self.dir.openFile(io, entry.name, .{});
+    //             defer file.close(io);
+    //             try self.callback(self.user_data, io, allocator, file);
+    //         } else { // Doesnt exist
+    //             try self.assets.put(allocator, .fromSlice(entry.name), .{ .mtime = entry_stat.mtime });
+    //         }
+    //     };
+    // }
+};
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
     const asset_paths: []const []const u8 = &.{
@@ -29,16 +71,46 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
 }
 
 pub fn deinit(self: *@This()) void {
+    // for (self.listeners.items) |listener| listener.dir.close(self.io);
     self.dir.close(self.io);
     self.* = undefined;
 }
 
-pub fn loadAsset(self: *@This(), sub_path: []const u8) std.Io.Dir.ReadFileAllocError![]u8 {
-    return self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), null);
-}
+// pub fn addListener(self: *@This(), comptime UserData: type, user_data: *UserData, sub_path: []const u8, callback: Metadata.Callback) !void {
+//     const listener: Metadata = .{
+//         .user_data = @ptrCast(@alignCast(user_data)),
+//         .dir = try self.dir.openDir(self.io, sub_path, .{ .iterate = true, .access_sub_paths = true }),
+//         .callback = callback,
+//     };
+//     try self.listeners.append(self.allocator, listener);
+// }
 
-pub fn loadAssetZ(self: *@This(), sub_path: []const u8) std.Io.Dir.ReadFileAllocError![:0]u8 {
-    return self.dir.readFileAllocOptions(self.io, sub_path, self.allocator, .unlimited, .of(u8), 0);
+// pub fn listen(self: *@This()) !void {
+//     for (self.listeners.items) |*listener| try listener.listen(self.io, self.allocator);
+// }
+
+/// Deprecated: use the asset server as intended
+pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, path: []const u8, callback: Metadata.Callback) !void {
+    var metadata: ?usize = null;
+    for (self.metadata.items, 0..) |meta, i| {
+        if (std.mem.eql(u8, meta.path, path) == true) {
+            metadata = i;
+            break;
+        }
+    }
+    if (metadata == null) {
+        try self.metadata.append(self.allocator, .{
+            .callback = callback,
+            .path = path,
+            .user_data = user_data,
+        });
+    }
+
+    const file = try self.dir.openFile(self.io, path, .{});
+    defer file.close(self.io);
+    try callback(user_data, path, self.io, self.allocator, file);
+
+    // return self.dir.readFileAlloc(self.io, sub_path, self.allocator, .unlimited);
 }
 
 // fn loadTextureRgba8(

@@ -7,6 +7,7 @@ const AssetServer = @import("shared").AssetServer;
 pub const Renderer = @import("Renderer.zig");
 
 pub const Context = struct {
+    asset_server: *AssetServer,
     renderer: Renderer,
 
     pub const Data = struct {
@@ -18,6 +19,7 @@ pub const Context = struct {
 
     pub fn init(data: Data) !@This() {
         return .{
+            .asset_server = data.asset_server,
             .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
         };
     }
