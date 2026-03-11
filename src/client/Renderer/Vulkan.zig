@@ -1,6 +1,7 @@
 const std = @import("std");
 const AssetServer = @import("shared").AssetServer;
 pub const c = @import("vulkan");
+const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
@@ -28,6 +29,21 @@ shaders: [2]c.VkShaderEXT,
 layout: descriptor.Layout,
 elapsed_time: f32 = 0,
 
+// const vertex_array = [_]Vertex.{
+//     .{
+//         .position = .{0,-0.5,0,0},
+//         .color = .{1,0,0,1}.
+//     },
+//     .{
+//         .position = .{0.5,0.5,0,0},
+//         .color = .{1,0,0,1}.
+//     },
+//
+//     .{
+//         .position = .{-0.5,0.5,0,0},
+//         .color = .{1,0,0,1}.
+//     },
+// };
 const Vertex = extern struct {
     position: [4]f32,
     color: [4]f32,
@@ -94,8 +110,15 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         false,
     );
 
-    try asset_server.loadAsset(@This(), self, "shaders/vertex.vert.spv", loadShader);
-    try asset_server.loadAsset(@This(), self, "shaders/fragment.frag.spv", loadShader);
+    // const layout: descriptor.Layout = try .init(self.device, &.{.{
+    //     .binding = 0,
+    //     .descriptorCount = 1,
+    //     .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    // }});
+
+    try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
+    try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
     // self.shaders = .{ null, null };
     self.layout = undefined;
@@ -110,25 +133,52 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
     const content = try reader.interface.allocRemaining(allocator, .unlimited);
     defer allocator.free(content);
 
-    if (std.mem.eql(u8, path, "shaders/vertex.vert.spv")) {
+    const compiler = shaderc.shaderc_compiler_initialize();
+    defer shaderc.shaderc_compiler_release(compiler);
+
+    if (std.mem.eql(u8, path, "shaders/vertex.vert")) {
+        const result = shaderc.shaderc_compile_into_spv(
+            compiler,
+            content.ptr,
+            content.len,
+            shaderc.shaderc_glsl_vertex_shader,
+            "vertex.vert",
+            "main",
+            null,
+        );
+        defer shaderc.shaderc_result_release(result);
+        const data = shaderc.shaderc_result_get_bytes(result);
+        const len = shaderc.shaderc_result_get_length(result);
         const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = content.len,
-            .pCode = content.ptr,
+            .codeSize = len,
+            .pCode = data,
             .pName = "main",
         };
 
         try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[0]));
-    } else if (std.mem.eql(u8, path, "shaders/fragment.frag.spv")) {
+    } else if (std.mem.eql(u8, path, "shaders/fragment.frag")) {
+        const result = shaderc.shaderc_compile_into_spv(
+            compiler,
+            content.ptr,
+            content.len,
+            shaderc.shaderc_glsl_fragment_shader,
+            "fragment.frag",
+            "main",
+            null,
+        );
+        defer shaderc.shaderc_result_release(result);
+        const data = shaderc.shaderc_result_get_bytes(result);
+        const len = shaderc.shaderc_result_get_length(result);
         const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .codeSize = content.len,
-            .pCode = content.ptr,
+            .codeSize = len,
+            .pCode = data,
             .pName = "main",
         };
 
@@ -312,7 +362,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
 
     self.elapsed_time += time;
-    std.debug.print("time: {d}\n", .{self.elapsed_time});
+    // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(self.elapsed_time / 100);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
     if (@mod(tmp, 2) == 1) {

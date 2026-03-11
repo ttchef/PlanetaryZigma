@@ -30,6 +30,7 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), detla_time: f32) !void {
         try self.renderer.update(detla_time);
+        try self.asset_server.update();
     }
 };
 
@@ -75,7 +76,7 @@ pub const ffi = struct {
     }
 
     pub export fn systemContextUpdate(context: *Context, detla_time: f32) void {
-        std.log.debug("system context update", .{});
+        // std.log.debug("system context update", .{});
         context.update(detla_time) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});

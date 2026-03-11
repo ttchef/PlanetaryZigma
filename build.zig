@@ -21,20 +21,8 @@ pub fn build(b: *std.Build) void {
     buildServer(b, target, optimize);
 }
 
-// TODO(ernesto): HOT RELOADING
 pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const shared = b.modules.get("shared").?;
-
-    // const glfw_headers = b.dependency("glfw_headers", .{});
-    // const glfw_translate_c = b.addTranslateC(.{
-    //     // glfw_headers.path("include/GLFW/glfw3.h"),
-    //     .root_source_file = b.addWriteFiles().add("c.h",
-    //         \\#define GLFW_INCLUDE_VULKAN
-    //         \\#include <GLFW/glfw3.h>
-    //     ),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
 
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
@@ -106,11 +94,25 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .flags = &.{"-std=c++17"},
         });
 
+        const shaderc_dep = b.dependency("shaderc", .{});
+        const shaderc = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("shaderc.h",
+                \\#include "shaderc/shaderc.h"
+                \\#include "shaderc/env.h"
+                \\#include "shaderc/status.h"
+                \\#include "shaderc/visibility.h"
+            ),
+            .optimize = optimize,
+            .target = target,
+            .link_libc = true,
+        });
+        shaderc.addIncludePath(shaderc_dep.path("libshaderc/include"));
+
+        system.root_module.addImport("shaderc", shaderc.createModule());
         system.root_module.addImport("vulkan", vulkan);
         exe.root_module.linkSystemLibrary("vulkan", .{});
     }
 
-    exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
     if (target.result.os.tag == .macos) {
         exe.root_module.linkFramework("Cocoa", .{});
         exe.root_module.linkFramework("QuartzCore", .{});
