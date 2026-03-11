@@ -131,6 +131,7 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &buffer);
     const content = try reader.interface.allocRemaining(allocator, .unlimited);
+    std.debug.print("size:  {d}\n", .{content.len});
     defer allocator.free(content);
 
     const compiler = shaderc.shaderc_compiler_initialize();
@@ -147,8 +148,16 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             null,
         );
         defer shaderc.shaderc_result_release(result);
+        const status = shaderc.shaderc_result_get_compilation_status(result);
+        std.debug.print("result code {d}\n", .{status});
+        if (status != shaderc.shaderc_compilation_status_success) {
+            std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
+        }
         const data = shaderc.shaderc_result_get_bytes(result);
         const len = shaderc.shaderc_result_get_length(result);
+        // std.debug.print("size:  {d}\n", .{len});
+        // std.debug.print("data:  {s}\n", .{data});
+
         const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,

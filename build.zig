@@ -95,22 +95,18 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         });
 
         const shaderc_dep = b.dependency("shaderc", .{});
-        const shaderc = b.addTranslateC(.{
-            .root_source_file = b.addWriteFiles().add("shaderc.h",
-                \\#include "shaderc/shaderc.h"
-                \\#include "shaderc/env.h"
-                \\#include "shaderc/status.h"
-                \\#include "shaderc/visibility.h"
-            ),
-            .optimize = optimize,
+        const shaderc_c = b.addTranslateC(.{
+            .root_source_file = shaderc_dep.path("libshaderc/include/shaderc/shaderc.h"),
             .target = target,
-            .link_libc = true,
+            .optimize = optimize,
         });
-        shaderc.addIncludePath(shaderc_dep.path("libshaderc/include"));
+        const shaderc = shaderc_c.createModule();
+        system.root_module.addImport("shaderc", shaderc);
 
-        system.root_module.addImport("shaderc", shaderc.createModule());
         system.root_module.addImport("vulkan", vulkan);
         exe.root_module.linkSystemLibrary("vulkan", .{});
+        exe.root_module.linkSystemLibrary("shaderc_shared", .{});
+        exe.root_module.link_libcpp = true;
     }
 
     if (target.result.os.tag == .macos) {
