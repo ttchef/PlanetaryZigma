@@ -27,23 +27,31 @@ depth_image: Image,
 //Temporary
 shaders: [2]c.VkShaderEXT,
 layout: descriptor.Layout,
+
+push_constant: descriptor.Layout,
 elapsed_time: f32 = 0,
 
-// const vertex_array = [_]Vertex.{
-//     .{
-//         .position = .{0,-0.5,0,0},
-//         .color = .{1,0,0,1}.
-//     },
-//     .{
-//         .position = .{0.5,0.5,0,0},
-//         .color = .{1,0,0,1}.
-//     },
-//
-//     .{
-//         .position = .{-0.5,0.5,0,0},
-//         .color = .{1,0,0,1}.
-//     },
-// };
+const PushConstant = extern struct {
+    buffer_address: c.VkDeviceAddress,
+    time: f32,
+};
+
+const vertex_array = [_]Vertex{
+    .{
+        .position = .{ 0, -0.5, 0, 0 },
+        .color = .{ 1, 0, 0, 1 },
+    },
+    .{
+        .position = .{ 0.5, 0.5, 0, 0 },
+        .color = .{ 1, 0, 0, 1 },
+    },
+    .{
+        .position = .{ -0.5, 0.5, 0, 0 },
+        .color = .{ 1, 0, 0, 1 },
+    },
+};
+const indicies_array = [_]u32{ 0, 1, 2 };
+
 const Vertex = extern struct {
     position: [4]f32,
     color: [4]f32,
@@ -110,17 +118,30 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         false,
     );
 
-    // const layout: descriptor.Layout = try .init(self.device, &.{.{
+    self.layout = try .init(self.device, &.{.{
+        .binding = 0,
+        .descriptorCount = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    }});
+
+    // const ranges: c.VkPushConstantRange = .{
+    //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    //     .offset = 0,
+    //     .size = @sizeOf(PushConstant),
+    // };
+    // self.push_constant = try .init(self.device, &.{.{
     //     .binding = 0,
     //     .descriptorCount = 1,
     //     .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
     //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    //     .pPushConstantRanges = &ranges,
     // }});
 
+    self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
     try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
-    // self.shaders = .{ null, null };
     self.layout = undefined;
     self.elapsed_time = 0;
     return self;
@@ -131,8 +152,8 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &buffer);
     const content = try reader.interface.allocRemaining(allocator, .unlimited);
-    std.debug.print("size:  {d}\n", .{content.len});
     defer allocator.free(content);
+    std.debug.print("size:  {d}\n", .{content.len});
 
     const compiler = shaderc.shaderc_compiler_initialize();
     defer shaderc.shaderc_compiler_release(compiler);
@@ -163,11 +184,13 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.layout.handle,
             .codeSize = len,
             .pCode = data,
             .pName = "main",
         };
 
+        if (self.shaders[0] != null) ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
         try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[0]));
     } else if (std.mem.eql(u8, path, "shaders/fragment.frag")) {
         const result = shaderc.shaderc_compile_into_spv(
@@ -191,6 +214,7 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .pName = "main",
         };
 
+        if (self.shaders[1] != null) ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
         try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[1]));
     }
 }
@@ -226,7 +250,6 @@ pub fn update(self: *@This(), time: f32) !void {
     // std.debug.print("Acquire result={d} image_index={d}\n", .{ aquire_result, image_index });
     switch (aquire_result) {
         c.VK_ERROR_OUT_OF_DATE_KHR,
-        c.VK_SUBOPTIMAL_KHR,
         => return,
         c.VK_TIMEOUT, c.VK_NOT_READY => return,
         else => {},
@@ -244,7 +267,6 @@ pub fn update(self: *@This(), time: f32) !void {
     };
     try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    //TODO: RENDERING!
     try render(self, cmd_buffer, time);
 
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
@@ -377,8 +399,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     if (@mod(tmp, 2) == 1) {
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     } else {
-        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
+        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);

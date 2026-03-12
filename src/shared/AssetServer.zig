@@ -11,41 +11,20 @@ pub const Metadata = struct {
     path: []const u8,
     mtime: std.Io.Timestamp,
     callback: Callback,
-    // assets: std.AutoArrayHashMapUnmanaged(u16, Asset) = .empty,
 
     pub const Callback = *const fn (*anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) anyerror!void;
 
-    // pub const Asset = struct {
-    //     mtime: std.Io.Timestamp,
-
-    //     pub const Key = enum(u16) {
-    //         _,
-
-    //         pub fn fromSlice(s: []const u8) @This() {
-    //             var hash: u16 = 0;
-    //             for (s) |c| hash = @intCast(hash *% 31 +% c);
-    //             return hash;
-    //         }
-    //     };
-    // };
-
-    // pub fn listen(self: *@This(), io: std.Io, allocator: std.mem.Allocator) !void {
-    //     var it = self.dir.iterate();
-    //     while (try it.next()) |entry| if (entry.kind == .file) {
-    //         const entry_stat = try self.dir.statFile(io, entry.name, .{});
-
-    //         if (self.assets.getPtr(entry.name)) |asset| {
-    //             if (entry_stat.mtime >= asset.mtime) continue;
-    //             asset.mtime = entry_stat.mtime;
-
-    //             const file = try self.dir.openFile(io, entry.name, .{});
-    //             defer file.close(io);
-    //             try self.callback(self.user_data, io, allocator, file);
-    //         } else { // Doesnt exist
-    //             try self.assets.put(allocator, .fromSlice(entry.name), .{ .mtime = entry_stat.mtime });
-    //         }
-    //     };
-    // }
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, user_data: *anyopaque, path: []const u8, callback: Callback) !@This() {
+        return .{
+            .user_data = user_data,
+            .mtime = .now(io, .real),
+            .path = try allocator.dupe(u8, path),
+            .callback = callback,
+        };
+    }
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) !void {
+        allocator.free(self.path);
+    }
 };
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
@@ -75,16 +54,21 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
 
 pub fn deinit(self: *@This()) void {
     self.dir.close(self.io);
+    for (self.metadata.items) |*meta| {
+        try meta.deinit(self.allocator);
+    }
+    self.metadata.deinit(self.allocator);
     self.* = undefined;
 }
 
 pub fn update(self: *@This()) !void {
-    // var it = self.dir.iterate();
-    // const stat = try self.dir.stat(self.io);
-    // if (stat.mtime.nanoseconds > self.mtime.nanoseconds + std.time.ns_per_s) {
-    // std.debug.print("info: {any}\n", .{stat.mtime});
     for (self.metadata.items) |*metadata| {
-        const entry_stat = try self.dir.statFile(self.io, metadata.path, .{});
+        const entry_stat = self.dir.statFile(self.io, metadata.path, .{}) catch |err| {
+            if (err == error.FileNotFound) continue;
+            std.debug.print("error: {any}\nfile: {s}\n", .{ err, metadata.path });
+            continue;
+        };
+
         if (entry_stat.mtime.nanoseconds > metadata.mtime.nanoseconds + std.time.ns_per_s) {
             std.debug.print("reload shader {s}\n", .{metadata.path});
             const file = try self.dir.openFile(self.io, metadata.path, .{});
@@ -94,26 +78,6 @@ pub fn update(self: *@This()) !void {
             metadata.mtime = entry_stat.mtime;
         }
     }
-    // self.mtime = stat.mtime;
-    // }
-    // while (try it.next(self.io)) |entry| {
-    //     const entry_stat = try self.dir.statFile(self.io, entry.name, .{});
-    //     _ = entry_stat;
-    //
-    //     std.debug.print("sub path: {s}\n", .{entry.name});
-    // if (self.assets.getPtr(entry.name)) |asset| {
-    //     if (entry_stat.mtime >= asset.mtime) continue;
-    //     asset.mtime = entry_stat.mtime;
-    //
-    //     const file = try self.dir.openFile(io, entry.name, .{});
-    //     defer file.close(io);
-    //     try self.callback(self.user_data, io, allocator, file);
-    // } else { // Doesnt exist
-    //     try self.assets.put(allocator, .fromSlice(entry.name), .{ .mtime = entry_stat.mtime });
-    // }
-    // }
-    //
-    // };
 }
 
 pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, path: []const u8, callback: Metadata.Callback) !void {
@@ -125,12 +89,10 @@ pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, 
         }
     }
     if (metadata == null) {
-        try self.metadata.append(self.allocator, .{
-            .callback = callback,
-            .path = path,
-            .user_data = user_data,
-            .mtime = .now(self.io, .real),
-        });
+        try self.metadata.append(
+            self.allocator,
+            try .init(self.allocator, self.io, user_data, path, callback),
+        );
     }
 
     const file = try self.dir.openFile(self.io, path, .{});
