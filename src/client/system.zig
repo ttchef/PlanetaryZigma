@@ -9,6 +9,7 @@ pub const Renderer = @import("Renderer.zig");
 pub const Context = struct {
     asset_server: *AssetServer,
     renderer: Renderer,
+    allocator: std.mem.Allocator,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -21,15 +22,17 @@ pub const Context = struct {
         return .{
             .asset_server = data.asset_server,
             .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
+            .allocator = data.allocator,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        self.renderer.deinit();
+        self.renderer.deinit(self.allocator);
     }
 
     pub fn update(self: *@This(), detla_time: f32) !void {
         try self.renderer.update(detla_time);
+        try self.asset_server.update();
     }
 };
 
@@ -75,7 +78,7 @@ pub const ffi = struct {
     }
 
     pub export fn systemContextUpdate(context: *Context, detla_time: f32) void {
-        std.log.debug("system context update", .{});
+        // std.log.debug("system context update", .{});
         context.update(detla_time) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});

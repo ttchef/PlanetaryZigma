@@ -4,14 +4,14 @@ const shared = @import("shared");
 const yes = @import("yes");
 const AssetServer = shared.AssetServer;
 
-inner: *Inner,
+inner: Inner,
 
 const Metal = @import("Renderer/Metal.zig");
 const Vulkan = @import("Renderer/Vulkan.zig");
 
 pub const Inner = switch (builtin.os.tag) {
-    .macos => Metal,
-    else => Vulkan,
+    .macos => *Metal,
+    else => *Vulkan,
 };
 
 const YesSurfaceCreateUserData = struct {
@@ -26,8 +26,14 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: 
     };
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.inner.deinit();
+    switch (builtin.os.tag) {
+        .macos => self.inner.deinit(),
+        else => {
+            allocator.destroy(self.inner);
+        },
+    }
 }
 
 pub fn update(self: *@This(), time: f32) !void {
@@ -46,10 +52,10 @@ pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, plat
             Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         },
         else => &.{
-            "VK_KHR_surface",
-            "VK_KHR_display",
             "VK_KHR_xlib_surface",
             Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+            Vulkan.c.VK_KHR_SURFACE_EXTENSION_NAME,
+            Vulkan.c.VK_KHR_DISPLAY_EXTENSION_NAME,
         },
     };
 
