@@ -10,9 +10,16 @@ const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
 const Image = @import("Vulkan/Image.zig");
+const Buffer = @import("Vulkan/Buffer.zig");
 const descriptor = @import("Vulkan/desrciptor.zig");
+const pipeline = @import("Vulkan/pipeline.zig");
 pub const check = @import("Vulkan/utils.zig").check;
 const ext = @import("Vulkan/ExtensionFunctions.zig");
+
+const PushConstant = extern struct {
+    buffer_address: c.VkDeviceAddress,
+    time: f32,
+};
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -26,28 +33,25 @@ depth_image: Image,
 
 //Temporary
 shaders: [2]c.VkShaderEXT,
-layout: descriptor.Layout,
-
-push_constant: descriptor.Layout,
+pipeline_layout: pipeline.Layout,
+vertex_buffer: Buffer,
 elapsed_time: f32 = 0,
-
-const PushConstant = extern struct {
-    buffer_address: c.VkDeviceAddress,
-    time: f32,
-};
 
 const vertex_array = [_]Vertex{
     .{
         .position = .{ 0, -0.5, 0, 0 },
         .color = .{ 1, 0, 0, 1 },
+        .uv = .{ 0, 0, 0, 0 },
     },
     .{
         .position = .{ 0.5, 0.5, 0, 0 },
         .color = .{ 1, 0, 0, 1 },
+        .uv = .{ 0, 0, 0, 0 },
     },
     .{
         .position = .{ -0.5, 0.5, 0, 0 },
         .color = .{ 1, 0, 0, 1 },
+        .uv = .{ 0, 0, 0, 0 },
     },
 };
 const indicies_array = [_]u32{ 0, 1, 2 };
@@ -117,32 +121,29 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         c.VK_IMAGE_ASPECT_DEPTH_BIT,
         false,
     );
+    self.pipeline_layout = try .init(self.device, PushConstant);
+    self.vertex_buffer = undefined;
+    // self.vertex_buffer = try .init(
+    //     self.vma,
+    //     @sizeOf(Vertex) * 3,
+    //     c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
+    //     .{
+    //         .usage = c.VMA_MEMORY_USAGE_AUTO,
+    //         .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    //     },
+    // );
 
-    self.layout = try .init(self.device, &.{.{
-        .binding = 0,
-        .descriptorCount = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    }});
-
-    // const ranges: c.VkPushConstantRange = .{
-    //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    //     .offset = 0,
-    //     .size = @sizeOf(PushConstant),
-    // };
-    // self.push_constant = try .init(self.device, &.{.{
-    //     .binding = 0,
-    //     .descriptorCount = 1,
-    //     .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    //     .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    //     .pPushConstantRanges = &ranges,
-    // }});
+    // const gpu_address = c.vkGetBufferDeviceAddressEXT(self.device.handle, self.vertex_buffer.info);
+    // var mapped: [*]u8 = @ptrCast(gpu_address);
+    // @memcpy(
+    //     mapped[0 .. @sizeOf(Vertex) * 3],
+    //     std.mem.asBytes(&vertex_array),
+    // );
 
     self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
     try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
-    self.layout = undefined;
     self.elapsed_time = 0;
     return self;
 }
@@ -157,7 +158,12 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
 
     const compiler = shaderc.shaderc_compiler_initialize();
     defer shaderc.shaderc_compiler_release(compiler);
-
+    // TODO: DONT DO THIS LOL XD
+    const ranges: c.VkPushConstantRange = .{
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = @sizeOf(PushConstant),
+    };
     if (std.mem.eql(u8, path, "shaders/vertex.vert")) {
         const result = shaderc.shaderc_compile_into_spv(
             compiler,
@@ -184,7 +190,8 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.layout.handle,
+            .pPushConstantRanges = &ranges,
+            .pushConstantRangeCount = 1,
             .codeSize = len,
             .pCode = data,
             .pName = "main",
@@ -209,6 +216,8 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pPushConstantRanges = &ranges,
+            .pushConstantRangeCount = 1,
             .codeSize = len,
             .pCode = data,
             .pName = "main",
@@ -399,8 +408,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     if (@mod(tmp, 2) == 1) {
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     } else {
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
@@ -408,7 +417,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
     ext.vkCmdSetPrimitiveTopologyEXT(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
-    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
+    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
+    c.vkCmdSetLineWidth(cmd, 10);
     ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
     ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
@@ -479,6 +489,9 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
         .pDepthAttachment = &depth_attachment,
         .pStencilAttachment = null,
     };
+
+    var push: PushConstant = .{ .buffer_address = 0, .time = self.elapsed_time };
+    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
 

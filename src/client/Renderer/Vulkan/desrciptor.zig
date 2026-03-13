@@ -25,22 +25,28 @@ pub const Layout = struct {
 };
 
 //TODO: LayoutPushConstant added them! and comptime ;D
-pub const LayoutPushConstant = struct {
-    handle: c.VkDescriptorSetLayout,
-
-    pub fn init(device: Device, bindings: []const c.VkDescriptorSetLayoutBinding) !@This() {
-        var info: c.VkDescriptorSetLayoutCreateInfo = .{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pBindings = &bindings[0],
-            .bindingCount = @intCast(bindings.len),
-        };
-
-        var set: c.VkDescriptorSetLayout = undefined;
-        try check(c.vkCreateDescriptorSetLayout(device.handle, &info, null, &set));
-        return .{ .handle = set };
-    }
-
-    pub fn deinit(self: @This(), device: Device) void {
-        c.vkDestroyDescriptorSetLayout(device.handle, self.handle, null);
-    }
-};
+// pub const LayoutPushConstant = struct {
+//     handle: c.VkDescriptorSetLayout,
+//
+//     pub fn init(device: Device, comptime PushConstant: type, bindings: []const c.VkDescriptorSetLayoutBinding) !@This() {
+//         const ranges: c.VkPushConstantRange = .{
+//             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+//             .offset = 0,
+//             .size = @sizeOf(PushConstant),
+//         };
+//         var info: c.VkDescriptorSetLayoutCreateInfo = .{
+//             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+//             .pBindings = &bindings[0],
+//             .bindingCount = @intCast(bindings.len),
+//             .
+//         };
+//
+//         var set: c.VkDescriptorSetLayout = undefined;
+//         try check(c.vkCreateDescriptorSetLayout(device.handle, &info, null, &set));
+//         return .{ .handle = set };
+//     }
+//
+//     pub fn deinit(self: @This(), device: Device) void {
+//         c.vkDestroyDescriptorSetLayout(device.handle, self.handle, null);
+//     }
+// };
