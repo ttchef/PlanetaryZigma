@@ -52,7 +52,7 @@ pub const device = struct {
         pub var vkCmdSetVertexInputEXT: *const fn (c.VkCommandBuffer, u32, [*c]const c.VkVertexInputBindingDescription2EXT, u32, [*c]const c.VkVertexInputAttributeDescription2EXT) callconv(.c) void = undefined;
         pub var vkCmdBeginRendering: *const fn (c.VkCommandBuffer, [*c]const c.VkRenderingInfo) callconv(.c) void = undefined;
         pub var vkCmdEndRendering: *const fn (c.VkCommandBuffer) callconv(.c) void = undefined;
-        pub var vkGetBufferDeviceAddress: *const fn (c.VkDevice, [*c]const c.VkBufferDeviceAddressInfo) c.VkDeviceAddress = undefined;
+        pub var vkGetBufferDeviceAddress: *const fn (c.VkDevice, [*c]const c.VkBufferDeviceAddressInfo) callconv(.c) c.VkDeviceAddress = undefined;
     };
     pub fn load(vk_device: c.VkDevice, log: ?bool) void {
         const decls = @typeInfo(ProcTable).@"struct".decls;
@@ -61,7 +61,6 @@ pub const device = struct {
             const proc_addr = c.vkGetDeviceProcAddr(vk_device, decl.name);
             if (proc_addr) |addr| {
                 @field(ProcTable, decl.name) = @as(@TypeOf(@field(ProcTable, decl.name)), @ptrCast(addr));
-                std.log.debug("Loaded device proc: {s}", .{decl.name});
             } else {
                 if (log orelse (builtin.mode == .Debug)) std.log.err("Proc '{s}' not found", .{decl.name});
             }

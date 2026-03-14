@@ -46,12 +46,27 @@ const vertex_array = [_]Vertex{
     },
     .{
         .position = .{ 0.5, 0.5, 0, 0 },
-        .color = .{ 1, 0, 0, 1 },
+        .color = .{ 0, 1, 0, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
         .position = .{ -0.5, 0.5, 0, 0 },
-        .color = .{ 1, 0, 0, 1 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ -1, 0.5, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ -1, 1, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ 1, 1, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
 };
@@ -136,7 +151,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     const data = self.vertex_buffer.info.pMappedData;
     var mapped: [*]u8 = @ptrCast(data);
     @memcpy(
-        mapped[0 .. @sizeOf(Vertex) * 3],
+        mapped[0 .. @sizeOf(Vertex) * vertex_array.len],
         std.mem.asBytes(&vertex_array),
     );
 
@@ -413,9 +428,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(self.elapsed_time / 100);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == 1) {
+    if (@mod(tmp, 2) == -1) {
+        ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
+        c.vkCmdSetLineWidth(cmd, 10);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     } else {
+        ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     }
@@ -425,8 +443,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
     ext.vkCmdSetPrimitiveTopologyEXT(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
-    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
-    c.vkCmdSetLineWidth(cmd, 10);
+
     ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
     ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
@@ -502,13 +519,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
         .buffer = self.vertex_buffer.buffer,
     };
     const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, &info);
-    std.debug.print("handle {d}\n", .{gpu_address});
     var push: PushConstant = .{ .buffer_address = gpu_address, .time = self.elapsed_time };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
 
-    c.vkCmdDraw(cmd, 3, 1, 0, 0);
+    c.vkCmdDraw(cmd, vertex_array.len, 1, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
