@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("vulkan");
 const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
-const ext = @import("ExtensionFunctions.zig");
+const ext = @import("procFunctions.zig").instance.ProcTable;
 
 handle: c.VkDebugUtilsMessengerEXT,
 

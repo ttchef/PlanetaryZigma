@@ -14,7 +14,8 @@ const Buffer = @import("Vulkan/Buffer.zig");
 const descriptor = @import("Vulkan/desrciptor.zig");
 const pipeline = @import("Vulkan/pipeline.zig");
 pub const check = @import("Vulkan/utils.zig").check;
-const ext = @import("Vulkan/ExtensionFunctions.zig");
+const proc = @import("Vulkan/procFunctions.zig");
+const ext = proc.device.ProcTable;
 
 const PushConstant = extern struct {
     buffer_address: c.VkDeviceAddress,
@@ -45,12 +46,27 @@ const vertex_array = [_]Vertex{
     },
     .{
         .position = .{ 0.5, 0.5, 0, 0 },
-        .color = .{ 1, 0, 0, 1 },
+        .color = .{ 0, 1, 0, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
         .position = .{ -0.5, 0.5, 0, 0 },
-        .color = .{ 1, 0, 0, 1 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ -1, 0.5, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ -1, 1, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
+        .uv = .{ 0, 0, 0, 0 },
+    },
+    .{
+        .position = .{ 1, 1, 0, 0 },
+        .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
 };
@@ -83,7 +99,7 @@ pub const InitOptions = struct {
 pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
     const self = try allocator.create(@This());
     self.instance = try .init(allocator, options.instance.extensions, options.instance.layers);
-    ext.loadInstanceFunctions(self.instance.handle);
+    proc.instance.load(self.instance.handle, null);
     self.debug_messenger = try .init(self.instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -97,7 +113,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     } else return error.configSurface;
     self.physical_device = try .pick(self.instance, self.surface.handle);
     self.device = try .init(self.physical_device, options.device.extensions);
-    ext.loadDeviceFunctions(self.device.handle);
+    proc.device.load(self.device.handle, null);
     self.vma = try .init(self.instance, self.physical_device, self.device);
     self.swapchain = try .init(allocator, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
     self.draw_image = try .init(
@@ -122,29 +138,29 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         false,
     );
     self.pipeline_layout = try .init(self.device, PushConstant);
-    self.vertex_buffer = undefined;
-    // self.vertex_buffer = try .init(
-    //     self.vma,
-    //     @sizeOf(Vertex) * 3,
-    //     c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
-    //     .{
-    //         .usage = c.VMA_MEMORY_USAGE_AUTO,
-    //         .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-    //     },
-    // );
+    self.vertex_buffer = try .init(
+        self.vma,
+        @sizeOf(Vertex) * 3,
+        c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
+        .{
+            .usage = c.VMA_MEMORY_USAGE_AUTO,
+            .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        },
+    );
 
-    // const gpu_address = c.vkGetBufferDeviceAddressEXT(self.device.handle, self.vertex_buffer.info);
-    // var mapped: [*]u8 = @ptrCast(gpu_address);
-    // @memcpy(
-    //     mapped[0 .. @sizeOf(Vertex) * 3],
-    //     std.mem.asBytes(&vertex_array),
-    // );
+    const data = self.vertex_buffer.info.pMappedData;
+    var mapped: [*]u8 = @ptrCast(data);
+    @memcpy(
+        mapped[0 .. @sizeOf(Vertex) * vertex_array.len],
+        std.mem.asBytes(&vertex_array),
+    );
 
     self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
     try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
     self.elapsed_time = 0;
+
     return self;
 }
 
@@ -210,8 +226,14 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             null,
         );
         defer shaderc.shaderc_result_release(result);
+        const status = shaderc.shaderc_result_get_compilation_status(result);
+        std.debug.print("result code {d}\n", .{status});
+        if (status != shaderc.shaderc_compilation_status_success) {
+            std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
+        }
         const data = shaderc.shaderc_result_get_bytes(result);
         const len = shaderc.shaderc_result_get_length(result);
+        std.debug.print("size:  {d}\n", .{len});
         const shader_create_info = c.VkShaderCreateInfoEXT{
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -231,6 +253,7 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
 pub fn deinit(self: *@This()) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
+    self.vertex_buffer.deinit(self.vma);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
     self.depth_image.deinit(self.vma, self.device);
@@ -405,9 +428,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(self.elapsed_time / 100);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == 1) {
+    if (@mod(tmp, 2) == -1) {
+        ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
+        c.vkCmdSetLineWidth(cmd, 10);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     } else {
+        ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     }
@@ -417,8 +443,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
     ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
     ext.vkCmdSetPrimitiveTopologyEXT(cmd, c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     ext.vkCmdSetRasterizerDiscardEnableEXT(cmd, c.VK_FALSE);
-    ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
-    c.vkCmdSetLineWidth(cmd, 10);
+
     ext.vkCmdSetRasterizationSamplesEXT(cmd, c.VK_SAMPLE_COUNT_1_BIT);
     ext.vkCmdSetAlphaToCoverageEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthBiasEnableEXT(cmd, c.VK_FALSE);
@@ -489,13 +514,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
         .pDepthAttachment = &depth_attachment,
         .pStencilAttachment = null,
     };
-
-    var push: PushConstant = .{ .buffer_address = 0, .time = self.elapsed_time };
+    var info: c.VkBufferDeviceAddressInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = self.vertex_buffer.buffer,
+    };
+    const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, &info);
+    var push: PushConstant = .{ .buffer_address = gpu_address, .time = self.elapsed_time };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
 
-    c.vkCmdDraw(cmd, 3, 1, 0, 0);
+    c.vkCmdDraw(cmd, vertex_array.len, 1, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
