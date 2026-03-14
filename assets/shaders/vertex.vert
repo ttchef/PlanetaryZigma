@@ -38,7 +38,7 @@ const vec3 colors[3] = vec3[](
 
 void main() {
     float x = positions[gl_VertexIndex].x + sin(time/10)/2;
-    float y = positions[gl_VertexIndex].y + cos(time/100)/2;
+    float y = positions[gl_VertexIndex].y + cos(time/10)/2;
     float z = positions[gl_VertexIndex].z + tan(time/100)/2;
     gl_Position = vec4(x,y, z, 1.0);
     fragColor = colors[gl_VertexIndex] * (cos(time/10) + 1)/2;
