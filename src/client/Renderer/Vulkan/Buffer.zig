@@ -37,3 +37,14 @@ pub fn init(vma: Vma, size: usize, vk_buffer_usage: c.VkBufferUsageFlags, vmaall
 pub fn deinit(self: @This(), vma: Vma) void {
     Vma.c.vmaDestroyBuffer(vma.handle, @ptrCast(self.buffer), self.vma_allocation);
 }
+
+pub fn copy(self: *@This(), comptime T: type, data: *const T, amount: usize) void {
+    const size = @sizeOf(T) * amount;
+    std.debug.assert(size <= self.info.size);
+    var mapped: [*]u8 = @ptrCast(self.info.pMappedData);
+    var byte_data: [*]const u8 = @ptrCast(data);
+    @memcpy(
+        mapped[0..size],
+        byte_data[0..size],
+    );
+}

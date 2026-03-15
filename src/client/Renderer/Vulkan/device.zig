@@ -114,10 +114,15 @@ pub const Logical = struct {
             .pNext = &shader_obj_features,
             .bufferDeviceAddress = c.VK_TRUE,
         };
+        var buffer_device_address_features_ext = c.VkPhysicalDeviceBufferDeviceAddressFeatures{
+            .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT,
+            .pNext = &buffer_device_address_features,
+            .bufferDeviceAddress = c.VK_TRUE,
+        };
 
         const device_info = c.VkDeviceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            .pNext = &buffer_device_address_features,
+            .pNext = &buffer_device_address_features_ext,
             .queueCreateInfoCount = 1,
             .pQueueCreateInfos = &queue_info,
             .pEnabledFeatures = &features,

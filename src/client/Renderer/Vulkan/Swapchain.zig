@@ -4,6 +4,7 @@ const Vma = @import("Vma.zig");
 const Func = @import("utils.zig").Func;
 const PhysicalDevice = @import("device.zig").Physical;
 const Device = @import("device.zig").Logical;
+const Buffer = @import("Buffer.zig");
 const Surface = @import("Surface.zig");
 const check = @import("utils.zig").check;
 
@@ -69,9 +70,10 @@ pub fn init(
 
 pub fn deinit(
     self: *@This(),
+    vma: Vma,
     device: Device,
 ) void {
-    for (&self.frames) |*frame| frame.deinit(device);
+    for (&self.frames) |*frame| frame.deinit(vma, device);
     for (0..self.image_count) |i| {
         c.vkDestroySemaphore(device.handle, self.render_semaphores[i], null);
     }
@@ -142,14 +144,18 @@ pub fn recreate(
     self.vk_images = vk_images;
 }
 
-const FrameData = struct {
+pub const FrameData = struct {
+    pub const GPUScene = extern struct {
+        view_proj: [16]f32,
+        time: f32,
+    };
+
     swapchain_semaphore: c.VkSemaphore,
     render_fence: c.VkFence,
     command_buffer: c.VkCommandBuffer,
-    // gpu_scene: Buffer,
+    gpu_scene: Buffer,
 
     pub fn init(vma: Vma, device: Device) !@This() {
-        _ = vma;
         var alloc_info: c.VkCommandBufferAllocateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = device.command_pool.handle,
@@ -178,23 +184,22 @@ const FrameData = struct {
             .command_buffer = command_buffer,
             .swapchain_semaphore = swapchain_semaphore,
             .render_fence = render_fence,
-
-            // .gpu_scene = try .init(
-            //     vma.handle,
-            //     @sizeOf(GPUSceneData),
-            //     c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            //     .{
-            //         .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
-            //         .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            //     },
-            // ),
+            .gpu_scene = try .init(
+                vma,
+                @sizeOf(GPUScene),
+                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                .{
+                    .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
+                    .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                },
+            ),
         };
     }
 
-    pub fn deinit(self: *@This(), device: Device) void {
+    pub fn deinit(self: *@This(), vma: Vma, device: Device) void {
         c.vkDestroySemaphore(device.handle, self.swapchain_semaphore, null);
         c.vkDestroyFence(device.handle, self.render_fence, null);
         c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &self.command_buffer);
-        // self.gpu_scene.deinit(vma.handle);
+        self.gpu_scene.deinit(vma);
     }
 };

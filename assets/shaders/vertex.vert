@@ -17,14 +17,13 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 
 layout(push_constant, std430) uniform pc {
   VertexBuffer vertexBuffer;
-  float time;
 } PushConstant;
 
 layout(location = 0) out vec3 fragColor;
 
 void main() {
   Vertex v = PushConstant.vertexBuffer.vertices[gl_VertexIndex];
-  float time = PushConstant.time;
+  float time = 1;
   float x = v.position.x + sin(time / 100) / 2;
   float y = v.position.y + cos(time / 100) / 2;
   float z = v.position.y + tan(time / 100) / 2;

@@ -53,6 +53,8 @@ pub const device = struct {
         pub var vkCmdBeginRendering: *const fn (c.VkCommandBuffer, [*c]const c.VkRenderingInfo) callconv(.c) void = undefined;
         pub var vkCmdEndRendering: *const fn (c.VkCommandBuffer) callconv(.c) void = undefined;
         pub var vkGetBufferDeviceAddress: *const fn (c.VkDevice, [*c]const c.VkBufferDeviceAddressInfo) callconv(.c) c.VkDeviceAddress = undefined;
+        pub var vkCmdBindDescriptorBuffersEXT: *const fn (c.VkCommandBuffer, u32, [*c]const c.VkDescriptorBufferBindingInfoEXT) callconv(.c) void = undefined;
+        pub var vkCmdSetDescriptorBufferOffsetsEXT: *const fn (c.VkCommandBuffer, c.VkPipelineBindPoint, c.VkPipelineLayout, u32, u32, [*c]const u32, [*c]const c.VkDeviceSize) callconv(.c) void = undefined;
     };
     pub fn load(vk_device: c.VkDevice, log: ?bool) void {
         const decls = @typeInfo(ProcTable).@"struct".decls;
