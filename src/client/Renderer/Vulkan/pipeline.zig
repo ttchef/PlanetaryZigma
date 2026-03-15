@@ -1,11 +1,16 @@
 const std = @import("std");
 const c = @import("vulkan");
 const Device = @import("device.zig").Logical;
+const descriptor = @import("desrciptor.zig");
 const check = @import("utils.zig").check;
 
 pub const Layout = struct {
     handle: c.VkPipelineLayout,
-    pub fn init(device: Device, comptime PushConstant: type) !@This() {
+    pub fn init(
+        device: Device,
+        comptime PushConstant: type,
+        descriptor_layout: descriptor.Layout,
+    ) !@This() {
         const ranges: c.VkPushConstantRange = .{
             .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
             .offset = 0,
@@ -14,8 +19,8 @@ pub const Layout = struct {
 
         var layout_create_info: c.VkPipelineLayoutCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            // .pSetLayouts = @ptrCast(config.descriptor_set_layouts),
-            // .setLayoutCount = @intCast(config.descriptor_set_layouts.len),
+            .pSetLayouts = &descriptor_layout.handle,
+            .setLayoutCount = descriptor_layout.count,
             .pPushConstantRanges = &ranges,
             .pushConstantRangeCount = 1,
         };
@@ -25,5 +30,9 @@ pub const Layout = struct {
         return .{
             .handle = layout,
         };
+    }
+
+    pub fn deinit(self: *@This(), device: Device) void {
+        c.vkDestroyPipelineLayout(device.handle, self.handle, null);
     }
 };

@@ -1,4 +1,5 @@
 const std = @import("std");
+const nz = @import("shared").nz;
 const AssetServer = @import("shared").AssetServer;
 pub const c = @import("vulkan");
 const shaderc = @import("shaderc");
@@ -19,7 +20,6 @@ const ext = proc.device.ProcTable;
 
 const PushConstant = extern struct {
     buffer_address: c.VkDeviceAddress,
-    time: f32,
 };
 
 instance: Instance,
@@ -34,6 +34,7 @@ depth_image: Image,
 
 //Temporary
 shaders: [2]c.VkShaderEXT,
+desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 vertex_buffer: Buffer,
 elapsed_time: f32 = 0,
@@ -137,10 +138,17 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         c.VK_IMAGE_ASPECT_DEPTH_BIT,
         false,
     );
-    self.pipeline_layout = try .init(self.device, PushConstant);
+    self.desciptor_layout = try .init(self.device, &.{.{
+        .binding = 0,
+        .descriptorCount = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    }});
+
+    self.pipeline_layout = try .init(self.device, PushConstant, self.desciptor_layout);
     self.vertex_buffer = try .init(
         self.vma,
-        @sizeOf(Vertex) * 3,
+        @sizeOf(Vertex) * vertex_array.len,
         c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
         .{
             .usage = c.VMA_MEMORY_USAGE_AUTO,
@@ -148,19 +156,13 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         },
     );
 
-    const data = self.vertex_buffer.info.pMappedData;
-    var mapped: [*]u8 = @ptrCast(data);
-    @memcpy(
-        mapped[0 .. @sizeOf(Vertex) * vertex_array.len],
-        std.mem.asBytes(&vertex_array),
-    );
+    self.vertex_buffer.copy(Vertex, &vertex_array[0], vertex_array.len);
 
     self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
     try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
     self.elapsed_time = 0;
-
     return self;
 }
 
@@ -206,6 +208,8 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
             .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.desciptor_layout.handle,
+            .setLayoutCount = 1,
             .pPushConstantRanges = &ranges,
             .pushConstantRangeCount = 1,
             .codeSize = len,
@@ -238,6 +242,8 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
             .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
             .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
             .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+            .pSetLayouts = &self.desciptor_layout.handle,
+            .setLayoutCount = 1,
             .pPushConstantRanges = &ranges,
             .pushConstantRangeCount = 1,
             .codeSize = len,
@@ -254,11 +260,13 @@ pub fn deinit(self: *@This()) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
     self.vertex_buffer.deinit(self.vma);
+    self.desciptor_layout.deinit(self.device);
+    self.pipeline_layout.deinit(self.device);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
     self.depth_image.deinit(self.vma, self.device);
     self.draw_image.deinit(self.vma, self.device);
-    self.swapchain.deinit(self.device);
+    self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
     self.surface.deinit(self.instance);
@@ -299,7 +307,7 @@ pub fn update(self: *@This(), time: f32) !void {
     };
     try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    try render(self, cmd_buffer, time);
+    try render(self, cmd_buffer, current_frame, time);
 
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -354,7 +362,7 @@ pub fn update(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, time: f32) !void {
     var draw_image_barrier: Image.Barrier = .init(cmd, self.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
     draw_image_barrier.transition(
@@ -514,12 +522,32 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, time: f32) !void {
         .pDepthAttachment = &depth_attachment,
         .pStencilAttachment = null,
     };
+
+    var scene_data: Swapchain.FrameData.GPUScene = .{
+        .view_proj = nz.Mat4x4(f32).identity.d,
+        .time = time,
+    };
+    current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, &scene_data, 1);
+    //TODO: make getter for VkBufferDeviceAddressInfo
+    // var info1: c.VkBufferDeviceAddressInfo = .{
+    //     .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+    //     .buffer = current_frame.gpu_scene.buffer,
+    // };
+    // const gpu_scene_data = ext.vkGetBufferDeviceAddress(self.device.handle, &info1);
+    // var info2: c.VkDescriptorBufferBindingInfoEXT = .{
+    //     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+    //     .address = gpu_scene_data,
+    //     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+    // };
+    // ext.vkCmdBindDescriptorBuffersEXT(cmd, 1, &info2);
+    // ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, null, null);
+
     var info: c.VkBufferDeviceAddressInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .buffer = self.vertex_buffer.buffer,
     };
     const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, &info);
-    var push: PushConstant = .{ .buffer_address = gpu_address, .time = self.elapsed_time };
+    var push: PushConstant = .{ .buffer_address = gpu_address };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
