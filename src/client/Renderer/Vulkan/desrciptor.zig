@@ -8,11 +8,12 @@ pub const Layout = struct {
     handle: c.VkDescriptorSetLayout,
     count: u32,
 
-    pub fn init(device: Device, bindings: []const c.VkDescriptorSetLayoutBinding) !@This() {
+    pub fn init(device: Device, bindings: []const c.VkDescriptorSetLayoutBinding, descriptor_flags: u32) !@This() {
         var info: c.VkDescriptorSetLayoutCreateInfo = .{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .pBindings = &bindings[0],
             .bindingCount = @intCast(bindings.len),
+            .flags = descriptor_flags,
         };
 
         var set: c.VkDescriptorSetLayout = undefined;
