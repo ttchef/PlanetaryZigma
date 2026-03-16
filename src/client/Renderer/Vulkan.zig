@@ -41,32 +41,32 @@ elapsed_time: f32 = 0,
 
 const vertex_array = [_]Vertex{
     .{
-        .position = .{ 0, -0.5, 0, 0 },
+        .position = .{ 0, -0.5, -1.2, 0 },
         .color = .{ 1, 0, 0, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
-        .position = .{ 0.5, 0.5, 0, 0 },
+        .position = .{ 0.5, 0.5, -1.2, 0 },
         .color = .{ 0, 1, 0, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
-        .position = .{ -0.5, 0.5, 0, 0 },
+        .position = .{ -0.5, 0.5, -1.2, 0 },
         .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
-        .position = .{ -1, 0.5, 0, 0 },
+        .position = .{ -1, 0.5, -1.2, 0 },
         .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
-        .position = .{ -1, 1, 0, 0 },
+        .position = .{ -1, 1, -1.2, 0 },
         .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
     .{
-        .position = .{ 1, 1, 0, 0 },
+        .position = .{ 1, 1, -1.2, 0 },
         .color = .{ 0, 0, 1, 1 },
         .uv = .{ 0, 0, 0, 0 },
     },
@@ -138,12 +138,16 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         c.VK_IMAGE_ASPECT_DEPTH_BIT,
         false,
     );
-    self.desciptor_layout = try .init(self.device, &.{.{
-        .binding = 0,
-        .descriptorCount = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    }});
+    self.desciptor_layout = try .init(
+        self.device,
+        &.{.{
+            .binding = 0,
+            .descriptorCount = @sizeOf(Swapchain.FrameData.GPUScene),
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        }},
+        c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+    );
 
     self.pipeline_layout = try .init(self.device, PushConstant, self.desciptor_layout);
     self.vertex_buffer = try .init(
@@ -197,6 +201,7 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
         std.debug.print("result code {d}\n", .{status});
         if (status != shaderc.shaderc_compilation_status_success) {
             std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
+            return;
         }
         const data = shaderc.shaderc_result_get_bytes(result);
         const len = shaderc.shaderc_result_get_length(result);
@@ -234,6 +239,7 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
         std.debug.print("result code {d}\n", .{status});
         if (status != shaderc.shaderc_compilation_status_success) {
             std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
+            return;
         }
         const data = shaderc.shaderc_result_get_bytes(result);
         const len = shaderc.shaderc_result_get_length(result);
@@ -471,14 +477,14 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdSetAlphaToOneEnableEXT(cmd, c.VK_FALSE);
     ext.vkCmdSetLogicOpEnableEXT(cmd, c.VK_FALSE);
 
-    const vertexInputBinding: c.VkVertexInputBindingDescription2EXT = .{
+    const vertex_input_binding: c.VkVertexInputBindingDescription2EXT = .{
         .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
         .binding = 0,
         .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
         .stride = @sizeOf(Vertex),
         .divisor = 1,
     };
-    const vertexAttributes = &[_]c.VkVertexInputAttributeDescription2EXT{
+    const vertex_attributes = &[_]c.VkVertexInputAttributeDescription2EXT{
         .{
             .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_ATTRIBUTE_DESCRIPTION_2_EXT,
             .location = 0,
@@ -502,7 +508,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         },
     };
 
-    ext.vkCmdSetVertexInputEXT(cmd, 1, &vertexInputBinding, 3, &vertexAttributes[0]);
+    ext.vkCmdSetVertexInputEXT(cmd, 1, &vertex_input_binding, 3, &vertex_attributes[0]);
 
     var render_info: c.VkRenderingInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -523,24 +529,27 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .pStencilAttachment = null,
     };
 
+    const aspect: f32 = @as(f32, @floatFromInt(self.draw_image.extent.width)) / @as(f32, @floatFromInt(self.draw_image.extent.height));
+    const proj = nz.Mat4x4(f32).perspective(std.math.degreesToRadians(90), aspect, 0.1, 1000);
     var scene_data: Swapchain.FrameData.GPUScene = .{
-        .view_proj = nz.Mat4x4(f32).identity.d,
-        .time = time,
+        .view_proj = proj.d,
+        .time = self.elapsed_time,
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, &scene_data, 1);
-    //TODO: make getter for VkBufferDeviceAddressInfo
-    // var info1: c.VkBufferDeviceAddressInfo = .{
-    //     .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-    //     .buffer = current_frame.gpu_scene.buffer,
-    // };
-    // const gpu_scene_data = ext.vkGetBufferDeviceAddress(self.device.handle, &info1);
-    // var info2: c.VkDescriptorBufferBindingInfoEXT = .{
-    //     .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-    //     .address = gpu_scene_data,
-    //     .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-    // };
-    // ext.vkCmdBindDescriptorBuffersEXT(cmd, 1, &info2);
-    // ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, null, null);
+    var info1: c.VkBufferDeviceAddressInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = current_frame.gpu_scene.buffer,
+    };
+    const gpu_scene_data = ext.vkGetBufferDeviceAddress(self.device.handle, &info1);
+    var info2: c.VkDescriptorBufferBindingInfoEXT = .{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+        .address = gpu_scene_data,
+        .usage = c.VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+    };
+    ext.vkCmdBindDescriptorBuffersEXT(cmd, 1, &info2);
+    var buffer_index: u32 = 0;
+    var offset: c.VkDeviceSize = 0;
+    ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
     var info: c.VkBufferDeviceAddressInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,

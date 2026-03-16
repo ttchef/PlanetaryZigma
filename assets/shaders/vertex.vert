@@ -5,6 +5,11 @@
 // layout(location = 0) in vec2 inPosition;
 // layout(location = 1) in vec3 inColor;
 
+layout(set = 0, binding = 0) uniform sceneData {
+  mat4 proj_view;
+  float time;
+} scene_data;
+
 struct Vertex {
   vec4 position;
   vec4 color;
@@ -23,10 +28,10 @@ layout(location = 0) out vec3 fragColor;
 
 void main() {
   Vertex v = PushConstant.vertexBuffer.vertices[gl_VertexIndex];
-  float time = 1;
-  float x = v.position.x + sin(time / 100) / 2;
-  float y = v.position.y + cos(time / 100) / 2;
-  float z = v.position.y + tan(time / 100) / 2;
-  gl_Position = vec4(x, y, 0, 1.0);
-  fragColor = vec3(x, y, z);
+  float time = scene_data.time;
+  float x = v.position.x;
+  float y = v.position.y;
+  float z = v.position.z;
+  gl_Position = vec4(x, y, z, 1.0) * scene_data.proj_view;
+  fragColor = vec3((sin(time / 10) + 1) / 2, y, z);
 }

@@ -22,7 +22,6 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "PlanetaryZigma",
         .size = .{ .width = 670, .height = 400 },
-        .min_size = .{ .width = 400, .height = 300 },
         .surface_type = .vulkan,
     });
     defer window.close(platform);

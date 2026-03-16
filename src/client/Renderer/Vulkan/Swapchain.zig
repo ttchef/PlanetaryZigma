@@ -187,7 +187,7 @@ pub const FrameData = struct {
             .gpu_scene = try .init(
                 vma,
                 @sizeOf(GPUScene),
-                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
                 .{
                     .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,
                     .flags = Vma.c.VMA_ALLOCATION_CREATE_MAPPED_BIT,
