@@ -32,6 +32,6 @@ void main() {
   float x = v.position.x;
   float y = v.position.y;
   float z = v.position.z;
-  gl_Position = vec4(x, y, z, 1.0) * scene_data.proj_view;
+  gl_Position = scene_data.proj_view * vec4(x, y, -1 * (sin(time / 10) + 1) / 2 - 0.1, 1.0);
   fragColor = vec3((sin(time / 10) + 1) / 2, y, z);
 }

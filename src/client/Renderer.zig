@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("shared");
+const Info = shared.Info;
 const yes = @import("yes");
 const AssetServer = shared.AssetServer;
 
@@ -27,7 +28,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: 
 }
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-    self.inner.deinit();
+    self.inner.deinit(allocator);
     switch (builtin.os.tag) {
         .macos => self.inner.deinit(),
         else => {
@@ -36,8 +37,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     }
 }
 
-pub fn update(self: *@This(), time: f32) !void {
-    try self.inner.update(time);
+pub fn update(self: *@This(), info: Info) !void {
+    try self.inner.update(info);
 }
 
 pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Platform.Window) !void {

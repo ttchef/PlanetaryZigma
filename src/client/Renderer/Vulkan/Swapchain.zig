@@ -6,6 +6,7 @@ const PhysicalDevice = @import("device.zig").Physical;
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Surface = @import("Surface.zig");
+const Image = @import("Image.zig");
 const check = @import("utils.zig").check;
 
 const max_frames_inflight: usize = 3;
@@ -15,6 +16,8 @@ render_semaphores: [16]c.VkSemaphore,
 image_count: u32,
 format: c.VkFormat,
 extent: c.VkExtent3D,
+draw_image: Image,
+depth_image: Image,
 
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
@@ -55,6 +58,29 @@ pub fn init(
     }
 
     const actual_extent: c.VkExtent2D = try surface.getExtent(physical_device, width, height);
+    const extent_3d: c.VkExtent3D = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
+
+    const draw_image: Image = try .init(
+        vma,
+        device,
+        c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        extent_3d,
+        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            c.VK_IMAGE_USAGE_STORAGE_BIT |
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    const depth_image: Image = try .init(
+        vma,
+        device,
+        c.VK_FORMAT_D32_SFLOAT,
+        extent_3d,
+        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_DEPTH_BIT,
+        false,
+    );
 
     return .{
         .swapchain = swapchain,
@@ -62,9 +88,11 @@ pub fn init(
         .render_semaphores = render_semaphores,
         .image_count = image_count,
         .format = surface_format.format,
-        .extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 },
+        .extent = extent_3d,
         .current_frame_inflight = 0,
         .frames = frames,
+        .depth_image = depth_image,
+        .draw_image = draw_image,
     };
 }
 
@@ -73,6 +101,8 @@ pub fn deinit(
     vma: Vma,
     device: Device,
 ) void {
+    self.draw_image.deinit(vma, device);
+    self.depth_image.deinit(vma, device);
     for (&self.frames) |*frame| frame.deinit(vma, device);
     for (0..self.image_count) |i| {
         c.vkDestroySemaphore(device.handle, self.render_semaphores[i], null);
@@ -142,6 +172,11 @@ pub fn recreate(
     var vk_images: [16]c.VkImage = undefined;
     try check(c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
     self.vk_images = vk_images;
+
+    const scaled_height: f32 = @as(f32, @floatFromInt(@min(actual_extent.height, self.draw_image.extent.height)));
+    const scaled_width: f32 = @as(f32, @floatFromInt(@min(actual_extent.width, self.draw_image.extent.width)));
+    self.draw_image.extent.height = @intFromFloat(scaled_height);
+    self.draw_image.extent.width = @intFromFloat(scaled_width);
 }
 
 pub const FrameData = struct {

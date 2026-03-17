@@ -13,7 +13,7 @@ format: c.VkFormat = undefined,
 mip_mapped: bool = undefined,
 
 pub fn init(
-    vma: Vma.Allocator,
+    vma: Vma,
     device: Device,
     format: c.VkFormat,
     extent: c.VkExtent3D,
@@ -47,7 +47,7 @@ pub fn init(
     var image: c.VkImage = undefined;
     var vma_image_allocation: Vma.Allocation = undefined;
     _ = Vma.c.vmaCreateImage(
-        vma,
+        vma.handle,
         @ptrCast(&image_info),
         &vma_alloc_info,
         @ptrCast(&image),
@@ -128,7 +128,6 @@ pub fn uploadDataToImage(self: *@This(), device: Device, vma: Vma.Allocator, dat
     };
 
     c.vkCmdCopyBufferToImage(
-
         cmd,
         upload_buffer.buffer,
         self.vk_image,
