@@ -1,12 +1,14 @@
 const std = @import("std");
 const nz = @import("shared").nz;
 const AssetServer = @import("shared").AssetServer;
+const Info = @import("shared").Info;
 pub const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
 const PhysicalDevice = @import("Vulkan/device.zig").Physical;
 const Device = @import("Vulkan/device.zig").Logical;
+const Mesh = @import("Vulkan/Mesh.zig");
 const Vma = @import("Vulkan/Vma.zig");
 const Swapchain = @import("Vulkan/Swapchain.zig");
 const Surface = @import("Vulkan/Surface.zig");
@@ -29,55 +31,12 @@ physical_device: PhysicalDevice,
 device: Device,
 vma: Vma,
 swapchain: Swapchain,
-draw_image: Image,
-depth_image: Image,
 
 //Temporary
 shaders: [2]c.VkShaderEXT,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
-vertex_buffer: Buffer,
-elapsed_time: f32 = 0,
-
-const vertex_array = [_]Vertex{
-    .{
-        .position = .{ 0, -0.5, -1.2, 0 },
-        .color = .{ 1, 0, 0, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-    .{
-        .position = .{ 0.5, 0.5, -1.2, 0 },
-        .color = .{ 0, 1, 0, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-    .{
-        .position = .{ -0.5, 0.5, -1.2, 0 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-    .{
-        .position = .{ -1, 0.5, -1.2, 0 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-    .{
-        .position = .{ -1, 1, -1.2, 0 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-    .{
-        .position = .{ 1, 1, -1.2, 0 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv = .{ 0, 0, 0, 0 },
-    },
-};
-const indicies_array = [_]u32{ 0, 1, 2 };
-
-const Vertex = extern struct {
-    position: [4]f32,
-    color: [4]f32,
-    uv: [4]f32,
-};
+mesh: Mesh,
 
 pub const InitOptions = struct {
     instance: struct {
@@ -117,27 +76,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     proc.device.load(self.device.handle, null);
     self.vma = try .init(self.instance, self.physical_device, self.device);
     self.swapchain = try .init(allocator, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
-    self.draw_image = try .init(
-        self.vma.handle,
-        self.device,
-        c.VK_FORMAT_R16G16B16A16_SFLOAT,
-        self.swapchain.extent,
-        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-            c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            c.VK_IMAGE_USAGE_STORAGE_BIT |
-            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        c.VK_IMAGE_ASPECT_COLOR_BIT,
-        false,
-    );
-    self.depth_image = try .init(
-        self.vma.handle,
-        self.device,
-        c.VK_FORMAT_D32_SFLOAT,
-        self.swapchain.extent,
-        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        c.VK_IMAGE_ASPECT_DEPTH_BIT,
-        false,
-    );
+
     self.desciptor_layout = try .init(
         self.device,
         &.{.{
@@ -150,23 +89,31 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     );
 
     self.pipeline_layout = try .init(self.device, PushConstant, self.desciptor_layout);
-    self.vertex_buffer = try .init(
+    self.mesh = try .init(
+        allocator,
         self.vma,
-        @sizeOf(Vertex) * vertex_array.len,
-        c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
-        .{
-            .usage = c.VMA_MEMORY_USAGE_AUTO,
-            .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        },
+        "test",
+        self.device,
+        &Mesh.indicies_array,
+        Mesh.Vertex,
+        &Mesh.vertex_array,
     );
-
-    self.vertex_buffer.copy(Vertex, &vertex_array[0], vertex_array.len);
+    // self.vertex_buffer = try .init(
+    //     self.vma,
+    //     @sizeOf(Vertex) * vertex_array.len,
+    //     c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
+    //     .{
+    //         .usage = c.VMA_MEMORY_USAGE_AUTO,
+    //         .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    //     },
+    // );
+    //
+    // self.vertex_buffer.copy(Vertex, &vertex_array[0], vertex_array.len);
 
     self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
     try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
 
-    self.elapsed_time = 0;
     return self;
 }
 
@@ -262,16 +209,14 @@ fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: st
     }
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    self.vertex_buffer.deinit(self.vma);
+    self.mesh.deinit(allocator, self.vma);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
     ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
-    self.depth_image.deinit(self.vma, self.device);
-    self.draw_image.deinit(self.vma, self.device);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -280,7 +225,9 @@ pub fn deinit(self: *@This()) void {
     self.instance.deinit();
 }
 
-pub fn update(self: *@This(), time: f32) !void {
+pub fn update(self: *@This(), info: Info) !void {
+    // const time = data.delta_time;
+    // const elapsed_time = data.elapsed_time;
     var image_index: u32 = undefined;
     var current_frame = &self.swapchain.frames[self.swapchain.current_frame_inflight % self.swapchain.frames.len];
     try check(c.vkWaitForFences(self.device.handle, 1, &current_frame.render_fence, 1, 1000000000));
@@ -313,11 +260,11 @@ pub fn update(self: *@This(), time: f32) !void {
     };
     try check(c.vkBeginCommandBuffer(cmd_buffer, &cmd_begin_info));
 
-    try render(self, cmd_buffer, current_frame, time);
+    try render(self, cmd_buffer, current_frame, info);
 
     var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
-    self.draw_image.copyOntoImage(
+    self.swapchain.draw_image.copyOntoImage(
         cmd_buffer,
         .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
     );
@@ -368,15 +315,16 @@ pub fn update(self: *@This(), time: f32) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, time: f32) !void {
-    var draw_image_barrier: Image.Barrier = .init(cmd, self.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, info: Info) !void {
+    const elapsed_time = info.elapsed_time;
+    var draw_image_barrier: Image.Barrier = .init(cmd, self.swapchain.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
     draw_image_barrier.transition(
         c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
     );
-    var depth_image_barrier: Image.Barrier = .init(cmd, self.depth_image.vk_image, c.VK_IMAGE_ASPECT_DEPTH_BIT);
+    var depth_image_barrier: Image.Barrier = .init(cmd, self.swapchain.depth_image.vk_image, c.VK_IMAGE_ASPECT_DEPTH_BIT);
     depth_image_barrier.transition(
         c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
@@ -385,7 +333,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var color_attachment: c.VkRenderingAttachmentInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = null,
-        .imageView = self.draw_image.vk_imageview,
+        .imageView = self.swapchain.draw_image.vk_imageview,
         .imageLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .resolveMode = c.VK_RESOLVE_MODE_NONE,
         .resolveImageView = null,
@@ -400,7 +348,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     };
     var depth_attachment: c.VkRenderingAttachmentInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = self.depth_image.vk_imageview,
+        .imageView = self.swapchain.depth_image.vk_imageview,
         .imageLayout = c.VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -423,14 +371,14 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1], null, null, null };
 
     const viewport: c.VkViewport = .{
-        .width = @floatFromInt(self.draw_image.extent.width),
-        .height = @floatFromInt(self.draw_image.extent.height),
+        .width = @floatFromInt(self.swapchain.draw_image.extent.width),
+        .height = @floatFromInt(self.swapchain.draw_image.extent.height),
         .maxDepth = 1,
     };
     const scissor: c.VkRect2D = .{
         .extent = .{
-            .width = self.draw_image.extent.width,
-            .height = self.draw_image.extent.height,
+            .width = self.swapchain.draw_image.extent.width,
+            .height = self.swapchain.draw_image.extent.height,
         },
     };
     ext.vkCmdBindShadersEXT(cmd, stages.len, &stages[0], &bound[0]);
@@ -438,9 +386,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdSetViewportWithCountEXT(cmd, 1, &viewport);
     ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
 
-    self.elapsed_time += time;
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
-    const tmp: i32 = @intFromFloat(self.elapsed_time / 100);
+    const tmp: i32 = @intFromFloat(elapsed_time / 100);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
     if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
@@ -481,7 +428,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .sType = c.VK_STRUCTURE_TYPE_VERTEX_INPUT_BINDING_DESCRIPTION_2_EXT,
         .binding = 0,
         .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
-        .stride = @sizeOf(Vertex),
+        .stride = @sizeOf(Mesh.Vertex),
         .divisor = 1,
     };
     const vertex_attributes = &[_]c.VkVertexInputAttributeDescription2EXT{
@@ -517,8 +464,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .renderArea = .{
             .offset = .{ .x = 0, .y = 0 },
             .extent = .{
-                .height = self.draw_image.extent.height,
-                .width = self.draw_image.extent.width,
+                .height = self.swapchain.draw_image.extent.height,
+                .width = self.swapchain.draw_image.extent.width,
             },
         },
         .layerCount = 1,
@@ -529,11 +476,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .pStencilAttachment = null,
     };
 
-    const aspect: f32 = @as(f32, @floatFromInt(self.draw_image.extent.width)) / @as(f32, @floatFromInt(self.draw_image.extent.height));
-    const proj = nz.Mat4x4(f32).perspective(std.math.degreesToRadians(90), aspect, 0.1, 1000);
+    const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
+
+    const cam_pos = nz.Mat4x4(f32).translate(.{ 0, -1, 2 });
+    const cam_rot = nz.Mat4x4(f32).rotate(0.2, .{ 1, 0, 0 });
+    const view = cam_pos.mul(cam_rot).inverse();
+    const proj = nz.Mat4x4(f32).perspective(std.math.degreesToRadians(90), aspect, 0.01, 100);
+    const proj_view = proj.mul(view);
+
     var scene_data: Swapchain.FrameData.GPUScene = .{
-        .view_proj = proj.d,
-        .time = self.elapsed_time,
+        .view_proj = proj_view.d,
+        .time = elapsed_time,
     };
     current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, &scene_data, 1);
     var info1: c.VkBufferDeviceAddressInfo = .{
@@ -551,17 +504,17 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var offset: c.VkDeviceSize = 0;
     ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
-    var info: c.VkBufferDeviceAddressInfo = .{
-        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = self.vertex_buffer.buffer,
-    };
-    const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, &info);
-    var push: PushConstant = .{ .buffer_address = gpu_address };
+    // var info_: c.VkBufferDeviceAddressInfo = .{
+    //     .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+    //     .buffer = self.mesh. vertex_buffer.buffer,
+    // };
+    // const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, self.mesh.vertex_buffer_address);
+    var push: PushConstant = .{ .buffer_address = self.mesh.vertex_buffer_address };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
 
-    c.vkCmdDraw(cmd, vertex_array.len, 1, 0, 0);
+    c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
@@ -576,9 +529,4 @@ pub fn resize(self: *@This(), allocator: std.mem.Allocator, width: u32, height: 
         width,
         height,
     );
-
-    const scaled_height: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.height, self.draw_image.extent.height)));
-    const scaled_width: f32 = @as(f32, @floatFromInt(@min(self.swapchain.extent.width, self.draw_image.extent.width)));
-    self.draw_image.extent.height = @intFromFloat(scaled_height);
-    self.draw_image.extent.width = @intFromFloat(scaled_width);
 }

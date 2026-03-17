@@ -44,6 +44,7 @@ pub const Physical = struct {
 
 pub const Logical = struct {
     handle: c.VkDevice,
+    immidiate_fence: c.VkFence,
     graphics_queue: c.VkQueue,
     command_pool: CommandPool,
 
@@ -143,16 +144,66 @@ pub const Logical = struct {
         c.vkGetDeviceQueue(device, physical_device.graphics_queue_family_index, 0, &queue);
 
         const command_pool: CommandPool = try .init(device, physical_device.graphics_queue_family_index);
-
+        var fence_info: c.VkFenceCreateInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        var fence: c.VkFence = undefined;
+        try check(c.vkCreateFence(device, &fence_info, null, &fence));
         return .{
             .handle = device,
             .graphics_queue = queue,
             .command_pool = command_pool,
+            .immidiate_fence = fence,
         };
     }
 
     pub fn deinit(self: @This()) void {
         self.command_pool.deinit(self);
         c.vkDestroyDevice(self.handle, null);
+    }
+
+    pub fn beginImmediateCommand(
+        device: @This(),
+    ) !c.VkCommandBuffer {
+        var alloc_info: c.VkCommandBufferAllocateInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandPool = device.command_pool.handle,
+            .commandBufferCount = 1,
+        };
+
+        var command_buffer: c.VkCommandBuffer = undefined;
+        try check(c.vkAllocateCommandBuffers(device.handle, &alloc_info, &command_buffer));
+
+        try check(c.vkResetFences(device.handle, 1, &device.immidiate_fence));
+        try check(c.vkResetCommandBuffer(command_buffer, 0));
+
+        var begin_info: c.VkCommandBufferBeginInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
+
+        try check(c.vkBeginCommandBuffer(command_buffer, &begin_info));
+        return command_buffer;
+    }
+
+    pub fn endImmediateCommand(
+        device: @This(),
+        command_buffer: c.VkCommandBuffer,
+    ) !void {
+        try check(c.vkEndCommandBuffer(command_buffer));
+
+        var submit_info: c.VkSubmitInfo = .{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer,
+        };
+
+        try check(c.vkQueueSubmit(device.graphics_queue, 1, &submit_info, device.immidiate_fence));
+
+        try check(c.vkWaitForFences(device.handle, 1, &device.immidiate_fence, 1, 9999999999));
+
+        c.vkFreeCommandBuffers(device.handle, device.command_pool.handle, 1, &command_buffer);
     }
 };

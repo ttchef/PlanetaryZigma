@@ -5,6 +5,11 @@ pub const ec = @import("ecs");
 pub const Watcher = @import("watcher.zig");
 pub const AssetServer = @import("AssetServer.zig");
 
+pub const Info = struct {
+    delta_time: f32,
+    elapsed_time: f32,
+};
+
 pub const World = struct {
     mutex: std.Io.Mutex,
     ec: ec.World(&.{

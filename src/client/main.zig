@@ -42,6 +42,8 @@ pub fn main(init: std.process.Init) !void {
         .window = window,
     });
 
+    var elapsed_time: f32 = 0;
+    const delta_time: f32 = 0.0167;
     main_loop: while (true) {
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main_loop,
@@ -54,7 +56,7 @@ pub fn main(init: std.process.Init) !void {
             },
             else => {},
         };
-        system_table.systemContextUpdate(&system_context, 0.0167);
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time });
 
         if (try watcher.check()) {
             std.log.debug("system table updated", .{});
@@ -71,6 +73,7 @@ pub fn main(init: std.process.Init) !void {
                 .window = window,
             });
         }
+        elapsed_time += delta_time;
     }
     system_table.systemContextDeinit(&system_context);
 }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const shared = @import("shared");
 const yes = @import("yes");
+const Info = shared.Info;
 
 const AssetServer = @import("shared").AssetServer;
 
@@ -17,6 +18,7 @@ pub const Context = struct {
         platform: yes.Platform,
         window: *yes.Platform.Window,
     };
+    pub const Time = struct {};
 
     pub fn init(data: Data) !@This() {
         return .{
@@ -30,8 +32,8 @@ pub const Context = struct {
         self.renderer.deinit(self.allocator);
     }
 
-    pub fn update(self: *@This(), detla_time: f32) !void {
-        try self.renderer.update(detla_time);
+    pub fn update(self: *@This(), info: *const Info) !void {
+        try self.renderer.update(.{ .delta_time = info.delta_time, .elapsed_time = info.elapsed_time });
         try self.asset_server.update();
     }
 };
@@ -44,7 +46,7 @@ pub const ffi = struct {
     pub const Table = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
-        systemContextUpdate: *const fn (*Context, detla_time: f32) callconv(.c) void,
+        systemContextUpdate: *const fn (*Context, data: *const Info) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -77,9 +79,9 @@ pub const ffi = struct {
         context.* = undefined;
     }
 
-    pub export fn systemContextUpdate(context: *Context, detla_time: f32) void {
+    pub export fn systemContextUpdate(context: *Context, data: *const Info) void {
         // std.log.debug("system context update", .{});
-        context.update(detla_time) catch |err| {
+        context.update(data) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
             return;
