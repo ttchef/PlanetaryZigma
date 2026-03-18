@@ -1,16 +1,19 @@
 const std = @import("std");
 const c = @import("vulkan");
 const Vma = @import("Vma.zig");
+const Device = @import("device.zig").Logical;
 const check = @import("utils.zig").check;
 
 buffer: c.VkBuffer,
 vma_allocation: Vma.Allocation,
+gpu_address: c.VkDeviceAddress,
 info: Vma.AllocationInfo,
+len: u32,
 
-pub fn init(vma: Vma, size: usize, vk_buffer_usage: c.VkBufferUsageFlags, vmaalloc_info: Vma.c.VmaAllocationCreateInfo) !@This() {
+pub fn init(device: Device, vma: Vma, comptime T: type, amount: usize, vk_buffer_usage: c.VkBufferUsageFlags, vmaalloc_info: Vma.c.VmaAllocationCreateInfo) !@This() {
     var buffer_info: Vma.c.VkBufferCreateInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = size,
+        .size = amount * @sizeOf(T),
         .usage = vk_buffer_usage,
     };
 
@@ -27,10 +30,18 @@ pub fn init(vma: Vma, size: usize, vk_buffer_usage: c.VkBufferUsageFlags, vmaall
         &info,
     ));
 
+    var device_adress_info: c.VkBufferDeviceAddressInfo = .{
+        .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = new_buffer,
+    };
+    const gpu_address = c.vkGetBufferDeviceAddress(device.handle, &device_adress_info);
+
     return .{
         .buffer = new_buffer,
         .vma_allocation = allocation,
         .info = info,
+        .gpu_address = gpu_address,
+        .len = @intCast(amount),
     };
 }
 
@@ -38,11 +49,11 @@ pub fn deinit(self: @This(), vma: Vma) void {
     Vma.c.vmaDestroyBuffer(vma.handle, @ptrCast(self.buffer), self.vma_allocation);
 }
 
-pub fn copy(self: *@This(), comptime T: type, data: *const T, amount: usize) void {
-    const size = @sizeOf(T) * amount;
+pub fn copy(self: *@This(), comptime T: type, data: []const T) void {
+    const size = @sizeOf(T) * data.len;
     std.debug.assert(size <= self.info.size);
     var mapped: [*]u8 = @ptrCast(self.info.pMappedData);
-    var byte_data: [*]const u8 = @ptrCast(data);
+    var byte_data: [*]const u8 = @ptrCast(data.ptr);
     @memcpy(
         mapped[0..size],
         byte_data[0..size],

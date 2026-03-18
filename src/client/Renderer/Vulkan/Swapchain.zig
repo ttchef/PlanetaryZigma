@@ -220,8 +220,10 @@ pub const FrameData = struct {
             .swapchain_semaphore = swapchain_semaphore,
             .render_fence = render_fence,
             .gpu_scene = try .init(
+                device,
                 vma,
-                @sizeOf(GPUScene),
+                GPUScene,
+                1,
                 c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | c.VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | c.VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
                 .{
                     .usage = Vma.c.VMA_MEMORY_USAGE_CPU_TO_GPU,

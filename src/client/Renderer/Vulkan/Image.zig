@@ -90,7 +90,9 @@ pub fn deinit(self: @This(), vulkan_mem_alloc: Vma, device: Device) void {
 pub fn uploadDataToImage(self: *@This(), device: Device, vma: Vma.Allocator, data: anytype) !void {
     const data_size: u32 = self.extent.depth * self.extent.width * self.extent.height * 4;
     const upload_buffer: Buffer = try .init(
+        device,
         vma,
+        u8,
         data_size,
         c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .{

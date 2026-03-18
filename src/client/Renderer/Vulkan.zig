@@ -83,7 +83,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
             .binding = 0,
             .descriptorCount = @sizeOf(Swapchain.FrameData.GPUScene),
             .descriptorType = c.VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
-            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+            .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
         }},
         c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
     );
@@ -98,17 +98,6 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         Mesh.Vertex,
         &Mesh.vertex_array,
     );
-    // self.vertex_buffer = try .init(
-    //     self.vma,
-    //     @sizeOf(Vertex) * vertex_array.len,
-    //     c.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | c.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR,
-    //     .{
-    //         .usage = c.VMA_MEMORY_USAGE_AUTO,
-    //         .flags = c.VMA_ALLOCATION_CREATE_MAPPED_BIT | c.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-    //     },
-    // );
-    //
-    // self.vertex_buffer.copy(Vertex, &vertex_array[0], vertex_array.len);
 
     self.shaders = .{ null, null };
     try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
@@ -478,8 +467,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    const cam_pos = nz.Mat4x4(f32).translate(.{ 0, -1, 2 });
-    const cam_rot = nz.Mat4x4(f32).rotate(0.2, .{ 1, 0, 0 });
+    const cam_pos = nz.Mat4x4(f32).translate(.{ 0.5, -0.5, 0 });
+    const cam_rot = nz.Mat4x4(f32).rotate(@sin(elapsed_time / 30) * 0.7, .{ 0, 0, 1 });
     const view = cam_pos.mul(cam_rot).inverse();
     const proj = nz.Mat4x4(f32).perspective(std.math.degreesToRadians(90), aspect, 0.01, 100);
     const proj_view = proj.mul(view);
@@ -488,7 +477,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .view_proj = proj_view.d,
         .time = elapsed_time,
     };
-    current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, &scene_data, 1);
+    current_frame.gpu_scene.copy(Swapchain.FrameData.GPUScene, (&scene_data)[0..1]);
     var info1: c.VkBufferDeviceAddressInfo = .{
         .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
         .buffer = current_frame.gpu_scene.buffer,
@@ -504,17 +493,20 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var offset: c.VkDeviceSize = 0;
     ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
-    // var info_: c.VkBufferDeviceAddressInfo = .{
-    //     .sType = c.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-    //     .buffer = self.mesh. vertex_buffer.buffer,
-    // };
-    // const gpu_address = ext.vkGetBufferDeviceAddress(self.device.handle, self.mesh.vertex_buffer_address);
-    var push: PushConstant = .{ .buffer_address = self.mesh.vertex_buffer_address };
+    var push: PushConstant = .{ .buffer_address = self.mesh.vertex_buffer.gpu_address };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
-
-    c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
+    c.vkCmdBindIndexBuffer(cmd, self.mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+    // c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
+    c.vkCmdDrawIndexed(
+        cmd,
+        @intCast(self.mesh.index_buffer.len),
+        1,
+        0,
+        0,
+        0,
+    );
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
