@@ -150,8 +150,10 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     // });
 
     //NOTE: hot reloading.
+    const io = b.graph.io;
+    const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = "system",
+        .name = b.fmt("system_{d}", .{time}),
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/server/System.zig"),
             .target = target,

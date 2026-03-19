@@ -39,12 +39,14 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("eneties: {d}\n", .{world.ec.generation.items.len});
         systemsUpdate(&systems, 1.0);
         if (try system_watcher.check()) {
-            systemsDeinit(&systems, &allocator);
-            try system_watcher.reload(io);
-            systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
-            systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
-            systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
-            if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
+            if (try system_watcher.reload(io)) {
+                systemsDeinit(&systems, &allocator);
+
+                systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
+                systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
+                systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
+                if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
+            }
         }
         world.mutex.unlock(io);
     }

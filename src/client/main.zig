@@ -59,19 +59,19 @@ pub fn main(init: std.process.Init) !void {
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time });
 
         if (try watcher.check()) {
-            std.log.debug("system table updated", .{});
-            system_table.systemContextDeinit(&system_context);
-            try watcher.reload(io);
-
-            system_table = try .load(&watcher.dynlib);
-            asset_server.deinit();
-            asset_server = try shared.AssetServer.init(allocator, init.io);
-            system_table.systemContextInit(&system_context, &system.Context.Data{
-                .allocator = allocator,
-                .asset_server = &asset_server,
-                .platform = platform,
-                .window = window,
-            });
+            if (try watcher.reload(io)) {
+                std.log.debug("system table updated", .{});
+                system_table.systemContextDeinit(&system_context);
+                system_table = try .load(&watcher.dynlib);
+                asset_server.deinit();
+                asset_server = try shared.AssetServer.init(allocator, init.io);
+                system_table.systemContextInit(&system_context, &system.Context.Data{
+                    .allocator = allocator,
+                    .asset_server = &asset_server,
+                    .platform = platform,
+                    .window = window,
+                });
+            }
         }
         elapsed_time += delta_time;
     }
