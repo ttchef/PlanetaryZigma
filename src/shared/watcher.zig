@@ -14,8 +14,8 @@ const FileWatcher = struct {
         return .{ .inotify_fd = fd };
     }
 
-    pub fn deinit(self: @This()) void {
-        std.posix.close(self.inotify_fd);
+    pub fn deinit(self: @This(), io: std.Io) void {
+        std.Io.Dir.close(.{ .handle = self.inotify_fd }, io);
     }
 
     pub fn addFile(self: *@This(), path: [:0]const u8) !void {
@@ -27,13 +27,14 @@ const FileWatcher = struct {
         var buffer: [max_event_size]u8 align(@alignOf(std.os.linux.inotify_event)) = undefined;
 
         const read = std.posix.read(self.inotify_fd, &buffer) catch return false;
+        std.debug.print("listen: {any}\n", .{buffer[0..read]});
         if (read > 0) return true;
         return false;
     }
 };
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    const lib_name: []const u8 = std.fmt.comptimePrint(library_name, .{comptime builtin.target.dynamicLibSuffix()});
+    const lib_name = "lib" ++ library_name ++ comptime builtin.target.dynamicLibSuffix();
 
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
@@ -59,10 +60,8 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     var file_watcher: FileWatcher = try .init();
     try file_watcher.addFile("zig-out/lib/");
 
-    std.debug.print("PATH: {s}\n", .{lib_path.?});
-
     const dynlib: std.DynLib = try .open(lib_path.?);
-    std.log.debug("PATH {s}\n", .{lib_path.?});
+    std.log.debug("PATH {s}", .{lib_path.?});
 
     var self: @This() = .{
         .lib_path_len = lib_path.?.len,
@@ -74,20 +73,45 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     return self;
 }
 
-pub fn deinit(self: *@This()) void {
-    self.file_watcher.deinit();
+pub fn deinit(self: *@This(), io: std.Io) void {
+    self.file_watcher.deinit(io);
     self.dynlib.close();
 }
 
-pub fn listen(self: *@This()) !bool {
+pub fn check(self: *@This()) !bool {
     return try self.file_watcher.listen();
 }
 
-pub fn reload(self: *@This()) !void {
-    std.log.debug("Reloaded dynamic lib:\nLEN: {}, PATH {s}\n", .{ self.lib_path_len, self.lib_path_buffer[0..self.lib_path_len] });
+const max_retries = 50;
+const retry_delay_ns = 100_000_000; // 100ms
+
+pub fn reload(self: *@This(), io: std.Io) !bool {
+    _ = io;
+    // self.dynlib.close();
+
+    // var retries: usize = 0;
+    // while (retries < max_retries) : (retries += 1) {
+    var dynlib = std.DynLib.open(self.lib_path_buffer[0..self.lib_path_len]) catch |err| {
+        std.log.debug("Retry {}/{}: failed to open library: {}", .{ 1, 2, err });
+        return false;
+    };
+
+    // Verify symbols are accessib
+    const test_symbol = dynlib.lookup(*const fn () void, "systemContextInit");
+    if (test_symbol == null) {
+        std.log.debug("Retry {}/{}: library opened but symbols not available yet", .{ 1, 2 });
+        dynlib.close();
+        return false;
+    }
+
     self.dynlib.close();
-    self.dynlib = try std.DynLib.open(self.lib_path_buffer[0..self.lib_path_len]);
+    self.dynlib = dynlib;
+    std.log.debug("Reloaded dynamic lib:\nLEN: {}, PATH {s}\n", .{ self.lib_path_len, self.lib_path_buffer[0..self.lib_path_len] });
     try self.file_watcher.addFile("zig-out/lib/");
+    return true;
+    //     return;
+    // }
+    // return error.DynlibOpenFailed;
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {

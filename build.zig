@@ -21,23 +21,27 @@ pub fn build(b: *std.Build) void {
     buildServer(b, target, optimize);
 }
 
-// TODO(ernesto): HOT RELOADING
 pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const shared = b.modules.get("shared").?;
 
-    const glfw_headers = b.dependency("glfw_headers", .{});
-    const glfw_translate_c = b.addTranslateC(.{
-        .root_source_file = glfw_headers.path("include/GLFW/glfw3.h"),
-        // b.addWriteFiles().add("c.h",
-        // \\#define GLFW_INCLUDE_NONE
-        // \\#include <GLFW/glfw3.h>
-        // ),
-        .target = target,
-        .optimize = optimize,
-    });
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
-    const objc = b.dependency("zig_objc", .{ .target = target, .optimize = optimize, }).module("objc");
+
+    const system = b.addLibrary(.{
+        .name = "system",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/client/system.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                .{ .name = "yes", .module = yes },
+            },
+            .link_libc = true,
+        }),
+        .linkage = .dynamic,
+    });
 
     const exe = b.addExecutable(.{
         .name = "client",
@@ -47,14 +51,64 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                .{ .name = "glfw", .module = glfw_translate_c.createModule() },
+                .{ .name = "system", .module = system.root_module },
+                .{ .name = "yes", .module = yes },
                 .{ .name = "wasm_runtime", .module = wasm_runtime },
-                .{ .name = "objc", .module = objc },
             },
+            .link_libc = true,
         }),
     });
 
-    exe.root_module.linkLibrary(b.dependency("glfw", .{ .target = target, .optimize = optimize }).artifact("glfw3"));
+    if (target.result.os.tag.isDarwin()) {
+        const objc = b.lazyDependency("zig_objc", .{
+            .target = target,
+            .optimize = optimize,
+        }).?.module("objc");
+        exe.root_module.addImport("objc", objc);
+    } else {
+        const vulkandeps = b.dependency("vulkan_headers", .{});
+        const vmadep = b.dependency("vma", .{});
+
+        const vulkan_c = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("vma_vulkan.h",
+                \\#include <vulkan/vulkan.h>
+                \\#include <vk_mem_alloc.h>
+            ),
+            .target = target,
+            .optimize = optimize,
+        });
+        vulkan_c.addIncludePath(vulkandeps.path("include/"));
+        vulkan_c.addIncludePath(vmadep.path("include/"));
+
+        const vulkan = vulkan_c.createModule();
+        vulkan.link_libcpp = true;
+        for (vulkan_c.include_dirs.items) |include_dir| vulkan.addIncludePath(include_dir.path);
+
+        vulkan.addCSourceFile(.{
+            .file = b.addWriteFiles().add("vma_impl.cpp",
+                \\#define VMA_STATIC_VULKAN_FUNCTIONS 1
+                \\#define VMA_DYNAMIC_VULKAN_FUNCTIONS 0
+                \\#define VMA_IMPLEMENTATION
+                \\#include <vk_mem_alloc.h>
+            ),
+            .flags = &.{"-std=c++17"},
+        });
+
+        const shaderc_dep = b.dependency("shaderc", .{});
+        const shaderc_c = b.addTranslateC(.{
+            .root_source_file = shaderc_dep.path("libshaderc/include/shaderc/shaderc.h"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const shaderc = shaderc_c.createModule();
+        system.root_module.addImport("shaderc", shaderc);
+
+        system.root_module.addImport("vulkan", vulkan);
+        exe.root_module.linkSystemLibrary("vulkan", .{});
+        exe.root_module.linkSystemLibrary("shaderc_shared", .{});
+        exe.root_module.link_libcpp = true;
+    }
+
     if (target.result.os.tag == .macos) {
         exe.root_module.linkFramework("Cocoa", .{});
         exe.root_module.linkFramework("QuartzCore", .{});
@@ -78,6 +132,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.link_libcpp = true;
     }
 
+    b.installArtifact(system);
     b.installArtifact(exe);
 
     const run_step = b.step("run-client", "Run the client");
@@ -95,8 +150,10 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     // });
 
     //NOTE: hot reloading.
+    const io = b.graph.io;
+    const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = "system",
+        .name = b.fmt("system_{d}", .{time}),
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/server/System.zig"),
             .target = target,

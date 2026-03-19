@@ -1,49 +1,101 @@
 const std = @import("std");
 
+dir: std.Io.Dir,
 allocator: std.mem.Allocator,
-assets_root: []u8,
+io: std.Io,
+mtime: std.Io.Timestamp,
+metadata: std.ArrayList(Metadata) = .empty,
+
+pub const Metadata = struct {
+    user_data: *anyopaque,
+    path: []const u8,
+    mtime: std.Io.Timestamp,
+    callback: Callback,
+
+    pub const Callback = *const fn (*anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) anyerror!void;
+
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, user_data: *anyopaque, path: []const u8, callback: Callback) !@This() {
+        return .{
+            .user_data = user_data,
+            .mtime = .now(io, .real),
+            .path = try allocator.dupe(u8, path),
+            .callback = callback,
+        };
+    }
+    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) !void {
+        allocator.free(self.path);
+    }
+};
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io) !@This() {
-    const root = try discoverAssetsRoot(allocator, io);
-    return .{
-        .allocator = allocator,
-        .assets_root = root,
-    };
-}
-
-pub fn deinit(self: *@This()) void {
-    self.allocator.free(self.assets_root);
-}
-
-pub fn loadAsset(self: *@This(), io: std.Io, relative_path: []const u8) ![]u8 {
-    const full_path = try std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.assets_root, relative_path });
-    defer self.allocator.free(full_path);
-
-    return try cwdDir().readFileAlloc(io, full_path, self.allocator, .unlimited);
-}
-
-pub fn loadAssetNullTerminated(self: *@This(), io: std.Io, relative_path: []const u8) ![:0]u8 {
-    const bytes = try self.loadAsset(io, relative_path);
-    defer self.allocator.free(bytes);
-    return try self.allocator.dupeZ(u8, bytes);
-}
-
-fn discoverAssetsRoot(allocator: std.mem.Allocator, io: std.Io) ![]u8 {
-    const candidates: []const []const u8 = &.{
+    const asset_paths: []const []const u8 = &.{
         "assets",
         "../assets",
         "../../assets",
     };
 
-    for (candidates) |candidate| {
-        cwdDir().access(io, candidate, .{}) catch continue;
-        return try allocator.dupe(u8, candidate);
-    }
+    const found_path: []const u8 = path: for (asset_paths) |path| {
+        std.Io.Dir.cwd().access(io, path, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
+        break :path path;
+    } else return error.NoAssetDir;
 
-    return error.AssetsFolderNotFound;
+    const dir = try std.Io.Dir.cwd().openDir(io, found_path, .{ .iterate = true });
+
+    return .{
+        .dir = dir,
+        .allocator = allocator,
+        .io = io,
+        .mtime = .now(io, .real),
+    };
 }
 
-fn cwdDir() std.Io.Dir {
-    if (@hasDecl(std.Io, "cwd")) return std.Io.cwd();
-    return std.Io.Dir.cwd();
+pub fn deinit(self: *@This()) void {
+    self.dir.close(self.io);
+    for (self.metadata.items) |*meta| {
+        try meta.deinit(self.allocator);
+    }
+    self.metadata.deinit(self.allocator);
+    self.* = undefined;
+}
+
+pub fn update(self: *@This()) !void {
+    for (self.metadata.items) |*metadata| {
+        const entry_stat = self.dir.statFile(self.io, metadata.path, .{}) catch |err| {
+            if (err == error.FileNotFound) continue;
+            std.debug.print("error: {any}\nfile: {s}\n", .{ err, metadata.path });
+            continue;
+        };
+
+        if (entry_stat.mtime.nanoseconds > metadata.mtime.nanoseconds + std.time.ns_per_s) {
+            std.debug.print("reload shader {s}\n", .{metadata.path});
+            const file = try self.dir.openFile(self.io, metadata.path, .{});
+
+            defer file.close(self.io);
+            try metadata.callback(metadata.user_data, metadata.path, self.io, self.allocator, file);
+            metadata.mtime = entry_stat.mtime;
+        }
+    }
+}
+
+pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, path: []const u8, callback: Metadata.Callback) !void {
+    var metadata: ?usize = null;
+    for (self.metadata.items, 0..) |meta, i| {
+        if (std.mem.eql(u8, meta.path, path) == true) {
+            metadata = i;
+            break;
+        }
+    }
+    if (metadata == null) {
+        try self.metadata.append(
+            self.allocator,
+            try .init(self.allocator, self.io, user_data, path, callback),
+        );
+    }
+
+    const file = try self.dir.openFile(self.io, path, .{});
+    defer file.close(self.io);
+    try callback(user_data, path, self.io, self.allocator, file);
 }

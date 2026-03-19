@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.2565+684032671",
+    .minimum_zig_version = "0.16.0-dev.2682+02142a54d",
     .dependencies = .{
         .numz = .{
             .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
@@ -12,13 +12,21 @@
             .url = "git+https://codeberg.org/HaraldWik/ecs#78c574af6b25c053f8a212a2141f101f94ea0cdb",
             .hash = "ecs-0.0.0-8vkflw8iAAD81LYGmf2I7Kq4QR5wmyFlwfSy6SfpqGFv",
         },
-        .glfw = .{
-            .url = "git+https://codeberg.org/HaraldWik/glfw_zig#1810b47f2dabc6f1f28d0cef194ede664e9cfa5b",
-            .hash = "glfw-3.4.0-a4Mg88DIBgAhxrur_Nm1I6n3nFdyVhaG8CK01QBiyCZe",
+        .shaderc = .{
+            .url = "git+https://github.com/google/shaderc?ref=v2026.1#301b4ede53d59b68bf55f95bb26412d9233c8187",
+            .hash = "N-V-__8AAAh4EgD_1vyfeRQed3y6urhGewfbgX0yP6g04hGv",
         },
-        .glfw_headers = .{
-            .url = "git+https://github.com/glfw/glfw#7c9ea952338b792cb2f70d7c663e498725073797",
-            .hash = "N-V-__8AAAQdSgC7xfmpp3sHsMxANb6YDkz_kZ2i1tTRMRP8",
+        .yes = .{
+            .url = "git+https://github.com/HaraldWik/yes#d0b2a6caa3d25ece6c6dc5f13c86272c7a264ec6",
+            .hash = "yes-0.0.0-pN7MXSDwAQA-t-f5ucx3T6qFzW74v_d_UOo6dkxtjWm9",
+        },
+        .vulkan_headers = .{
+            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",
+            .hash = "N-V-__8AABoW_QEK-3TzuDEzM4iIfxXkfm2qHw0hBj0rutkl",
+        },
+        .vma = .{
+            .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
+            .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
         },
         .zphysics = .{
             .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
@@ -31,6 +39,7 @@
         .zig_objc = .{
             .url = "git+https://github.com/lolzdev/zig-objc#db99ba17af2ed3b1fc05c463f86cdb46eb0aae04",
             .hash = "zig_objc-0.0.0-Ir_Sp3IfAQDUK5DWXJvWDmZqeMFjgSg26Ju7VlVhEeYz",
+            .lazy = true,
         },
     },
     .paths = .{
