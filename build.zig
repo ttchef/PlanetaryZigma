@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
     });
 
     buildClient(b, target, optimize);
-    buildServer(b, target, optimize);
+    // buildServer(b, target, optimize);
 }
 
 pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -27,9 +27,10 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
-
+    const io = b.graph.io;
+    const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = "system",
+        .name = b.fmt("system{d}", .{time}),
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/client/system.zig"),
             .target = target,
@@ -131,6 +132,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.linkSystemLibrary("spirv-cross-util", .{});
         exe.root_module.link_libcpp = true;
     }
+    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
 
     b.installArtifact(system);
     b.installArtifact(exe);
@@ -165,6 +167,7 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         }),
         .linkage = .dynamic,
     });
+    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
     b.installArtifact(system);
     // system.root_module.linkLibrary(zphysics.artifact("joltc"));
 
