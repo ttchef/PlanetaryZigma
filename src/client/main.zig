@@ -5,7 +5,8 @@ const system = @import("system");
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init) !void {
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false }) = .init;
+    // var gpa: std.heap.DebugAllocator(.{ .verbose_log = false }) = .init;
+    var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .init;
     defer _ = gpa.deinit();
     const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
     const io = init.io;
@@ -31,9 +32,10 @@ pub fn main(init: std.process.Init) !void {
 
     var watcher: shared.Watcher = try .init("system", io);
     defer watcher.deinit(io);
+    try watcher.load(io);
 
     var system_context: system.Context = undefined;
-    var system_table: system.ffi.Table = try .load(&watcher.dynlib);
+    var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .allocator = allocator,
@@ -58,20 +60,18 @@ pub fn main(init: std.process.Init) !void {
         };
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time });
 
-        if (try watcher.check()) {
-            if (try watcher.reload(io)) {
-                std.log.debug("system table updated", .{});
-                system_table.systemContextDeinit(&system_context);
-                system_table = try .load(&watcher.dynlib);
-                asset_server.deinit();
-                asset_server = try shared.AssetServer.init(allocator, init.io);
-                system_table.systemContextInit(&system_context, &system.Context.Data{
-                    .allocator = allocator,
-                    .asset_server = &asset_server,
-                    .platform = platform,
-                    .window = window,
-                });
-            }
+        if (try watcher.reload(io)) {
+            std.log.debug("system table updated", .{});
+            system_table.systemContextDeinit(&system_context);
+            system_table = try .load(&watcher.dynlib.?);
+            asset_server.deinit();
+            asset_server = try shared.AssetServer.init(allocator, init.io);
+            system_table.systemContextInit(&system_context, &system.Context.Data{
+                .allocator = allocator,
+                .asset_server = &asset_server,
+                .platform = platform,
+                .window = window,
+            });
         }
         elapsed_time += delta_time;
     }
