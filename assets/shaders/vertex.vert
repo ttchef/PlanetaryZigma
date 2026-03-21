@@ -33,7 +33,7 @@ void main() {
   float y = v.position.y;
   float z = v.position.z;
   // gl_Position = scene_data.proj_view * vec4(x, y, -1 * (sin(time / 10) + 1) / 2 - 0.1, 1.0);
-  gl_Position = scene_data.proj_view * vec4(x, y, z * sin(scene_data.time / 100) - 1.2, 1.0);
+  gl_Position = scene_data.proj_view * vec4(x, y, z * sin(scene_data.time / 10) - 1.2, 1.0);
 
   vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
   vec3 col = 0.5 + 0.5 * cos(scene_data.time / 100 + uv + vec3(0, 2, 4));

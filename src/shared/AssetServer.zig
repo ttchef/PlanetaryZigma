@@ -95,6 +95,7 @@ pub fn loadAsset(self: *@This(), comptime UserData: type, user_data: *UserData, 
         );
     }
 
+    std.log.debug("path: {s}", .{path});
     const file = try self.dir.openFile(self.io, path, .{});
     defer file.close(self.io);
     try callback(user_data, path, self.io, self.allocator, file);

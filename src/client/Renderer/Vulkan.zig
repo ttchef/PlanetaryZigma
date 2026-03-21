@@ -16,13 +16,10 @@ const Image = @import("Vulkan/Image.zig");
 const Buffer = @import("Vulkan/Buffer.zig");
 const descriptor = @import("Vulkan/desrciptor.zig");
 const pipeline = @import("Vulkan/pipeline.zig");
+const Shader = @import("Vulkan/Shader.zig");
 pub const check = @import("Vulkan/utils.zig").check;
 const proc = @import("Vulkan/procFunctions.zig");
 const ext = proc.device.ProcTable;
-
-const PushConstant = extern struct {
-    buffer_address: c.VkDeviceAddress,
-};
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -33,7 +30,8 @@ vma: Vma,
 swapchain: Swapchain,
 
 //Temporary
-shaders: [2]c.VkShaderEXT,
+vertex_shader: *Shader,
+fragment_shader: *Shader,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
 mesh: Mesh,
@@ -88,114 +86,29 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
     );
 
-    self.pipeline_layout = try .init(self.device, PushConstant, self.desciptor_layout);
-    self.mesh = try .init(
-        allocator,
-        self.vma,
-        "test",
-        self.device,
-        &Mesh.indicies_array,
-        Mesh.Vertex,
-        &Mesh.vertex_array,
-    );
-
-    self.shaders = .{ null, null };
-    try asset_server.loadAsset(@This(), self, "shaders/vertex.vert", loadShader);
-    try asset_server.loadAsset(@This(), self, "shaders/fragment.frag", loadShader);
+    self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
+    self.mesh = try .init(allocator, self.vma, "test", self.device, &Mesh.indicies_array, Mesh.Vertex, &Mesh.vertex_array);
+    self.vertex_shader = try .init(allocator, self.device, asset_server, .{
+        .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+        .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+        .pSetLayouts = &self.desciptor_layout.handle,
+        .setLayoutCount = 1,
+        .pushConstantRangeCount = 1,
+        .pName = "main",
+    }, "shaders/vertex.vert");
+    self.fragment_shader = try .init(allocator, self.device, asset_server, .{
+        .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
+        .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
+        .pSetLayouts = &self.desciptor_layout.handle,
+        .setLayoutCount = 1,
+        .pushConstantRangeCount = 1,
+        .pName = "main",
+    }, "shaders/fragment.frag");
 
     return self;
-}
-
-fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) !void {
-    const self: *@This() = @ptrCast(@alignCast(user_data));
-    var buffer: [4096]u8 = undefined;
-    var reader = file.reader(io, &buffer);
-    const content = try reader.interface.allocRemaining(allocator, .unlimited);
-    defer allocator.free(content);
-    std.debug.print("size:  {d}\n", .{content.len});
-
-    const compiler = shaderc.shaderc_compiler_initialize();
-    defer shaderc.shaderc_compiler_release(compiler);
-    // TODO: DONT DO THIS LOL XD
-    const ranges: c.VkPushConstantRange = .{
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        .offset = 0,
-        .size = @sizeOf(PushConstant),
-    };
-    if (std.mem.eql(u8, path, "shaders/vertex.vert")) {
-        const result = shaderc.shaderc_compile_into_spv(
-            compiler,
-            content.ptr,
-            content.len,
-            shaderc.shaderc_glsl_vertex_shader,
-            "vertex.vert",
-            "main",
-            null,
-        );
-        defer shaderc.shaderc_result_release(result);
-        const status = shaderc.shaderc_result_get_compilation_status(result);
-        std.debug.print("result code {d}\n", .{status});
-        if (status != shaderc.shaderc_compilation_status_success) {
-            std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
-            return;
-        }
-        const data = shaderc.shaderc_result_get_bytes(result);
-        const len = shaderc.shaderc_result_get_length(result);
-        // std.debug.print("size:  {d}\n", .{len});
-        // std.debug.print("data:  {s}\n", .{data});
-
-        const shader_create_info = c.VkShaderCreateInfoEXT{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-            .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.desciptor_layout.handle,
-            .setLayoutCount = 1,
-            .pPushConstantRanges = &ranges,
-            .pushConstantRangeCount = 1,
-            .codeSize = len,
-            .pCode = data,
-            .pName = "main",
-        };
-
-        if (self.shaders[0] != null) ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
-        try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[0]));
-    } else if (std.mem.eql(u8, path, "shaders/fragment.frag")) {
-        const result = shaderc.shaderc_compile_into_spv(
-            compiler,
-            content.ptr,
-            content.len,
-            shaderc.shaderc_glsl_fragment_shader,
-            "fragment.frag",
-            "main",
-            null,
-        );
-        defer shaderc.shaderc_result_release(result);
-        const status = shaderc.shaderc_result_get_compilation_status(result);
-        std.debug.print("result code {d}\n", .{status});
-        if (status != shaderc.shaderc_compilation_status_success) {
-            std.debug.print("err message {s}\n", .{shaderc.shaderc_result_get_error_message(result)});
-            return;
-        }
-        const data = shaderc.shaderc_result_get_bytes(result);
-        const len = shaderc.shaderc_result_get_length(result);
-        std.debug.print("size:  {d}\n", .{len});
-        const shader_create_info = c.VkShaderCreateInfoEXT{
-            .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
-            .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-            .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
-            .pSetLayouts = &self.desciptor_layout.handle,
-            .setLayoutCount = 1,
-            .pPushConstantRanges = &ranges,
-            .pushConstantRangeCount = 1,
-            .codeSize = len,
-            .pCode = data,
-            .pName = "main",
-        };
-
-        if (self.shaders[1] != null) ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
-        try check(ext.vkCreateShadersEXT(self.device.handle, 1, &shader_create_info, null, &self.shaders[1]));
-    }
 }
 
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
@@ -204,8 +117,8 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.mesh.deinit(allocator, self.vma);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
-    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[0], null);
-    ext.vkDestroyShaderEXT(self.device.handle, self.shaders[1], null);
+    self.vertex_shader.deinit(allocator);
+    self.fragment_shader.deinit(allocator);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -357,7 +270,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         c.VK_SHADER_STAGE_GEOMETRY_BIT,
     };
 
-    const bound = [_]c.VkShaderEXT{ self.shaders[0], self.shaders[1], null, null, null };
+    const bound = [_]c.VkShaderEXT{ self.vertex_shader.handle, self.fragment_shader.handle, null, null, null };
 
     const viewport: c.VkViewport = .{
         .width = @floatFromInt(self.swapchain.draw_image.extent.width),
@@ -378,7 +291,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(elapsed_time / 100);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == 1) {
+    if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 10);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
@@ -493,8 +406,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var offset: c.VkDeviceSize = 0;
     ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
-    var push: PushConstant = .{ .buffer_address = self.mesh.vertex_buffer.gpu_address };
-    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(PushConstant), &push);
+    var push: Shader.PushConstant = .{ .buffer_address = self.mesh.vertex_buffer.gpu_address };
+    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     c.vkCmdBindIndexBuffer(cmd, self.mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);

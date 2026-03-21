@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 // lib_path_len: usize,
 
 dynlib: ?std.DynLib = null,
+old_dynlib: ?std.DynLib = null,
 dir_path: []const u8,
 mtime: std.Io.Timestamp,
 lib_name: []const u8,
@@ -30,63 +31,12 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
         .mtime = .zero,
         .lib_name = lib_name,
     };
-
-    // const lib_path: ?[]const u8 =
-    //     for (search_paths) |path_prefix| {
-    //         var buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    //         const path = try std.fmt.bufPrint(&buffer, "{s}{s}", .{ path_prefix, lib_name });
-    //
-    //         if ((std.Io.Dir.cwd().access(io, path, .{}) catch null) != null) {
-    //             break @constCast(path);
-    //         }
-    //     } else null;
-
-    //if (lib_path == null or (std.fs.cwd().access(lib_path.?, .{}) catch null) != null) {
-    //    std.log.warn("{s} not found", .{lib_path orelse "null"});
-    //    std.process.cleanExit();
-    //}
-
-    // var file_watcher: FileWatcher = try .init();
-    // try file_watcher.addFile("zig-out/lib/");
-    //         const asset_paths: []const []const u8 = &.{
-    //             "assets",
-    //             "../assets",
-    //             "../../assets",
-    //         };
-    //
-    //         const found_path: []const u8 = path: for (asset_paths) |path| {
-    //             std.Io.Dir.cwd().access(io, path, .{}) catch |err| switch (err) {
-    //                 error.FileNotFound => continue,
-    //                 else => return err,
-    //             };
-    //             break :path path;
-    //         } else return error.NoAssetDir;
-    //
-    //         const dir = try std.Io.Dir.cwd().openDir(io, found_path, .{ .iterate = true });
-    //
-    //         return .{
-    //             .dir = dir,
-    //             .allocator = allocator,
-    //             .io = io,
-    //             .mtime = .now(io, .real),
-    //         };
-
-    // const dynlib: std.DynLib = try .open(lib_path.?);
-    // std.log.debug("PATH {s}", .{lib_path.?});
-
-    // var self: @This() = .{
-    //     .lib_path_len = lib_path.?.len,
-    //     .lib_path_buffer = undefined,
-    //     .dynlib = dynlib,
-    //     .file_watcher = file_watcher,
-    // };
-    // @memcpy(self.lib_path_buffer[0..lib_path.?.len], lib_path.?[0..]);
-    // return self;
 }
 
 pub fn deinit(self: *@This(), io: std.Io) void {
     _ = io;
     if (self.dynlib) |*dynlib| dynlib.close();
+    if (self.old_dynlib) |*dynlib| dynlib.close();
 }
 
 pub fn load(self: *@This(), io: std.Io) !void {
@@ -118,27 +68,22 @@ pub fn load(self: *@This(), io: std.Io) !void {
 }
 
 pub fn reload(self: *@This(), io: std.Io) !bool {
-    std.log.debug("PATH: {s}", .{self.dir_path});
     const dir = std.Io.Dir.cwd().openDir(io, self.dir_path, .{ .iterate = true }) catch return false;
-    std.log.debug("PATH: {s}", .{self.dir_path});
     defer dir.close(io);
     const dir_stat = try dir.stat(io);
     if (dir_stat.mtime.nanoseconds <= self.mtime.nanoseconds) return false;
 
-    const old_dynlib = self.dynlib;
-    _ = old_dynlib;
+    self.old_dynlib = self.dynlib;
     self.load(io) catch {
-        // self.dynlib = old_dynlib;
+        self.dynlib = self.old_dynlib;
         return false;
     };
+
     self.mtime = dir_stat.mtime;
-    // if (old_dynlib) |*dynlib| dynlib.close();
+    self.mtime.nanoseconds += std.time.ns_per_s * 2;
 
     std.log.debug("Reloaded dynamic lib:\n, PATH {s}\n", .{self.lib_name});
     return true;
-    //     return;
-    // }
-    // return error.DynlibOpenFailed;
 }
 
 pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
@@ -146,52 +91,3 @@ pub inline fn lookup(self: *@This(), comptime T: type, name: [:0]const u8) !T {
     if (function_pointer == null) return error.DynlibLookup;
     return function_pointer.?;
 }
-
-// file_watcher: FileWatcher,
-
-// const FileWatcher = struct {
-//     inotify_fd: i32,
-//
-//     pub fn init() !@This() {
-//         const asset_paths: []const []const u8 = &.{
-//             "assets",
-//             "../assets",
-//             "../../assets",
-//         };
-//
-//         const found_path: []const u8 = path: for (asset_paths) |path| {
-//             std.Io.Dir.cwd().access(io, path, .{}) catch |err| switch (err) {
-//                 error.FileNotFound => continue,
-//                 else => return err,
-//             };
-//             break :path path;
-//         } else return error.NoAssetDir;
-//
-//         const dir = try std.Io.Dir.cwd().openDir(io, found_path, .{ .iterate = true });
-//
-//         return .{
-//             .dir = dir,
-//             .allocator = allocator,
-//             .io = io,
-//             .mtime = .now(io, .real),
-//         };
-//     }
-//
-//     pub fn deinit(self: @This(), io: std.Io) void {
-//         std.Io.Dir.close(.{ .handle = self.inotify_fd }, io);
-//     }
-//
-//     pub fn addFile(self: *@This(), path: [:0]const u8) !void {
-//         _ = try inotify_add_watchZ(self.inotify_fd, path, std.os.linux.IN.MODIFY);
-//     }
-//
-//     pub fn listen(self: *@This()) !bool {
-//         const max_event_size = @sizeOf(std.os.linux.inotify_event) + std.os.linux.NAME_MAX + 1;
-//         var buffer: [max_event_size]u8 align(@alignOf(std.os.linux.inotify_event)) = undefined;
-//
-//         const read = std.posix.read(self.inotify_fd, &buffer) catch return false;
-//         std.debug.print("listen: {any}\n", .{buffer[0..read]});
-//         if (read > 0) return true;
-//         return false;
-//     }
-// };

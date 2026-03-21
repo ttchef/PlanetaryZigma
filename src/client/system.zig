@@ -18,7 +18,6 @@ pub const Context = struct {
         platform: yes.Platform,
         window: *yes.Platform.Window,
     };
-    pub const Time = struct {};
 
     pub fn init(data: Data) !@This() {
         return .{
