@@ -5,8 +5,8 @@ const system = @import("system");
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init) !void {
-    // var gpa: std.heap.DebugAllocator(.{ .verbose_log = false }) = .init;
-    var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false }) = .init;
+    // var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .init;
     defer _ = gpa.deinit();
     const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
     const io = init.io;
@@ -63,6 +63,7 @@ pub fn main(init: std.process.Init) !void {
         if (try watcher.reload(io)) {
             std.log.debug("system table updated", .{});
             system_table.systemContextDeinit(&system_context);
+            watcher.old_dynlib.?.close();
             system_table = try .load(&watcher.dynlib.?);
             asset_server.deinit();
             asset_server = try shared.AssetServer.init(allocator, init.io);

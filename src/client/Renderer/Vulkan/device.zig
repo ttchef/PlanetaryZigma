@@ -160,6 +160,7 @@ pub const Logical = struct {
 
     pub fn deinit(self: @This()) void {
         self.command_pool.deinit(self);
+        c.vkDestroyFence(self.handle, self.immidiate_fence, null);
         c.vkDestroyDevice(self.handle, null);
     }
 
