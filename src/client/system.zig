@@ -1,11 +1,37 @@
 const std = @import("std");
 const shared = @import("shared");
+const nz = shared.nz;
 const yes = @import("yes");
-const Info = shared.Info;
+pub const ec = shared.ec;
+pub const Camera = @import("system/Camera.zig");
 
 const AssetServer = @import("shared").AssetServer;
 
 pub const Renderer = @import("Renderer.zig");
+
+pub const Info = struct {
+    delta_time: f32,
+    elapsed_time: f32,
+    world: *World,
+};
+
+pub const World = struct {
+    mutex: std.Io.Mutex,
+    ec: ec.World(&.{
+        nz.Transform3D(f32),
+        Camera,
+    }),
+
+    pub fn init(allocator: std.mem.Allocator) !@This() {
+        return .{
+            .mutex = .init,
+            .ec = try .init(allocator, null),
+        };
+    }
+    pub fn deinit(self: *@This()) void {
+        self.ec.deinit();
+    }
+};
 
 pub const Context = struct {
     asset_server: *AssetServer,
@@ -32,8 +58,18 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        try self.renderer.update(.{ .delta_time = info.delta_time, .elapsed_time = info.elapsed_time });
+        var query = info.world.ec.query(&.{Camera});
+        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
+        try camera.update(info);
+        try self.renderer.update(info);
         try self.asset_server.update();
+    }
+
+    pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Platform.Window.Event) !void {
+        _ = self;
+        var query = info.world.ec.query(&.{Camera});
+        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
+        try camera.eventUpdate(info, event);
     }
 };
 
@@ -45,7 +81,7 @@ pub const ffi = struct {
     pub const Table = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
-        systemContextUpdate: *const fn (*Context, data: *const Info) callconv(.c) void,
+        systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Platform.Window.Event) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -78,9 +114,9 @@ pub const ffi = struct {
         context.* = undefined;
     }
 
-    pub export fn systemContextUpdate(context: *Context, data: *const Info) void {
-        // std.log.debug("system context update", .{});
-        context.update(data) catch |err| {
+    pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Platform.Window.Event) void {
+        const result = if (event != null) context.eventUpdate(info, event.?) else context.update(info);
+        result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
             return;

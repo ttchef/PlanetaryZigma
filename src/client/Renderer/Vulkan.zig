@@ -1,7 +1,9 @@
 const std = @import("std");
 const nz = @import("shared").nz;
 const AssetServer = @import("shared").AssetServer;
-const Info = @import("shared").Info;
+const system = @import("../system.zig");
+const Info = system.Info;
+const World = system.World;
 pub const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
@@ -87,7 +89,15 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     );
 
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
-    self.mesh = try .init(allocator, self.vma, "test", self.device, &Mesh.indicies_array, Mesh.Vertex, &Mesh.vertex_array);
+    self.mesh = try .init(
+        allocator,
+        self.vma,
+        "test",
+        self.device,
+        &Mesh.box.indicies_array,
+        Mesh.Vertex,
+        &Mesh.box.vertex_array,
+    );
     self.vertex_shader = try .init(allocator, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
@@ -127,7 +137,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     self.instance.deinit();
 }
 
-pub fn update(self: *@This(), info: Info) !void {
+pub fn update(self: *@This(), info: *const Info) !void {
     // const time = data.delta_time;
     // const elapsed_time = data.elapsed_time;
     var image_index: u32 = undefined;
@@ -217,7 +227,7 @@ pub fn update(self: *@This(), info: Info) !void {
     self.swapchain.current_frame_inflight += 1;
 }
 
-pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, info: Info) !void {
+pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.FrameData, info: *const Info) !void {
     const elapsed_time = info.elapsed_time;
     var draw_image_barrier: Image.Barrier = .init(cmd, self.swapchain.draw_image.vk_image, c.VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -289,16 +299,16 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     ext.vkCmdSetScissorWithCountEXT(cmd, 1, &scissor);
 
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
-    const tmp: i32 = @intFromFloat(elapsed_time / 100);
+    const tmp: i32 = @intFromFloat(elapsed_time);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == -1) {
+    if (@mod(tmp, 2) == 1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 10);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
@@ -380,10 +390,13 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    const cam_pos = nz.Mat4x4(f32).translate(.{ 0.5, -0.5, 0 });
-    const cam_rot = nz.Mat4x4(f32).rotate(@sin(elapsed_time / 30) * 0.7, .{ 0, 0, 1 });
-    const view = cam_pos.mul(cam_rot).inverse();
-    const proj = nz.Mat4x4(f32).perspective(std.math.degreesToRadians(90), aspect, 0.01, 100);
+    var query = info.world.ec.query(&.{system.Camera});
+    const camera = query.next().?.get(system.Camera, info.world.ec).?;
+    const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
+    // const cam_rot = nz.Mat4x4(f32).rotate(1, .{ 1, 0, 0 });
+    // const view = cam_pos.mul(cam_rot).inverse();
+    const view = cam_pos.inverse();
+    const proj = nz.Mat4x4(f32).perspective(camera.fov_rad, aspect, 0.01, 100);
     const proj_view = proj.mul(view);
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
