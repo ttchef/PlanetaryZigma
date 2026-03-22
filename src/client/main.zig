@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("shared");
 const system = @import("system");
+const World = system.World;
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init) !void {
@@ -30,6 +31,11 @@ pub fn main(init: std.process.Init) !void {
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
 
+    var world: World = try .init(allocator);
+    defer world.deinit();
+    var camera = try world.ec.addEntity();
+    camera.set(system.Camera, .{}, world.ec);
+
     var watcher: shared.Watcher = try .init("system", io);
     defer watcher.deinit(io);
     try watcher.load(io);
@@ -45,20 +51,24 @@ pub fn main(init: std.process.Init) !void {
     });
 
     var elapsed_time: f32 = 0;
-    const delta_time: f32 = 0.0167;
+    // const step_time: f32 = 0.0167;
     main_loop: while (true) {
-        while (try window.poll(platform)) |event| switch (event) {
-            .close => break :main_loop,
-            .resize => |size| {
-                std.log.info("resize: {d}x{d}", .{ size.width, size.height });
-                try system_context.renderer.resize(allocator, window);
-            },
-            .key => |key| {
-                if (key.state == .released and key.sym == .escape) break :main_loop;
-            },
-            else => {},
-        };
-        system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time });
+        const delta_time = getDeltaTime(io);
+        while (try window.poll(platform)) |event| {
+            switch (event) {
+                .close => break :main_loop,
+                .resize => |size| {
+                    std.log.info("resize: {d}x{d}", .{ size.width, size.height });
+                    try system_context.renderer.resize(allocator, window);
+                },
+                .key => |key| {
+                    if (key.state == .released and key.sym == .escape) break :main_loop;
+                },
+                else => {},
+            }
+            system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, &event);
+        }
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, null);
 
         if (try watcher.reload(io)) {
             std.log.debug("system table updated", .{});
@@ -77,4 +87,21 @@ pub fn main(init: std.process.Init) !void {
         elapsed_time += delta_time;
     }
     system_table.systemContextDeinit(&system_context);
+}
+
+pub fn getDeltaTime(io: std.Io) f32 {
+    const static = struct {
+        var previous: ?std.Io.Timestamp = null;
+    };
+
+    const now: std.Io.Timestamp = .now(io, .real);
+    const prev = static.previous orelse {
+        static.previous = now;
+        return getDeltaTime(io);
+    };
+
+    const dt_ns = prev.durationTo(now);
+    static.previous = now;
+
+    return @as(f32, @floatFromInt(dt_ns.nanoseconds)) / 1_000_000_000.0;
 }

@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("shared");
-const Info = shared.Info;
+const Info = @import("system.zig").Info;
 const yes = @import("yes");
 const AssetServer = shared.AssetServer;
 
@@ -37,7 +37,7 @@ pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     }
 }
 
-pub fn update(self: *@This(), info: Info) !void {
+pub fn update(self: *@This(), info: *const Info) !void {
     try self.inner.update(info);
 }
 

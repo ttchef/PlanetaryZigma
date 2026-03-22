@@ -5,6 +5,8 @@ const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
 
+pub const box = @import("Meshes/box.zig");
+
 pub const vertex_array = [_]Vertex{
     .{
         .position = .{ 0, 0, -1 },
