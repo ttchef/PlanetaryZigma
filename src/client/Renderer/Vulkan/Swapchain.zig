@@ -149,6 +149,7 @@ fn create(
 pub fn recreate(
     self: *@This(),
     allocator: std.mem.Allocator,
+    vma: Vma,
     physical_device: PhysicalDevice,
     device: Device,
     surface: Surface,
@@ -173,10 +174,29 @@ pub fn recreate(
     try check(c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
     self.vk_images = vk_images;
 
-    const scaled_height: f32 = @as(f32, @floatFromInt(@min(actual_extent.height, self.draw_image.extent.height)));
-    const scaled_width: f32 = @as(f32, @floatFromInt(@min(actual_extent.width, self.draw_image.extent.width)));
-    self.draw_image.extent.height = @intFromFloat(scaled_height);
-    self.draw_image.extent.width = @intFromFloat(scaled_width);
+    self.draw_image.deinit(vma, device);
+    self.draw_image = try .init(
+        vma,
+        device,
+        c.VK_FORMAT_R16G16B16A16_SFLOAT,
+        self.extent,
+        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            c.VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            c.VK_IMAGE_USAGE_STORAGE_BIT |
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_COLOR_BIT,
+        false,
+    );
+    self.depth_image.deinit(vma, device);
+    self.depth_image = try .init(
+        vma,
+        device,
+        c.VK_FORMAT_D32_SFLOAT,
+        self.extent,
+        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        c.VK_IMAGE_ASPECT_DEPTH_BIT,
+        false,
+    );
 }
 
 pub const FrameData = struct {

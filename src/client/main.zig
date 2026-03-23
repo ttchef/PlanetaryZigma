@@ -27,6 +27,7 @@ pub fn main(init: std.process.Init) !void {
         .surface_type = .vulkan,
     });
     defer window.close(platform);
+    try window.setCursor(platform, .crosshair);
 
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();

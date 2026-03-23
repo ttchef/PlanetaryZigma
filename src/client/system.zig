@@ -42,7 +42,7 @@ pub const Context = struct {
         allocator: std.mem.Allocator,
         asset_server: *AssetServer,
         platform: yes.Platform,
-        window: *yes.Platform.Window,
+        window: *yes.Window,
     };
 
     pub fn init(data: Data) !@This() {
@@ -65,7 +65,7 @@ pub const Context = struct {
         try self.asset_server.update();
     }
 
-    pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Platform.Window.Event) !void {
+    pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
         var query = info.world.ec.query(&.{Camera});
         const camera = query.next().?.getPtr(Camera, info.world.ec).?;
@@ -81,7 +81,7 @@ pub const ffi = struct {
     pub const Table = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
-        systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Platform.Window.Event) callconv(.c) void,
+        systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Window.Event) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -114,7 +114,7 @@ pub const ffi = struct {
         context.* = undefined;
     }
 
-    pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Platform.Window.Event) void {
+    pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Window.Event) void {
         const result = if (event != null) context.eventUpdate(info, event.?) else context.update(info);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);

@@ -119,7 +119,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
     // std.log.debug("speed {any}", .{self.speed});
 }
 
-pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Platform.Window.Event) !void {
+pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
     _ = info;
     switch (event.*) {
         .key => |key| {
@@ -140,6 +140,9 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Platform
                 self.speed += @floatCast(scroll);
             },
             .horizontal => {},
+        },
+        .focus => |focus| {
+            if (focus == .unfocused) self.input_map = .{};
         },
 
         else => {},

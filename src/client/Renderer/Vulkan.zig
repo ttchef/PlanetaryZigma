@@ -89,14 +89,16 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     );
 
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
+    var planet_vertices: Mesh.Planet = try .init(allocator, 30);
+    defer planet_vertices.deinit(allocator);
     self.mesh = try .init(
         allocator,
         self.vma,
         "test",
         self.device,
-        &Mesh.box.indicies_array,
+        planet_vertices.indices.items,
         Mesh.Vertex,
-        &Mesh.box.vertex_array,
+        planet_vertices.vertices.items,
     );
     self.vertex_shader = try .init(allocator, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -301,7 +303,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(elapsed_time);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == 1) {
+    if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 10);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
@@ -310,7 +312,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     }
-    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
@@ -441,6 +443,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 pub fn resize(self: *@This(), allocator: std.mem.Allocator, width: u32, height: u32) !void {
     try self.swapchain.recreate(
         allocator,
+        self.vma,
         self.physical_device,
         self.device,
         self.surface,
