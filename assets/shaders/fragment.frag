@@ -12,7 +12,7 @@ layout(set = 0, binding = 0) uniform sceneData {
 } scene_data;
 
 float sd_guy(in vec3 p) {
-  float t = fract(scene_data.time / 100);
+  float t = fract(scene_data.time);
   float y = 4.0 * t * (1.0 - t);
   vec3 cen = vec3(0.0, y, 0.0);
   return length(p - cen) - 0.25;
@@ -47,7 +47,7 @@ float cast_ray(in vec3 ro, in vec3 rd) {
 
 void main() {
   vec2 p = (inUv * 2.0 - 1.0);
-  float an = scene_data.time / 100;
+  float an = scene_data.time;
 
   vec3 ta = vec3(0.0, 0.5, 0.0);
   vec3 ro = ta + vec3(1.5 * sin(an), 0.0, 1.5 * cos(an));

@@ -17,10 +17,10 @@ pub const Inner = switch (builtin.os.tag) {
 
 const YesSurfaceCreateUserData = struct {
     platform: yes.Platform,
-    window: *yes.Platform.Window,
+    window: *yes.Window,
 };
 
-pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Platform.Window) !@This() {
+pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     return switch (builtin.os.tag) {
         .macos => .{ .inner = Metal.init(allocator, platform, window) },
         else => initVulkan(allocator, asset_server, platform, window),
@@ -41,11 +41,11 @@ pub fn update(self: *@This(), info: *const Info) !void {
     try self.inner.update(info);
 }
 
-pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Platform.Window) !void {
+pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Window) !void {
     try self.inner.resize(allocator, window.size.width, window.size.height);
 }
 
-pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Platform.Window) !@This() {
+pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     const extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",

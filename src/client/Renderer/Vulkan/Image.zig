@@ -82,7 +82,7 @@ pub fn init(
     };
 }
 
-pub fn deinit(self: @This(), vulkan_mem_alloc: Vma, device: Device) void {
+pub fn deinit(self: *@This(), vulkan_mem_alloc: Vma, device: Device) void {
     c.vkDestroyImageView(device.handle, self.vk_imageview, null);
     Vma.c.vmaDestroyImage(vulkan_mem_alloc.handle, @ptrCast(self.vk_image), self.vma_allocation);
 }
