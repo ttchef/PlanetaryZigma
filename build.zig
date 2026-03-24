@@ -16,9 +16,11 @@ pub fn build(b: *std.Build) void {
             .{ .name = "numz", .module = numz },
         },
     });
+    const io = b.graph.io;
+    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
 
     buildClient(b, target, optimize);
-    // buildServer(b, target, optimize);
+    buildServer(b, target, optimize);
 }
 
 pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -30,7 +32,7 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     const io = b.graph.io;
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = b.fmt("system{d}", .{time}),
+        .name = b.fmt("system_client_{d}", .{time}),
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/client/system.zig"),
             .target = target,
@@ -132,7 +134,6 @@ pub fn buildClient(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
         exe.root_module.linkSystemLibrary("spirv-cross-util", .{});
         exe.root_module.link_libcpp = true;
     }
-    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
 
     b.installArtifact(system);
     b.installArtifact(exe);
@@ -151,23 +152,23 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
     //     .enable_cross_platform_determinism = true,
     // });
 
-    //NOTE: hot reloading.
     const io = b.graph.io;
     const time = std.Io.Timestamp.now(io, .real);
     const system = b.addLibrary(.{
-        .name = b.fmt("system_{d}", .{time}),
+        .name = b.fmt("system_server_{d}", .{time}),
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/server/System.zig"),
+            .root_source_file = b.path("src/server/system.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
                 // .{ .name = "zphy", .module = zphysics.module("root") },
             },
+            .link_libc = true,
         }),
         .linkage = .dynamic,
     });
-    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
+
     b.installArtifact(system);
     // system.root_module.linkLibrary(zphysics.artifact("joltc"));
 
@@ -179,7 +180,7 @@ pub fn buildServer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: st
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                .{ .name = "System", .module = system.root_module },
+                .{ .name = "system", .module = system.root_module },
             },
         }),
     });

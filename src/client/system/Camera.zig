@@ -116,6 +116,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
     // move = nz.vec.scale(move, speed_multiplier);
     self.transform.position += move;
     // std.log.debug("pos {any}", .{self.transform.position});
+    // std.log.debug("pos {any}", .{self.transform.position});
     // std.log.debug("speed {any}", .{self.speed});
 }
 
