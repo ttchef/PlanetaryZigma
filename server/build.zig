@@ -1,0 +1,66 @@
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
+    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
+
+    _ = b.addModule("shared", .{
+        .root_source_file = b.path("../shared/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "ecs", .module = ec },
+            .{ .name = "numz", .module = numz },
+        },
+    });
+    const io = b.graph.io;
+    std.Io.Dir.cwd().deleteTree(io, "../zig-out/lib/") catch unreachable;
+    const shared = b.modules.get("shared").?;
+    // const zphysics = b.dependency("zphysics", .{
+    //     .use_double_precision = false,
+    //     .enable_cross_platform_determinism = true,
+    // });
+
+    const time = std.Io.Timestamp.now(io, .real);
+    const system = b.addLibrary(.{
+        .name = b.fmt("system_server_{d}", .{time}),
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/system.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                // .{ .name = "zphy", .module = zphysics.module("root") },
+            },
+            .link_libc = true,
+        }),
+        .linkage = .dynamic,
+    });
+
+    b.installArtifact(system);
+    // system.root_module.linkLibrary(zphysics.artifact("joltc"));
+
+    const exe = b.addExecutable(.{
+        .name = "server",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "shared", .module = shared },
+                .{ .name = "system", .module = system.root_module },
+            },
+        }),
+    });
+
+    b.installArtifact(exe);
+
+    const run_step = b.step("run", "Run the server");
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_cmd.addArgs(args);
+}
