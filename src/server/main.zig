@@ -1,7 +1,7 @@
 const std = @import("std");
-const System = @import("System");
+const system = @import("system");
 const shared = @import("shared");
-const World = shared.World;
+const World = system.World;
 const nz = shared.nz;
 
 pub fn main(init: std.process.Init) !void {
@@ -9,7 +9,7 @@ pub fn main(init: std.process.Init) !void {
 
     var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
     defer _ = gpa.deinit();
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
 
     const io = init.io;
     var server = try shared.net.address.listen(io, .{
@@ -18,16 +18,21 @@ pub fn main(init: std.process.Init) !void {
     });
     defer server.deinit(io);
 
-    var system_watcher: shared.Watcher = try .init("libsystem{s}", io);
-    var systems: System = undefined;
-    var systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
-    var systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
-    var systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
+    var watcher: shared.Watcher = try .init("system_server_", io);
+    defer watcher.deinit(io);
+    try watcher.load(io);
+
+    var system_context: system.Context = undefined;
+    var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
+
+    std.log.debug("ptr: {p}", .{system_table.systemContextInit});
+    system_table.systemContextInit(&system_context, &system.Context.Data{
+        .allocator = allocator,
+    });
+    defer system_table.systemContextDeinit(&system_context);
 
     var world: World = try .init(allocator);
     defer world.deinit();
-    if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
-    defer systemsDeinit(&systems, &allocator);
 
     var accept_client_future = try io.concurrent(acceptClient, .{ io, &server, &world });
 
@@ -36,15 +41,14 @@ pub fn main(init: std.process.Init) !void {
         try world.mutex.lock(io);
         count += 1;
 
-        std.debug.print("eneties: {d}\n", .{world.ec.generation.items.len});
-        systemsUpdate(&systems, 1.0);
-        if (try system_watcher.reload(io)) {
-            systemsDeinit(&systems, &allocator);
-
-            systemsInit = try system_watcher.lookup(System.InitSystems, "initSystems");
-            systemsDeinit = try system_watcher.lookup(System.DeinitSystems, "deinit");
-            systemsUpdate = try system_watcher.lookup(System.UpdateSystems, "update");
-            if (systemsInit(&systems, &allocator) != 0) return error.SystemsInit;
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = 1, .elapsed_time = 0, .world = &world });
+        if (try watcher.reload(io)) {
+            std.log.debug("system table updated", .{});
+            watcher.old_dynlib.?.close();
+            system_table = try .load(&watcher.dynlib.?);
+            system_table.systemContextInit(&system_context, &system.Context.Data{
+                .allocator = allocator,
+            });
         }
         world.mutex.unlock(io);
     }

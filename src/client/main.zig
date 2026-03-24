@@ -12,22 +12,29 @@ pub fn main(init: std.process.Init) !void {
     const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
     const io = init.io;
 
-    var platform_impl = switch (builtin.os.tag) {
-        .windows => try yes.Platform.Win32.get(allocator),
-        .macos => @compileError("lorenzo fix this idk, figure it out"),
-        else => try yes.Platform.Xlib.init(),
-    };
-    const platform = platform_impl.platform();
+    const stream = try shared.net.address.connect(io, .{ .mode = .stream });
+    defer stream.close(io);
+    var stream_reader_buffer: [128]u8 = undefined;
+    var stream_reader = stream.reader(io, &stream_reader_buffer);
+    const reader = &stream_reader.interface;
 
-    var window_impl: @TypeOf(platform_impl).Window = .{};
-    const window = &window_impl.interface;
+    // while (true) {
+    // }
+    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    defer cross_platform.deinit();
+    const platform = cross_platform.platform();
+
+    var cross_window: yes.Platform.Cross.Window = .empty(platform);
+    const window = cross_window.interface(platform);
     try window.open(platform, .{
         .title = "PlanetaryZigma",
-        .size = .{ .width = 670, .height = 400 },
+        .size = .{ .width = 600, .height = 400 },
+        .resize_policy = .{ .specified = .{
+            .min_size = .{ .width = 300, .height = 200 },
+        } },
         .surface_type = .vulkan,
     });
     defer window.close(platform);
-    try window.setCursor(platform, .crosshair);
 
     var asset_server = try shared.AssetServer.init(allocator, init.io);
     defer asset_server.deinit();
@@ -37,7 +44,7 @@ pub fn main(init: std.process.Init) !void {
     var camera = try world.ec.addEntity();
     camera.set(system.Camera, .{}, world.ec);
 
-    var watcher: shared.Watcher = try .init("system", io);
+    var watcher: shared.Watcher = try .init("system_client_", io);
     defer watcher.deinit(io);
     try watcher.load(io);
 
@@ -56,6 +63,7 @@ pub fn main(init: std.process.Init) !void {
     main_loop: while (true) {
         const delta_time = getDeltaTime(io);
         while (try window.poll(platform)) |event| {
+            system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, &event);
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
@@ -63,11 +71,11 @@ pub fn main(init: std.process.Init) !void {
                     try system_context.renderer.resize(allocator, window);
                 },
                 .key => |key| {
+                    std.log.debug("key: {t}", .{key.sym});
                     if (key.state == .released and key.sym == .escape) break :main_loop;
                 },
                 else => {},
             }
-            system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, &event);
         }
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, null);
 
@@ -85,6 +93,18 @@ pub fn main(init: std.process.Init) !void {
                 .window = window,
             });
         }
+        _ = reader;
+        // reader.fillMore() catch |err| switch (err) {
+        //     error.EndOfStream => break,
+        //     else => return err,
+        // };
+        //
+        // const read = reader.buffered();
+        //
+        // std.debug.print("from server: {s}\n", .{read});
+        //
+        // reader.tossBuffered();
+
         elapsed_time += delta_time;
     }
     system_table.systemContextDeinit(&system_context);
