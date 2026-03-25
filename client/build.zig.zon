@@ -28,10 +28,6 @@
             .url = "git+https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator#v3.3.0",
             .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
         },
-        .zphysics = .{
-            .url = "git+https://github.com/zig-gamedev/zphysics.git#cef47382fb548a770ad44c7c8a20e496a11df075",
-            .hash = "zphysics-0.2.0-dev-nZDEAI_fQgAEgTR_PnmxLaBEeYAqOi4GD644fPnJ9THh",
-        },
         .wasm_runtime = .{
             .url = "git+https://git.sagittarius-a.org/lorenzo/wasm-runtime#2bdfef7041b5e85e8d782d42c8a32185c8c92f01",
             .hash = "wasm_runtime-0.0.0-_oLQEeMdBQDQC17ztold-i-28doIw56DvocXQlaI9Gfj",

@@ -12,11 +12,9 @@ pub fn main(init: std.process.Init) !void {
     const allocator = gpa.allocator();
 
     const io = init.io;
-    var server = try shared.net.address.listen(io, .{
-        .reuse_address = true,
-        .mode = .stream,
-    });
-    defer server.deinit(io);
+    const addr = try std.Io.net.IpAddress.parse("127.0.0.1", 8080);
+    var socket = try addr.bind(io, .{ .protocol = .udp, .mode = .dgram });
+    defer socket.close(io);
 
     var watcher: shared.Watcher = try .init("system_server_", io);
     defer watcher.deinit(io);
@@ -25,7 +23,6 @@ pub fn main(init: std.process.Init) !void {
     var system_context: system.Context = undefined;
     var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
-    std.log.debug("ptr: {p}", .{system_table.systemContextInit});
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .allocator = allocator,
     });
@@ -34,10 +31,15 @@ pub fn main(init: std.process.Init) !void {
     var world: World = try .init(allocator);
     defer world.deinit();
 
-    var accept_client_future = try io.concurrent(acceptClient, .{ io, &server, &world });
+    var accept_client_future = try io.concurrent(acceptClient, .{ io, &socket, &world });
 
     var count: usize = 0;
+    var accumlated_time: f32 = 0;
+    const time_step: f32 = 0.0167;
     while (true) {
+        accumlated_time += getDeltaTime(io);
+        if (accumlated_time < time_step) continue;
+        accumlated_time -= time_step;
         try world.mutex.lock(io);
         count += 1;
 
@@ -55,10 +57,22 @@ pub fn main(init: std.process.Init) !void {
     try accept_client_future.await(io);
 }
 
-pub fn acceptClient(io: std.Io, server: *std.Io.net.Server, world: *World) !void {
+pub fn acceptClient(io: std.Io, socket: *std.Io.net.Socket, world: *World) !void {
+    std.log.debug("hello 1", .{});
+    var buffer: [1024]u8 = undefined;
     while (true) {
-        const stream = try server.accept(io);
-        _ = io.async(handleClient, .{ io, stream, world });
+        const msg = try socket.receive(io, &buffer);
+        _ = msg.from; // Sender's address
+        _ = msg.data; // Received data (slice of buffer)
+        _ = msg.flags;
+        // TODO: Track clients by msg.from address
+        // For UDP, you can respond with: server.socket.send(io, &msg.from, response_data)
+        std.log.debug("hello {any}", .{msg.from});
+
+        try world.mutex.lock(io);
+        const entity_player = try world.ec.addEntity();
+        entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 20, 0 } }, world.ec);
+        world.mutex.unlock(io);
     }
 }
 
@@ -80,4 +94,21 @@ pub fn handleClient(io: std.Io, stream: std.Io.net.Stream, world: *World) !void 
 
         _ = try io.sleep(.fromMilliseconds(100), .real);
     }
+}
+
+pub fn getDeltaTime(io: std.Io) f32 {
+    const static = struct {
+        var previous: ?std.Io.Timestamp = null;
+    };
+
+    const now: std.Io.Timestamp = .now(io, .real);
+    const prev = static.previous orelse {
+        static.previous = now;
+        return getDeltaTime(io);
+    };
+
+    const dt_ns = prev.durationTo(now);
+    static.previous = now;
+
+    return @as(f32, @floatFromInt(dt_ns.nanoseconds)) / 1_000_000_000.0;
 }

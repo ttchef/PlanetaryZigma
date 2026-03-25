@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         },
     });
     const io = b.graph.io;
-    std.Io.Dir.cwd().deleteTree(io, "../zig-out/lib/") catch unreachable;
+    std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
     const shared = b.modules.get("shared").?;
     // const zphysics = b.dependency("zphysics", .{
     //     .use_double_precision = false,

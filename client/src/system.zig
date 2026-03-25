@@ -1,10 +1,13 @@
 const std = @import("std");
-const testing = @import("test.zig");
 const shared = @import("shared");
 const nz = shared.nz;
+const yes = @import("yes");
 pub const ec = shared.ec;
-// const Physics = @import("Physics.zig");
-// physics: *Physics,
+pub const Camera = @import("system/Camera.zig");
+
+const AssetServer = @import("shared").AssetServer;
+
+pub const Renderer = @import("Renderer.zig");
 
 pub const Info = struct {
     delta_time: f32,
@@ -16,6 +19,7 @@ pub const World = struct {
     mutex: std.Io.Mutex,
     ec: ec.World(&.{
         nz.Transform3D(f32),
+        Camera,
     }),
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -30,27 +34,52 @@ pub const World = struct {
 };
 
 pub const Context = struct {
+    asset_server: *AssetServer,
+    renderer: Renderer,
     allocator: std.mem.Allocator,
+    stream: std.Io.net.Stream,
+    io: std.Io,
+    server_address: std.Io.net.IpAddress,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
+        asset_server: *AssetServer,
+        platform: yes.Platform,
+        window: *yes.Window,
+        stream: std.Io.net.Stream,
+        io: std.Io,
+        server_address: std.Io.net.IpAddress,
     };
 
     pub fn init(data: Data) !@This() {
         return .{
+            .asset_server = data.asset_server,
+            .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
             .allocator = data.allocator,
+            .stream = data.stream,
+            .io = data.io,
+            .server_address = data.server_address,
         };
     }
 
     pub fn deinit(self: *@This()) void {
-        _ = self;
+        self.renderer.deinit(self.allocator);
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        const world = info.world;
-        // _ = world;
-        std.debug.print("eneties: {d}\n", .{world.ec.generation.items.len});
+        var query = info.world.ec.query(&.{Camera});
+        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
+        try camera.update(info);
+        try self.renderer.update(info);
+        try self.asset_server.update();
+        try self.stream.socket.send(self.io, &self.server_address, "WEEEE");
+    }
+
+    pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
+        var query = info.world.ec.query(&.{Camera});
+        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
+        try camera.eventUpdate(info, event);
     }
 };
 
@@ -62,7 +91,7 @@ pub const ffi = struct {
     pub const Table = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
-        systemContextUpdate: *const fn (*Context, data: *const Info) callconv(.c) void,
+        systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Window.Event) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -95,8 +124,8 @@ pub const ffi = struct {
         context.* = undefined;
     }
 
-    pub export fn systemContextUpdate(context: *Context, info: *const Info) void {
-        const result = context.update(info);
+    pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Window.Event) void {
+        const result = if (event != null) context.eventUpdate(info, event.?) else context.update(info);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
