@@ -12,14 +12,11 @@ pub fn main(init: std.process.Init) !void {
     const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
     const io = init.io;
 
-    const stream = try shared.net.address.connect(io, .{ .mode = .stream });
+    const addr: std.Io.net.IpAddress = try .parse("127.0.0.1", 8080);
+    var stream = try addr.connect(io, .{ .mode = .dgram, .protocol = .udp });
     defer stream.close(io);
-    var stream_reader_buffer: [128]u8 = undefined;
-    var stream_reader = stream.reader(io, &stream_reader_buffer);
-    const reader = &stream_reader.interface;
+    try stream.socket.send(io, &addr, "hello");
 
-    // while (true) {
-    // }
     var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
     defer cross_platform.deinit();
     const platform = cross_platform.platform();
@@ -56,6 +53,9 @@ pub fn main(init: std.process.Init) !void {
         .asset_server = &asset_server,
         .platform = platform,
         .window = window,
+        .stream = stream,
+        .io = io,
+        .server_address = addr,
     });
 
     var elapsed_time: f32 = 0;
@@ -91,9 +91,12 @@ pub fn main(init: std.process.Init) !void {
                 .asset_server = &asset_server,
                 .platform = platform,
                 .window = window,
+                .stream = stream,
+                .io = io,
+                .server_address = addr,
             });
         }
-        _ = reader;
+        // _ = reader;
         // reader.fillMore() catch |err| switch (err) {
         //     error.EndOfStream => break,
         //     else => return err,

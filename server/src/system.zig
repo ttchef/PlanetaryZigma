@@ -48,8 +48,8 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         const world = info.world;
-        // _ = world;
-        std.debug.print("eneties: {d}\n", .{world.ec.generation.items.len});
+        _ = world;
+        // std.debug.print("enetiess : {d}\n", .{world.ec.generation.items.len});
         _ = self;
     }
 };
