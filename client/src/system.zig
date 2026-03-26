@@ -72,7 +72,9 @@ pub const Context = struct {
         try camera.update(info);
         try self.renderer.update(info);
         try self.asset_server.update();
-        try self.stream.socket.send(self.io, &self.server_address, "WEEEE");
+        var command: shared.Net.Command = .{ .id = 234, .data = undefined };
+        @memcpy(command.data[0..5], "LOL1\x00");
+        try self.stream.socket.send(self.io, &self.server_address, std.mem.asBytes(&command));
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
