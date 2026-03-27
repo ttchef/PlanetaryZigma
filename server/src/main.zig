@@ -42,11 +42,11 @@ pub fn main(init: std.process.Init) !void {
 
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = 1, .elapsed_time = 0, .world = &world });
         if (try watcher.reload(io)) {
+            system_table.systemContextReload(&system_context, true);
             std.log.debug("system table updated", .{});
-            try system_context.preload();
             watcher.old_dynlib.?.close();
             system_table = try .load(&watcher.dynlib.?);
-            try system_context.reload();
+            system_table.systemContextReload(&system_context, false);
         }
         world.mutex.unlock(io);
     }

@@ -72,9 +72,18 @@ pub const Context = struct {
         try camera.update(info);
         try self.renderer.update(info);
         try self.asset_server.update();
-        var command: shared.Net.Command = .{ .id = 234, .data = undefined };
-        @memcpy(command.data[0..5], "LOL1\x00");
-        try self.stream.socket.send(self.io, &self.server_address, std.mem.asBytes(&command));
+        const name = "lucas";
+        const connect: shared.net.cmd.Connect = .{ .name_len = name.len, .name = name };
+        var buffer: [1024]u8 = undefined;
+        const size = try shared.net.cmd.writeBuf(
+            &buffer,
+            .{ .opcode = .connect },
+            connect,
+        );
+        std.log.debug("buffer: {any}", .{buffer[0..size]});
+        // var command: shared.net.Command = .{ .id = 234, .data = undefined };
+        // @memcpy(command.data[0..6], "LOL10\x00");
+        try self.stream.socket.send(self.io, &self.server_address, buffer[0..size]);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
