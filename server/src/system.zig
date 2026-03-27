@@ -32,7 +32,7 @@ pub const World = struct {
 
 pub const Context = struct {
     allocator: std.mem.Allocator,
-    accept_client_future: ?std.Io.Future(@typeInfo(@TypeOf(net.acceptClient)).@"fn".return_type.?) = null,
+    accept_client_future: std.Io.Future(@typeInfo(@TypeOf(net.acceptClient)).@"fn".return_type.?),
     world: *World,
     io: std.Io,
     socket: std.Io.net.Socket,
@@ -44,22 +44,19 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
-        const address = try std.Io.net.IpAddress.parse(shared.Net.server_ip, shared.Net.server_port);
+        const address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port);
         self.* = .{
             .allocator = data.allocator,
             .io = data.io,
             .socket = try address.bind(data.io, .{ .protocol = .udp, .mode = .dgram }),
             .world = data.world,
+            .accept_client_future = undefined,
         };
         self.accept_client_future = try data.io.concurrent(net.acceptClient, .{ data.io, &self.socket, data.world });
     }
 
     pub fn deinit(self: *@This()) !void {
-        if (self.accept_client_future) |*f| {
-            f.await(self.io) catch |err| {
-                std.log.debug("future await in deinit: {s}", .{@errorName(err)});
-            };
-        }
+        try self.accept_client_future.cancel(self.io);
         self.socket.close(self.io);
     }
 
@@ -69,17 +66,10 @@ pub const Context = struct {
         // std.debug.print("enetiess : {d}\n", .{world.ec.generation.items.len});
         _ = self;
     }
-    pub fn preload(self: *@This()) !void {
-        std.debug.print("1-r: \n", .{});
-        if (self.accept_client_future) |*f| {
-            f.cancel(self.io) catch |err| {
-                std.log.debug("cancel: {s}", .{@errorName(err)});
-            };
+    fn reload(self: *@This(), pre_reload: bool) !void {
+        if (pre_reload) try self.accept_client_future.cancel(self.io) else {
+            self.accept_client_future = try self.io.concurrent(net.acceptClient, .{ self.io, &self.socket, self.world });
         }
-        std.log.debug("2-r", .{});
-    }
-    pub fn reload(self: *@This()) !void {
-        self.accept_client_future = try self.io.concurrent(net.acceptClient, .{ self.io, &self.socket, self.world });
     }
 };
 
@@ -92,6 +82,7 @@ pub const ffi = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
         systemContextUpdate: *const fn (*Context, data: *const Info) callconv(.c) void,
+        systemContextReload: *const fn (*Context, pre_reload: bool) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -130,6 +121,14 @@ pub const ffi = struct {
 
     pub export fn systemContextUpdate(context: *Context, info: *const Info) void {
         const result = context.update(info);
+        result catch |err| {
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            std.log.err("context update: {any}", .{@errorName(err)});
+            return;
+        };
+    }
+    pub export fn systemContextReload(context: *Context, pre_reload: bool) void {
+        const result = context.reload(pre_reload);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
