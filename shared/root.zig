@@ -10,35 +10,62 @@ pub const net = struct {
     pub const server_port: u16 = 8080;
     pub const data_size: u32 = 1024;
     pub const endian: std.builtin.Endian = .little;
-    pub const cmd = struct {
-        pub const Header = packed struct {
-            opcode: Opcode,
-        };
+    pub const Command = union(Opcode) {
+        connect: Connect,
+        disconnect: void,
+
         pub const Opcode = enum(u16) {
             connect,
             disconnect,
         };
+
+        pub const Header = packed struct {
+            opcode: Opcode,
+        };
+
+        pub const Parsed = struct {
+            header: Header,
+            command: Command,
+        };
+
         pub const Connect = struct {
             name_len: u16,
             name: []const u8,
         };
-        pub fn writeBuf(buffer: []u8, header: Header, value: anytype) !usize {
-            var fixed_writer: std.Io.Writer = .fixed(buffer);
-            const writer = &fixed_writer;
-            try writer.writeStruct(header, endian);
-            try marshal(writer, value);
-            return writer.end;
+
+        pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {
+            switch (std.meta.activeTag(self.*)) {
+                inline else => |tag| {
+                    const tag_name = @tagName(tag);
+                    const opcode = std.meta.stringToEnum(Opcode, tag_name).?;
+                    const header: Header = .{ .opcode = opcode };
+                    try writer.writeStruct(header, endian);
+                    try marshal(writer, @field(self.*, tag_name));
+                },
+            }
         }
-        pub fn readBuf(T: type, buffer: []u8) !struct { Header, T, usize } {
-            var fixed_reader: std.Io.Reader = .fixed(buffer);
-            const reader = &fixed_reader;
+
+        pub fn parse(reader: *std.Io.Reader) !Parsed {
             const header = try reader.takeStruct(Header, endian);
-            const out = try unmarshal(null, reader, T, true);
-            return .{ header, out, reader.bufferedLen() };
+            switch (header.opcode) {
+                inline else => |opcode| return .{
+                    .header = header,
+                    .command = try .parseFromOpcode(reader, opcode),
+                },
+            }
         }
+
+        fn parseFromOpcode(reader: *std.Io.Reader, comptime opcode: Opcode) !Command {
+            const tag_name = @tagName(opcode);
+            const T = @FieldType(Command, tag_name);
+            const out = try unmarshal(null, reader, T, true);
+            return @unionInit(Command, tag_name, out);
+        }
+
         fn marshal(writer: *std.Io.Writer, value: anytype) !void {
             const T: type = @TypeOf(value);
             switch (@typeInfo(T)) {
+                .void => return,
                 .bool => try writer.writeInt(u8, @intFromBool(value), endian),
                 .int => try writer.writeInt(T, value, endian),
                 .float => |float| try writer.writeInt(@Int(.signed, float.bits), @bitCast(float), endian),
@@ -65,6 +92,7 @@ pub const net = struct {
                 else => @compileError("can not serialize type of " ++ @typeName(T) ++ " aka " ++ @tagName(@typeInfo(T))),
             }
         }
+
         fn unmarshal(opt_allocator: ?std.mem.Allocator, reader: *std.Io.Reader, Out: type, deserialize_slices: bool) !Out {
             return switch (@typeInfo(Out)) {
                 .bool => try reader.takeByte() == 1,
