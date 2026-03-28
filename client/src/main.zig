@@ -15,7 +15,6 @@ pub fn main(init: std.process.Init) !void {
     const addr: std.Io.net.IpAddress = try .parse("127.0.0.1", 8080);
     var stream = try addr.connect(io, .{ .mode = .dgram, .protocol = .udp });
     defer stream.close(io);
-    try stream.socket.send(io, &addr, "hello");
 
     var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
     defer cross_platform.deinit();
@@ -57,6 +56,19 @@ pub fn main(init: std.process.Init) !void {
         .io = io,
         .server_address = addr,
     });
+
+    //TODO: Intial connect: move out.
+    const name = "lucas";
+    const connect_command: shared.net.Command = .{ .connect = .{
+        .name_len = name.len,
+        .name = name,
+    } };
+    var fixed_writer_buffer: [1024]u8 = undefined;
+    var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+    const writer = &fixed_writer;
+    try connect_command.write(writer);
+    std.log.debug("buffer: {any}", .{writer.buffered()});
+    try stream.socket.send(io, &system_context.server_address, writer.buffered());
 
     var elapsed_time: f32 = 0;
     // const step_time: f32 = 0.0167;
