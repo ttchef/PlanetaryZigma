@@ -32,10 +32,11 @@ pub const World = struct {
 
 pub const Context = struct {
     allocator: std.mem.Allocator,
-    accept_client_future: std.Io.Future(@typeInfo(@TypeOf(net.acceptClient)).@"fn".return_type.?),
     world: *World,
     io: std.Io,
-    socket: std.Io.net.Socket,
+    accept_client_future: std.Io.Future(@typeInfo(@TypeOf(net.Client.accept)).@"fn".return_type.?),
+    address: std.Io.net.IpAddress,
+    clients: std.AutoHashMap(std.Io.net.IpAddress, net.Client),
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -44,31 +45,48 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
-        const address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port);
         self.* = .{
             .allocator = data.allocator,
             .io = data.io,
-            .socket = try address.bind(data.io, .{ .protocol = .udp, .mode = .dgram }),
+            .address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port),
             .world = data.world,
             .accept_client_future = undefined,
+            .clients = .init(data.allocator),
         };
-        self.accept_client_future = try data.io.concurrent(net.acceptClient, .{ data.io, &self.socket, data.world });
+        self.accept_client_future = try data.io.concurrent(net.Client.accept, .{ data.allocator, data.io, self.address, &self.clients });
     }
 
     pub fn deinit(self: *@This()) !void {
         try self.accept_client_future.cancel(self.io);
-        self.socket.close(self.io);
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
         const world = info.world;
-        _ = world;
-        // std.debug.print("enetiess : {d}\n", .{world.ec.generation.items.len});
-        _ = self;
+        var it = self.clients.iterator();
+        while (it.next()) |pair| {
+            for (pair.value_ptr.command_queue.items) |command| {
+                switch (command) {
+                    .connect => {
+                        var entity = try world.ec.addEntity();
+                        entity.set(nz.Transform3D(f32), .{}, world.ec);
+                        pair.value_ptr.entity_id = @intCast(@intFromEnum(entity));
+                        std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
+                    },
+                    .disconnect => {
+                        try world.ec.remove(@enumFromInt(pair.value_ptr.entity_id));
+                        std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
+                    },
+                    // else => {
+                    //     std.log.err("unhandled command", .{});
+                    // },
+                }
+            }
+            pair.value_ptr.command_queue.clearAndFree(self.allocator);
+        }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         if (pre_reload) try self.accept_client_future.cancel(self.io) else {
-            self.accept_client_future = try self.io.concurrent(net.acceptClient, .{ self.io, &self.socket, self.world });
+            self.accept_client_future = try self.io.concurrent(net.Client.accept, .{ self.allocator, self.io, self.address, &self.clients });
         }
     }
 };

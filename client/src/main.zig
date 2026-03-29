@@ -122,6 +122,14 @@ pub fn main(init: std.process.Init) !void {
 
         elapsed_time += delta_time;
     }
+
+    //TODO: Intial connect: move out.
+    const disconnect_command: shared.net.Command = .disconnect;
+    fixed_writer.end = 0;
+    try disconnect_command.write(writer);
+    std.log.debug("buffer: {any}", .{writer.buffered()});
+    try stream.socket.send(io, &system_context.server_address, writer.buffered());
+
     system_table.systemContextDeinit(&system_context);
 }
 
