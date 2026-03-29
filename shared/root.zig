@@ -95,6 +95,7 @@ pub const net = struct {
 
         fn unmarshal(opt_allocator: ?std.mem.Allocator, reader: *std.Io.Reader, Out: type, deserialize_slices: bool) !Out {
             return switch (@typeInfo(Out)) {
+                .void => return,
                 .bool => try reader.takeByte() == 1,
                 .int => try reader.takeInt(Out, endian),
                 .float => std.mem.readInt(Out, try reader.takeArray(@sizeOf(Out)), endian),

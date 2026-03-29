@@ -3,34 +3,55 @@ const World = @import("../system.zig").World;
 const shared = @import("shared");
 const nz = shared.nz;
 
-pub fn acceptClient(io: std.Io, socket: *std.Io.net.Socket, world: *World) !void {
-    std.log.debug("hello 1", .{});
-    var buffer: [1024]u8 = undefined;
+pub const Client = struct {
+    allocator: std.mem.Allocator,
+    name: []const u8,
+    entity_id: i32 = -1,
+    command_queue: std.ArrayList(shared.net.Command) = .empty,
 
-    while (true) {
-        const msg = try socket.receive(io, &buffer);
-        _ = msg.from; // Sender's address
-        _ = msg.data; // Received data (slice of buffer)
-        _ = msg.flags;
+    pub fn accept(allocator: std.mem.Allocator, io: std.Io, address: std.Io.net.IpAddress, clients: *std.AutoHashMap(std.Io.net.IpAddress, @This())) !void {
+        std.log.debug("hello 1", .{});
+        var buffer: [1024]u8 = undefined;
+        const socket = try address.bind(io, .{ .protocol = .udp, .mode = .dgram });
 
-        var msg_reader: std.Io.Reader = .fixed(&buffer);
-        const reader = &msg_reader;
-        std.log.debug("data: {any}", .{msg.data});
+        while (true) {
+            const msg = try socket.receive(io, &buffer);
+            _ = msg.from; // Sender's address
+            _ = msg.data; // Received data (slice of buffer)
+            _ = msg.flags;
 
-        const parsed = try shared.net.Command.parse(reader);
-        std.log.debug("recived {any}", .{parsed.command});
-        // const header, const connect, const size = try shared.net.cmd.readBuf(shared.net.cmd.Connect, &buffer);
-        // var command: shared.Net.Command = undefined;
-        // const ptr = &command;
-        // const data = @as([*]u8, @ptrCast(ptr));
-        // @memcpy(data, msg.data);
-        // TODO: Track clients by msg.from address
-        // For UDP, you can respond with: server.socket.send(io, &msg.from, response_data)
-        // std.log.debug("recived: header: {any}, connect: {any}, size: {d}", .{ header, connect, size });
+            var msg_reader: std.Io.Reader = .fixed(&buffer);
+            const reader = &msg_reader;
+            std.log.debug("data: {any}", .{msg.data});
 
-        try world.mutex.lock(io);
-        // const entity_player = try world.ec.addEntity();
-        // entity_player.set(nz.Transform3D(f32), .{ .position = .{ 0, 20, 0 } }, world.ec);
-        world.mutex.unlock(io);
+            const parsed = try shared.net.Command.parse(reader);
+
+            switch (parsed.command) {
+                .connect => {
+                    const connect = parsed.command.connect;
+                    std.log.debug("recived {any}", .{parsed.command});
+
+                    std.log.debug("PHASE 0", .{});
+                    try clients.put(msg.from, undefined);
+                    var client = clients.getPtr(msg.from).?;
+
+                    std.log.debug("PHASE 1", .{});
+                    client.* = .{
+                        .allocator = allocator,
+                        .name = try allocator.dupe(u8, connect.name),
+                    };
+                    try client.command_queue.append(allocator, parsed.command);
+                },
+                else => {
+                    var client = clients.getPtr(msg.from).?;
+                    try client.command_queue.append(allocator, parsed.command);
+                },
+            }
+        }
     }
-}
+
+    pub fn deinit(self: *@This()) !void {
+        self.allocator.free(self.name);
+        self.command_queue.deinit(self.allocator);
+    }
+};
