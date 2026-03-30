@@ -37,8 +37,6 @@ pub fn main(init: std.process.Init) !void {
 
     var world: World = try .init(allocator);
     defer world.deinit();
-    var camera = try world.ec.addEntity();
-    camera.set(system.Camera, .{}, world.ec);
 
     var watcher: shared.Watcher = try .init("system_client_", io);
     defer watcher.deinit(io);
@@ -108,17 +106,6 @@ pub fn main(init: std.process.Init) !void {
                 .server_address = addr,
             });
         }
-        // _ = reader;
-        // reader.fillMore() catch |err| switch (err) {
-        //     error.EndOfStream => break,
-        //     else => return err,
-        // };
-        //
-        // const read = reader.buffered();
-        //
-        // std.debug.print("from server: {s}\n", .{read});
-        //
-        // reader.tossBuffered();
 
         elapsed_time += delta_time;
     }

@@ -3,6 +3,7 @@ const shared = @import("shared");
 const nz = shared.nz;
 const yes = @import("yes");
 pub const ec = shared.ec;
+const net = @import("system/net.zig");
 pub const Camera = @import("system/Camera.zig");
 
 const AssetServer = @import("shared").AssetServer;
@@ -40,6 +41,8 @@ pub const Context = struct {
     stream: std.Io.net.Stream,
     io: std.Io,
     server_address: std.Io.net.IpAddress,
+    server_listen: std.Io.Future(@typeInfo(@TypeOf(net.listen)).@"fn".return_type.?),
+    commands: std.ArrayList(shared.net.Command) = .empty,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -51,10 +54,11 @@ pub const Context = struct {
         server_address: std.Io.net.IpAddress,
     };
 
-    pub fn init(data: Data) !@This() {
-        return .{
+    pub fn init(self: *@This(), data: Data) !void {
+        self.* = .{
             .asset_server = data.asset_server,
             .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
+            .server_listen = try data.io.concurrent(net.listen, .{ data.allocator, data.io, data.stream, &self.commands }),
             .allocator = data.allocator,
             .stream = data.stream,
             .io = data.io,
@@ -68,29 +72,36 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         var query = info.world.ec.query(&.{Camera});
-        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
-        try camera.update(info);
-        try self.renderer.update(info);
+        if (query.next()) |entry| {
+            try entry.getPtr(Camera, info.world.ec).?.update(info);
+            try self.renderer.update(info);
+        }
         try self.asset_server.update();
-        // const name = "lucas";
-        // const connect: shared.net.cmd.Connect = .{ .name_len = name.len, .name = name };
-        // var buffer: [1024]u8 = undefined;
-        // const size = try shared.net.cmd.writeBuf(
-        //     &buffer,
-        //     .{ .opcode = .connect },
-        //     connect,
-        // );
-        // std.log.debug("buffer: {any}", .{buffer[0..(size)]});
-        // var command: shared.net.Command = .{ .id = 234, .data = undefined };
-        // @memcpy(command.data[0..6], "LOL10\x00");
-        // try self.stream.socket.send(self.io, &self.server_address, buffer[0..size]);
+        for (self.commands.items) |command| {
+            switch (command) {
+                .acknowledge => {
+                    var new_camera = try info.world.ec.addEntity();
+                    new_camera.set(Camera, .{}, info.world.ec);
+                    std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
+                },
+                .spawn_entity => {
+                    _ = try info.world.ec.addEntity();
+                    std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
+                },
+                else => {
+                    std.log.err("Unhandled command {s}", .{@tagName(command)});
+                },
+            }
+        }
+        self.commands.clearAndFree(self.allocator);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
         var query = info.world.ec.query(&.{Camera});
-        const camera = query.next().?.getPtr(Camera, info.world.ec).?;
-        try camera.eventUpdate(info, event);
+        if (query.next()) |entry| {
+            try entry.getPtr(Camera, info.world.ec).?.eventUpdate(info, event);
+        }
     }
 };
 
@@ -122,7 +133,7 @@ pub const ffi = struct {
 
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
         std.log.debug("system context init", .{});
-        context.* = Context.init(data.*) catch |err| {
+        context.init(data.*) catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context init: {s}", .{@errorName(err)});
             return;

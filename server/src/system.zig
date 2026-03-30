@@ -35,7 +35,7 @@ pub const Context = struct {
     world: *World,
     io: std.Io,
     accept_client_future: std.Io.Future(@typeInfo(@TypeOf(net.Client.accept)).@"fn".return_type.?),
-    address: std.Io.net.IpAddress,
+    socket: std.Io.net.Socket,
     clients: std.AutoHashMap(std.Io.net.IpAddress, net.Client),
 
     pub const Data = struct {
@@ -45,15 +45,16 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
+        const address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port);
         self.* = .{
             .allocator = data.allocator,
             .io = data.io,
-            .address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port),
+            .socket = try address.bind(data.io, .{ .protocol = .udp, .mode = .dgram }),
             .world = data.world,
             .accept_client_future = undefined,
             .clients = .init(data.allocator),
         };
-        self.accept_client_future = try data.io.concurrent(net.Client.accept, .{ data.allocator, data.io, self.address, &self.clients });
+        self.accept_client_future = try data.io.concurrent(net.Client.accept, .{ data.allocator, data.io, self.socket, &self.clients });
     }
 
     pub fn deinit(self: *@This()) !void {
@@ -64,29 +65,45 @@ pub const Context = struct {
         const world = info.world;
         var it = self.clients.iterator();
         while (it.next()) |pair| {
-            for (pair.value_ptr.command_queue.items) |command| {
+            const client = pair.value_ptr;
+            const client_address = pair.key_ptr;
+            for (client.command_queue.items) |command| {
                 switch (command) {
                     .connect => {
                         var entity = try world.ec.addEntity();
                         entity.set(nz.Transform3D(f32), .{}, world.ec);
-                        pair.value_ptr.entity_id = @intCast(@intFromEnum(entity));
+                        client.entity_id = @intCast(@intFromEnum(entity));
+                        var fixed_writer_buffer: [1024]u8 = undefined;
+                        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+                        const writer = &fix_writer;
+                        const acknowledge_command: shared.net.Command = .acknowledge;
+                        try acknowledge_command.write(writer);
+                        try self.socket.send(self.io, client_address, writer.buffered());
+
                         std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
                     },
                     .disconnect => {
-                        try world.ec.remove(@enumFromInt(pair.value_ptr.entity_id));
+                        try world.ec.remove(@enumFromInt(client.entity_id));
                         std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
                     },
-                    // else => {
-                    //     std.log.err("unhandled command", .{});
-                    // },
+                    .spawn_entity => {
+                        var fixed_writer_buffer: [1024]u8 = undefined;
+                        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+                        const writer = &fix_writer;
+                        try command.write(writer);
+                        try self.socket.send(self.io, client_address, writer.buffered());
+                    },
+                    else => {
+                        std.log.err("Unhandled command {s}", .{@tagName(command)});
+                    },
                 }
             }
-            pair.value_ptr.command_queue.clearAndFree(self.allocator);
+            client.command_queue.clearAndFree(self.allocator);
         }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         if (pre_reload) try self.accept_client_future.cancel(self.io) else {
-            self.accept_client_future = try self.io.concurrent(net.Client.accept, .{ self.allocator, self.io, self.address, &self.clients });
+            self.accept_client_future = try self.io.concurrent(net.Client.accept, .{ self.allocator, self.io, self.socket, &self.clients });
         }
     }
 };

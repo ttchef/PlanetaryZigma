@@ -13,10 +13,14 @@ pub const net = struct {
     pub const Command = union(Opcode) {
         connect: Connect,
         disconnect: void,
+        acknowledge: void,
+        spawn_entity: SpawnEntity,
 
         pub const Opcode = enum(u16) {
             connect,
             disconnect,
+            acknowledge,
+            spawn_entity,
         };
 
         pub const Header = packed struct {
@@ -31,6 +35,10 @@ pub const net = struct {
         pub const Connect = struct {
             name_len: u16,
             name: []const u8,
+        };
+
+        pub const SpawnEntity = struct {
+            id: u32,
         };
 
         pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {
@@ -146,7 +154,7 @@ pub const net = struct {
                             };
                         },
                         .@"struct" => |s| switch (s.layout) {
-                            .auto, .@"extern" => try unmarshal(reader, field.type, endian),
+                            .auto, .@"extern" => try unmarshal(opt_allocator, reader, field.type, deserialize_slices),
                             .@"packed" => try reader.takeStruct(field.type, endian),
                         },
                         else => @compileError("can not read type of " ++ @typeName(field.type) ++ " aka " ++ @tagName(@typeInfo(field.type))),
