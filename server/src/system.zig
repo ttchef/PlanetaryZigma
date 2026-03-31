@@ -67,19 +67,19 @@ pub const Context = struct {
         while (it.next()) |pair| {
             const client = pair.value_ptr;
             const client_address = pair.key_ptr;
-            for (client.command_queue.items) |command| {
+            try client.command_queue.mutex.lock(self.io);
+            for (client.command_queue.commands.items) |command| {
+                var fixed_writer_buffer: [1024]u8 = undefined;
+                var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+                const writer = &fix_writer;
                 switch (command) {
                     .connect => {
                         var entity = try world.ec.addEntity();
                         entity.set(nz.Transform3D(f32), .{}, world.ec);
                         client.entity_id = @intCast(@intFromEnum(entity));
-                        var fixed_writer_buffer: [1024]u8 = undefined;
-                        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-                        const writer = &fix_writer;
-                        const acknowledge_command: shared.net.Command = .acknowledge;
+                        const acknowledge_command: shared.net.Command = .{ .acknowledge = .{ .id = client.entity_id } };
                         try acknowledge_command.write(writer);
                         try self.socket.send(self.io, client_address, writer.buffered());
-
                         std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
                     },
                     .disconnect => {
@@ -87,18 +87,33 @@ pub const Context = struct {
                         std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
                     },
                     .spawn_entity => {
-                        var fixed_writer_buffer: [1024]u8 = undefined;
-                        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-                        const writer = &fix_writer;
                         try command.write(writer);
                         try self.socket.send(self.io, client_address, writer.buffered());
+                    },
+                    .input => {
+                        const input = command.input;
+                        if (input.forward) {
+                            var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
+                            transform.position[2] -= 1;
+                            const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
+                            try command_update_transform.write(writer);
+                            try self.socket.send(self.io, client_address, writer.buffered());
+                        }
+                        if (input.backward) {
+                            var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
+                            transform.position[2] += 1;
+                            const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
+                            try command_update_transform.write(writer);
+                            try self.socket.send(self.io, client_address, writer.buffered());
+                        }
                     },
                     else => {
                         std.log.err("Unhandled command {s}", .{@tagName(command)});
                     },
                 }
             }
-            client.command_queue.clearAndFree(self.allocator);
+            client.command_queue.commands.clearAndFree(self.allocator);
+            client.command_queue.mutex.unlock(self.io);
         }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {

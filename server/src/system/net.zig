@@ -5,8 +5,8 @@ const nz = shared.nz;
 pub const Client = struct {
     allocator: std.mem.Allocator,
     name: []const u8,
-    entity_id: i32 = -1,
-    command_queue: std.ArrayList(shared.net.Command) = .empty,
+    entity_id: u32 = 0,
+    command_queue: shared.net.CommandQueue = .{},
 
     pub fn accept(allocator: std.mem.Allocator, io: std.Io, socket: std.Io.net.Socket, clients: *std.AutoHashMap(std.Io.net.IpAddress, @This())) !void {
         std.log.debug("hello 1", .{});
@@ -36,7 +36,7 @@ pub const Client = struct {
                         .allocator = allocator,
                         .name = try allocator.dupe(u8, connect.name),
                     };
-                    try client.command_queue.append(allocator, parsed.command);
+                    try client.command_queue.commands.append(allocator, parsed.command);
                     // var fixed_writer_buffer: [1024]u8 = undefined;
                     // var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
                     // const writer = &fix_writer;
@@ -49,14 +49,14 @@ pub const Client = struct {
                     while (it.next()) |pair| {
                         if (pair.key_ptr.*.eql(&msg.from)) continue;
                         const it_client = pair.value_ptr;
-                        try it_client.command_queue.append(allocator, spawn_entitiy_cmd);
+                        try it_client.command_queue.commands.append(allocator, spawn_entitiy_cmd);
                         const it_spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = @intCast(it_client.entity_id) } };
-                        try client.command_queue.append(allocator, it_spawn_entitiy_cmd);
+                        try client.command_queue.commands.append(allocator, it_spawn_entitiy_cmd);
                     }
                 },
                 else => {
                     var client = clients.getPtr(msg.from).?;
-                    try client.command_queue.append(allocator, parsed.command);
+                    try client.command_queue.commands.append(allocator, parsed.command);
                 },
             }
         }
@@ -64,6 +64,6 @@ pub const Client = struct {
 
     pub fn deinit(self: *@This()) !void {
         self.allocator.free(self.name);
-        self.command_queue.deinit(self.allocator);
+        self.command_queue.commands.deinit(self.allocator);
     }
 };
