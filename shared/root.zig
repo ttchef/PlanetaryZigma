@@ -10,17 +10,27 @@ pub const net = struct {
     pub const server_port: u16 = 8080;
     pub const data_size: u32 = 1024;
     pub const endian: std.builtin.Endian = .little;
+
+    pub const CommandQueue = struct {
+        commands: std.ArrayList(Command) = .empty,
+        mutex: std.Io.Mutex = .init,
+    };
+
     pub const Command = union(Opcode) {
         connect: Connect,
         disconnect: void,
-        acknowledge: void,
+        acknowledge: Acknowledge,
         spawn_entity: SpawnEntity,
+        input: Input,
+        update_transform: UpdateTransform,
 
         pub const Opcode = enum(u16) {
             connect,
             disconnect,
             acknowledge,
             spawn_entity,
+            input,
+            update_transform,
         };
 
         pub const Header = packed struct {
@@ -37,8 +47,26 @@ pub const net = struct {
             name: []const u8,
         };
 
+        pub const Acknowledge = struct {
+            id: u32,
+        };
+
         pub const SpawnEntity = struct {
             id: u32,
+        };
+
+        pub const Input = struct {
+            forward: bool = false,
+            backward: bool = false,
+            right: bool = false,
+            left: bool = false,
+            up: bool = false,
+            down: bool = false,
+        };
+
+        pub const UpdateTransform = struct {
+            id: u32,
+            pos: nz.Vec3(f32),
         };
 
         pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {
@@ -76,17 +104,21 @@ pub const net = struct {
                 .void => return,
                 .bool => try writer.writeInt(u8, @intFromBool(value), endian),
                 .int => try writer.writeInt(T, value, endian),
-                .float => |float| try writer.writeInt(@Int(.signed, float.bits), @bitCast(float), endian),
+                .float => |float| try writer.writeInt(@Int(.signed, float.bits), @intFromFloat(value * 256), endian),
                 .pointer => |pointer| {
                     if (pointer.child == u8)
                         try writer.writeAll(value)
                     else
                         try writer.writeSliceEndian(pointer.child, value, endian);
                 },
-                .array => |arr| if (arr.child == u8)
+                .array => |array| if (array.child == u8)
                     try writer.writeAll(&value)
-                else
-                    try writer.writeSliceEndian(arr.child, value, endian),
+                else for (value) |item| {
+                    try marshal(writer, item);
+                },
+                .vector => |vector| inline for (0..vector.len) |i| {
+                    try marshal(writer, value[i]);
+                },
                 .@"struct" => |@"struct"| switch (@"struct".layout) {
                     .auto => inline for (std.meta.fields(T)) |field| {
                         const field_value = @field(value, field.name);
@@ -106,7 +138,7 @@ pub const net = struct {
                 .void => return,
                 .bool => try reader.takeByte() == 1,
                 .int => try reader.takeInt(Out, endian),
-                .float => std.mem.readInt(Out, try reader.takeArray(@sizeOf(Out)), endian),
+                .float => |float| @floatFromInt((try reader.takeInt(@Int(.signed, float.bits), endian)) * 256),
                 .@"enum" => try reader.takeEnum(Out, endian),
                 .@"struct" => {
                     var out: Out = std.mem.zeroes(Out);
@@ -143,9 +175,16 @@ pub const net = struct {
                         .array => |array| if (array.child == u8) (try reader.takeArray(array.len)).* else array: {
                             var val: field.type = std.mem.zeroes(field.type);
                             for (0..array.len) |i| {
-                                val[i] = try unmarshal(reader, array.child, endian, deserialize_slices, false);
+                                val[i] = try unmarshal(opt_allocator, reader, array.child, deserialize_slices);
                             }
                             break :array val;
+                        },
+                        .vector => |vector| vector: {
+                            var val: field.type = @splat(0);
+                            inline for (0..vector.len) |i| {
+                                val[i] = try unmarshal(opt_allocator, reader, vector.child, deserialize_slices);
+                            }
+                            break :vector val;
                         },
                         .@"enum" => e: {
                             break :e reader.takeEnum(field.type, endian) catch |err| {

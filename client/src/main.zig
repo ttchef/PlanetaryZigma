@@ -66,14 +66,17 @@ pub fn main(init: std.process.Init) !void {
     const writer = &fixed_writer;
     try connect_command.write(writer);
     std.log.debug("buffer: {any}", .{writer.buffered()});
-    try stream.socket.send(io, &system_context.server_address, writer.buffered());
+    try stream.socket.send(io, &system_context.network_manager.server_address, writer.buffered());
 
     var elapsed_time: f32 = 0;
-    // const step_time: f32 = 0.0167;
+    var accumlated_time: f32 = 0;
+    const time_step: f32 = 0.0167;
     main_loop: while (true) {
-        const delta_time = getDeltaTime(io);
+        accumlated_time += getDeltaTime(io);
+        if (accumlated_time < time_step) continue;
+        accumlated_time -= time_step;
         while (try window.poll(platform)) |event| {
-            system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, &event);
+            system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, &event);
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
@@ -87,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
                 else => {},
             }
         }
-        system_table.systemContextUpdate(&system_context, &.{ .delta_time = delta_time, .elapsed_time = elapsed_time, .world = &world }, null);
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, null);
 
         if (try watcher.reload(io)) {
             std.log.debug("system table updated", .{});
@@ -107,7 +110,7 @@ pub fn main(init: std.process.Init) !void {
             });
         }
 
-        elapsed_time += delta_time;
+        elapsed_time += time_step;
     }
 
     //TODO: Intial connect: move out.
@@ -115,7 +118,7 @@ pub fn main(init: std.process.Init) !void {
     fixed_writer.end = 0;
     try disconnect_command.write(writer);
     std.log.debug("buffer: {any}", .{writer.buffered()});
-    try stream.socket.send(io, &system_context.server_address, writer.buffered());
+    try stream.socket.send(io, &system_context.network_manager.server_address, writer.buffered());
 
     system_table.systemContextDeinit(&system_context);
 }
