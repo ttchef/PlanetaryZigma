@@ -63,6 +63,7 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         const world = info.world;
+        const dt = info.delta_time;
         var it = self.clients.iterator();
         while (it.next()) |pair| {
             const client = pair.value_ptr;
@@ -80,7 +81,7 @@ pub const Context = struct {
                         const acknowledge_command: shared.net.Command = .{ .acknowledge = .{ .id = client.entity_id } };
                         try acknowledge_command.write(writer);
                         try self.socket.send(self.io, client_address, writer.buffered());
-                        std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
+                        std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ec.entity_count, client.entity_id });
                     },
                     .disconnect => {
                         try world.ec.remove(@enumFromInt(client.entity_id));
@@ -92,20 +93,20 @@ pub const Context = struct {
                     },
                     .input => {
                         const input = command.input;
+                        var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
+                        const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
+                        if (input.left) transform.position[0] -= dt;
+                        if (input.right) transform.position[0] += dt;
+                        if (input.up) transform.position[1] -= dt;
+                        if (input.down) transform.position[1] += dt;
                         if (input.forward) {
-                            var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-                            transform.position[2] -= 1;
-                            const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
-                            try command_update_transform.write(writer);
-                            try self.socket.send(self.io, client_address, writer.buffered());
+                            transform.position[2] -= dt;
+                            std.debug.print("client_address : {any}\n", .{client_address});
                         }
-                        if (input.backward) {
-                            var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-                            transform.position[2] += 1;
-                            const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
-                            try command_update_transform.write(writer);
-                            try self.socket.send(self.io, client_address, writer.buffered());
-                        }
+
+                        if (input.backward) transform.position[2] += dt;
+                        try command_update_transform.write(writer);
+                        try self.socket.send(self.io, client_address, writer.buffered());
                     },
                     else => {
                         std.log.err("Unhandled command {s}", .{@tagName(command)});

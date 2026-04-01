@@ -62,14 +62,16 @@ pub const Context = struct {
         try self.network_manager.init(data.allocator, data.io, data.stream, data.server_address);
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This()) !void {
         self.renderer.deinit(self.allocator);
+        try self.network_manager.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        var query = info.world.ec.query(&.{Camera});
+        var query = info.world.ec.query(&.{ Camera, nz.Transform3D(f32) });
         if (query.next()) |entry| {
             const camera = entry.getPtr(Camera, info.world.ec).?;
+            const transform = entry.getPtr(nz.Transform3D(f32), info.world.ec).?;
             camera.update(info);
             try self.renderer.update(info);
 
@@ -79,6 +81,8 @@ pub const Context = struct {
             const input_command: shared.net.Command = .{ .input = camera.input_map };
             try input_command.write(writer);
             try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
+
+            camera.transform.position = transform.position;
         }
         try self.asset_server.update();
         try self.network_manager.update(info);
@@ -130,7 +134,11 @@ pub const ffi = struct {
 
     pub export fn systemContextDeinit(context: *Context) void {
         std.log.debug("system context deinit", .{});
-        context.deinit();
+        context.deinit() catch |err| {
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            std.log.err("context update: {any}", .{@errorName(err)});
+            return;
+        };
         context.* = undefined;
     }
 

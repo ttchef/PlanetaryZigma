@@ -110,7 +110,6 @@ pub fn update(self: *@This(), info: *const Info) void {
     // const speed_multiplier: f32 = if (keyboard[sdl.SDL_SCANCODE_LSHIFT]) 3 else 1;
     // move = nz.vec.scale(move, speed_multiplier);
     // self.transform.position += move;
-    std.log.debug("pos {any}", .{self.transform.position});
     // std.log.debug("pos {any}", .{self.transform.position});
     // std.log.debug("speed {any}", .{self.speed});
 }

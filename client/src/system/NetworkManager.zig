@@ -3,6 +3,7 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const World = system.World;
 const Info = system.Info;
+const nz = shared.nz;
 
 stream: std.Io.net.Stream,
 server_address: std.Io.net.IpAddress,
@@ -10,7 +11,9 @@ server_listen: std.Io.Future(@typeInfo(@TypeOf(listen)).@"fn".return_type.?),
 command_queue: shared.net.CommandQueue = .{},
 io: std.Io = undefined,
 allocator: std.mem.Allocator = undefined,
-enitity_mapping: std.AutoHashMap(u32, u32) = undefined,
+
+//TODO: Continue here fix the damn AutoHashMap to be persistant on hot reload, also clean up this strcture init LOL XD
+enitity_mapping: ?*std.AutoHashMap(u32, u32) = null,
 
 pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, server_address: std.Io.net.IpAddress) !void {
     self.server_listen = try io.concurrent(listen, .{ allocator, io, stream, &self.command_queue });
@@ -18,7 +21,15 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io, stream: st
     self.server_address = server_address;
     self.io = io;
     self.allocator = allocator;
-    self.enitity_mapping = .init(allocator);
+    if (self.enitity_mapping == null) {
+        self.enitity_mapping = try allocator.create(std.AutoHashMap(u32, u32));
+        self.enitity_mapping.?.* = .init(allocator);
+    }
+}
+
+pub fn deinit(self: *@This()) !void {
+    try self.server_listen.cancel(self.io);
+    // self.enitity_mapping.deinit();
 }
 
 pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, command_queue: *shared.net.CommandQueue) !void {
@@ -29,10 +40,10 @@ pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Strea
             if (err == error.WouldBlock) continue;
             return err;
         };
+        _ = msg;
 
         var msg_reader: std.Io.Reader = .fixed(&buffer);
         const reader = &msg_reader;
-        std.log.debug("data: {any}", .{msg.data});
 
         const parsed = try shared.net.Command.parse(reader);
 
@@ -45,23 +56,28 @@ pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Strea
 pub fn update(self: *@This(), info: *const Info) !void {
     try self.command_queue.mutex.lock(self.io);
     for (self.command_queue.commands.items) |command| {
-        // const input_command: shared.net.Command.Input
         switch (command) {
             .acknowledge => {
                 var new_camera = try info.world.ec.addEntity();
-                new_camera.set(system.Camera, .{ .transform = .{ .position = .{ 0, 0, 40 } } }, info.world.ec);
-                try self.enitity_mapping.put(command.acknowledge.id, @intCast(@intFromEnum(new_camera)));
-                std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
+                new_camera.set(system.Camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } }, info.world.ec);
+                new_camera.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 40 } }, info.world.ec);
+                try self.enitity_mapping.?.put(command.acknowledge.id, @intCast(@intFromEnum(new_camera)));
+                std.debug.print("ack enetiess : {d}\n", .{info.world.ec.entity_count});
+                std.debug.print("MY ID: {d}, server ID: {d} ", .{ @intFromEnum(new_camera), command.acknowledge.id });
             },
             .spawn_entity => {
                 _ = try info.world.ec.addEntity();
-                std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
+                std.debug.print("spawn enetiess : {d}\n", .{info.world.ec.entity_count});
             },
             .update_transform => {
-                const update_trensform_command = command.update_transform;
-                //TODO: CHANGE TO NOT BE CAMERA BUT TRANSFORM: Lucas
-                var camera = info.world.ec.entityGetPtr(system.Camera, @enumFromInt(update_trensform_command.id)).?;
-                camera.transform.position = update_trensform_command.pos;
+                std.log.debug("size: {d},  ", .{self.enitity_mapping.?.capacity()});
+                const update_transform_command = command.update_transform;
+                const id = self.enitity_mapping.?.get(update_transform_command.id);
+                std.log.debug("server ID: {d},  ", .{update_transform_command.id});
+                if (id == null) continue;
+                std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
+                const transform = info.world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(id.?));
+                if (transform) |t| t.position = update_transform_command.pos;
             },
             else => {
                 std.log.err("Unhandled command {s}", .{@tagName(command)});

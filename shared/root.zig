@@ -104,7 +104,7 @@ pub const net = struct {
                 .void => return,
                 .bool => try writer.writeInt(u8, @intFromBool(value), endian),
                 .int => try writer.writeInt(T, value, endian),
-                .float => |float| try writer.writeInt(@Int(.signed, float.bits), @intFromFloat(value * 256), endian),
+                .float => |float| try writer.writeInt(@Int(.signed, float.bits), @bitCast(value), endian),
                 .pointer => |pointer| {
                     if (pointer.child == u8)
                         try writer.writeAll(value)
@@ -138,7 +138,7 @@ pub const net = struct {
                 .void => return,
                 .bool => try reader.takeByte() == 1,
                 .int => try reader.takeInt(Out, endian),
-                .float => |float| @floatFromInt((try reader.takeInt(@Int(.signed, float.bits), endian)) * 256),
+                .float => |float| @bitCast(try reader.takeInt(@Int(.signed, float.bits), endian)),
                 .@"enum" => try reader.takeEnum(Out, endian),
                 .@"struct" => {
                     var out: Out = std.mem.zeroes(Out);
@@ -146,7 +146,7 @@ pub const net = struct {
                     inline for (@typeInfo(Out).@"struct".fields) |field| @field(out, field.name) = switch (@typeInfo(field.type)) {
                         .bool => try reader.takeByte() == 1,
                         .int => try reader.takeInt(field.type, endian),
-                        .float => std.mem.readInt(field.type, try reader.takeArray(@sizeOf(Out)), endian),
+                        .float => |float| @bitCast(try reader.takeInt(@Int(.signed, float.bits), endian)),
                         .pointer => |ptr| if (deserialize_slices) slice: {
                             const element_len_name = field.name ++ "_len";
                             std.debug.assert(@typeInfo(@FieldType(Out, element_len_name)) == .int);
