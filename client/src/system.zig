@@ -3,7 +3,7 @@ const shared = @import("shared");
 const nz = shared.nz;
 const yes = @import("yes");
 pub const ec = shared.ec;
-const net = @import("system/net.zig");
+const NetworkManager = @import("system/NetworkManager.zig");
 pub const Camera = @import("system/Camera.zig");
 
 const AssetServer = @import("shared").AssetServer;
@@ -38,11 +38,8 @@ pub const Context = struct {
     asset_server: *AssetServer,
     renderer: Renderer,
     allocator: std.mem.Allocator,
-    stream: std.Io.net.Stream,
     io: std.Io,
-    server_address: std.Io.net.IpAddress,
-    server_listen: std.Io.Future(@typeInfo(@TypeOf(net.listen)).@"fn".return_type.?),
-    commands: std.ArrayList(shared.net.Command) = .empty,
+    network_manager: NetworkManager,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -58,42 +55,37 @@ pub const Context = struct {
         self.* = .{
             .asset_server = data.asset_server,
             .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
-            .server_listen = try data.io.concurrent(net.listen, .{ data.allocator, data.io, data.stream, &self.commands }),
             .allocator = data.allocator,
-            .stream = data.stream,
             .io = data.io,
-            .server_address = data.server_address,
+            .network_manager = .{ .stream = undefined, .server_address = undefined, .server_listen = undefined },
         };
+        try self.network_manager.init(data.allocator, data.io, data.stream, data.server_address);
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This()) !void {
         self.renderer.deinit(self.allocator);
+        try self.network_manager.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        var query = info.world.ec.query(&.{Camera});
+        var query = info.world.ec.query(&.{ Camera, nz.Transform3D(f32) });
         if (query.next()) |entry| {
-            try entry.getPtr(Camera, info.world.ec).?.update(info);
+            const camera = entry.getPtr(Camera, info.world.ec).?;
+            const transform = entry.getPtr(nz.Transform3D(f32), info.world.ec).?;
+            camera.update(info);
             try self.renderer.update(info);
+
+            var fixed_writer_buffer: [1024]u8 = undefined;
+            var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+            const writer = &fix_writer;
+            const input_command: shared.net.Command = .{ .input = camera.input_map };
+            try input_command.write(writer);
+            try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
+
+            camera.transform.position = transform.position;
         }
         try self.asset_server.update();
-        for (self.commands.items) |command| {
-            switch (command) {
-                .acknowledge => {
-                    var new_camera = try info.world.ec.addEntity();
-                    new_camera.set(Camera, .{}, info.world.ec);
-                    std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
-                },
-                .spawn_entity => {
-                    _ = try info.world.ec.addEntity();
-                    std.debug.print("enetiess : {d}\n", .{info.world.ec.entity_count});
-                },
-                else => {
-                    std.log.err("Unhandled command {s}", .{@tagName(command)});
-                },
-            }
-        }
-        self.commands.clearAndFree(self.allocator);
+        try self.network_manager.update(info);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
@@ -142,7 +134,11 @@ pub const ffi = struct {
 
     pub export fn systemContextDeinit(context: *Context) void {
         std.log.debug("system context deinit", .{});
-        context.deinit();
+        context.deinit() catch |err| {
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            std.log.err("context update: {any}", .{@errorName(err)});
+            return;
+        };
         context.* = undefined;
     }
 

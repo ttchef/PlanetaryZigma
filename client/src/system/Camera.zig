@@ -1,6 +1,7 @@
 const std = @import("std");
 const nz = @import("shared").nz;
 const system = @import("../system.zig");
+const shared = @import("shared");
 const Info = system.Info;
 const yes = @import("yes");
 
@@ -12,22 +13,16 @@ speed: f32 = 5,
 sensitivity: f32 = 1,
 was_rotating: bool = false,
 
-input_map: struct {
-    forward: bool = false,
-    backward: bool = false,
-    right: bool = false,
-    left: bool = false,
-    up: bool = false,
-    down: bool = false,
-} = .{},
+input_map: shared.net.Command.Input = .{},
 
 transform: nz.Transform3D(f32) = .{},
 
-pub fn update(self: *@This(), info: *const Info) !void {
+pub fn update(self: *@This(), info: *const Info) void {
+    _ = info;
     // const world = info.world;
-    const current_pitch_rad = self.transform.rotation[0];
-    const current_yaw_rad = self.transform.rotation[1];
-
+    // const current_pitch_rad = self.transform.rotation[0];
+    // const current_yaw_rad = self.transform.rotation[1];
+    //
     // camera.sensitivity = 1;
     // camera.speed = 500;
 
@@ -48,12 +43,12 @@ pub fn update(self: *@This(), info: *const Info) !void {
     // }
 
     // current_pitch_rad = std.math.clamp(current_pitch_rad, -1.5, 1.5);
-    const forward = nz.vec.forwardFromEuler(nz.Vec3(f32){ current_pitch_rad, current_yaw_rad, 0 });
-
-    const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
-
-    const up = nz.vec.normalize(nz.vec.cross(right, forward));
-
+    // const forward = nz.vec.forwardFromEuler(nz.Vec3(f32){ current_pitch_rad, current_yaw_rad, 0 });
+    //
+    // const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
+    //
+    // const up = nz.vec.normalize(nz.vec.cross(right, forward));
+    //
     // std.debug.print(
     //     \\--- Mouse / Orientation Debug ---
     //     \\mouse buttons: {x}
@@ -86,22 +81,22 @@ pub fn update(self: *@This(), info: *const Info) !void {
     //     },
     // );
 
-    var move = nz.Vec3(f32){ 0, 0, 0 };
-    const velocity = self.speed * info.delta_time;
+    // var move = nz.Vec3(f32){ 0, 0, 0 };
+    // const velocity = self.speed * info.delta_time;
     // std.log.debug("dt: {d}", .{info.delta_time});
 
-    if (self.input_map.forward)
-        move += nz.vec.scale(forward, velocity);
-    if (self.input_map.backward)
-        move -= nz.vec.scale(forward, velocity);
-    if (self.input_map.left)
-        move -= nz.vec.scale(right, velocity);
-    if (self.input_map.right)
-        move += nz.vec.scale(right, velocity);
-    if (self.input_map.down)
-        move += nz.vec.scale(up, velocity);
-    if (self.input_map.up)
-        move -= nz.vec.scale(up, velocity);
+    // if (self.input_map.forward)
+    //     move += nz.vec.scale(forward, velocity);
+    // if (self.input_map.backward)
+    //     move -= nz.vec.scale(forward, velocity);
+    // if (self.input_map.left)
+    //     move -= nz.vec.scale(right, velocity);
+    // if (self.input_map.right)
+    //     move += nz.vec.scale(right, velocity);
+    // if (self.input_map.down)
+    //     move += nz.vec.scale(up, velocity);
+    // if (self.input_map.up)
+    //     move -= nz.vec.scale(up, velocity);
     //
     // if (keyboard[sdl.SDL_SCANCODE_SPACE])
     //     move += nz.vec.scale(up, velocity);
@@ -114,8 +109,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
 
     // const speed_multiplier: f32 = if (keyboard[sdl.SDL_SCANCODE_LSHIFT]) 3 else 1;
     // move = nz.vec.scale(move, speed_multiplier);
-    self.transform.position += move;
-    // std.log.debug("pos {any}", .{self.transform.position});
+    // self.transform.position += move;
     // std.log.debug("pos {any}", .{self.transform.position});
     // std.log.debug("speed {any}", .{self.speed});
 }
