@@ -36,7 +36,8 @@ vertex_shader: *Shader,
 fragment_shader: *Shader,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
-mesh: Mesh,
+planet_mesh: Mesh,
+box_mesh: Mesh,
 
 pub const InitOptions = struct {
     instance: struct {
@@ -91,7 +92,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
     var planet_vertices: Mesh.Planet = try .init(allocator, 30);
     defer planet_vertices.deinit(allocator);
-    self.mesh = try .init(
+    self.planet_mesh = try .init(
         allocator,
         self.vma,
         "test",
@@ -99,6 +100,15 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         planet_vertices.indices.items,
         Mesh.Vertex,
         planet_vertices.vertices.items,
+    );
+    self.box_mesh = try .init(
+        allocator,
+        self.vma,
+        "box",
+        self.device,
+        &Mesh.box.indicies_array,
+        Mesh.Vertex,
+        &Mesh.box.vertex_array,
     );
     self.vertex_shader = try .init(allocator, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
@@ -126,7 +136,8 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
 pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    self.mesh.deinit(allocator, self.vma);
+    self.planet_mesh.deinit(allocator, self.vma);
+    self.box_mesh.deinit(allocator, self.vma);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(allocator);
@@ -303,16 +314,16 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     // std.debug.print("time: {d}\n", .{self.elapsed_time});
     const tmp: i32 = @intFromFloat(elapsed_time);
     // std.debug.print("fixed-time: {d}\n", .{tmp});
-    if (@mod(tmp, 2) == 1) {
+    if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 1);
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
     }
-    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_CLOCKWISE);
+    ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthWriteEnableEXT(cmd, c.VK_TRUE);
     ext.vkCmdSetDepthCompareOpEXT(cmd, c.VK_COMPARE_OP_LESS_OR_EQUAL);
@@ -421,20 +432,41 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var offset: c.VkDeviceSize = 0;
     ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
-    var push: Shader.PushConstant = .{ .buffer_address = self.mesh.vertex_buffer.gpu_address };
+    var push: Shader.PushConstant = .{ .buffer_address = self.planet_mesh.vertex_buffer.gpu_address };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
-    c.vkCmdBindIndexBuffer(cmd, self.mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+    c.vkCmdBindIndexBuffer(cmd, self.planet_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
     // c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
     c.vkCmdDrawIndexed(
         cmd,
-        @intCast(self.mesh.index_buffer.len),
+        @intCast(self.planet_mesh.index_buffer.len),
         1,
         0,
         0,
         0,
     );
+
+    var query_mesh = info.world.ec.query(&.{ system.Mesh, system.Transform });
+    push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address };
+    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
+    c.vkCmdBindIndexBuffer(cmd, self.box_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
+    while (query_mesh.next()) |entry| {
+        std.log.debug("draw box", .{});
+        const mesh_id = entry.get(system.Mesh, info.world.ec).?;
+        _ = mesh_id;
+        const transform = entry.get(system.Transform, info.world.ec).?;
+        _ = transform;
+        c.vkCmdDrawIndexed(
+            cmd,
+            @intCast(self.box_mesh.index_buffer.len),
+            1,
+            0,
+            0,
+            0,
+        );
+    }
+
     ext.vkCmdEndRendering(cmd);
 
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
