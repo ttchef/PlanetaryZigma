@@ -112,6 +112,13 @@ pub const Context = struct {
                         std.log.err("Unhandled command {s}", .{@tagName(command)});
                     },
                 }
+                // var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
+                // var command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
+                // command_update_transform.update_transform.id = client.entity_id;
+                // transform.position[2] += dt;
+                // command_update_transform.update_transform.pos = transform.position;
+                // try command_update_transform.write(writer);
+                // try self.socket.send(self.io, client_address, writer.buffered());
             }
             client.command_queue.commands.clearAndFree(self.allocator);
             client.command_queue.mutex.unlock(self.io);
