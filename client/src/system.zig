@@ -4,11 +4,14 @@ const nz = shared.nz;
 const yes = @import("yes");
 pub const ec = shared.ec;
 const NetworkManager = @import("system/NetworkManager.zig");
-pub const Camera = @import("system/Camera.zig");
-
 const AssetServer = @import("shared").AssetServer;
-
 pub const Renderer = @import("Renderer.zig");
+
+pub const Transform = nz.Transform3D(f32);
+pub const Camera = @import("system/Camera.zig");
+pub const Mesh = struct {
+    id: u32,
+};
 
 pub const Info = struct {
     delta_time: f32,
@@ -21,16 +24,20 @@ pub const World = struct {
     ec: ec.World(&.{
         nz.Transform3D(f32),
         Camera,
+        Mesh,
     }),
+    enitity_mapping: std.AutoHashMap(u32, u32),
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .mutex = .init,
             .ec = try .init(allocator, null),
+            .enitity_mapping = .init(allocator),
         };
     }
     pub fn deinit(self: *@This()) void {
         self.ec.deinit();
+        self.enitity_mapping.deinit();
     }
 };
 
