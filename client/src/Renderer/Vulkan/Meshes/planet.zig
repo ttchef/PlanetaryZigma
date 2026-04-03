@@ -102,7 +102,7 @@ fn marchCube(
                 allocator,
                 .{
                     .position = (vert1 + vert2) / devision,
-                    // .color = .{ @mod(vert1[0], 2), 1, @mod(vert1[1], 2), 1 },
+                    .color = .{ 1, 0, 0, 1 },
                     // .normal = .{ 1, 0, 0 },
                     .uv_x = @floor(@mod(index, 3)),
                     .uv_y = @ceil(@mod(index + 2, 3)),

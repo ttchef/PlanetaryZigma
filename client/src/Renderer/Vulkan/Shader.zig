@@ -7,6 +7,7 @@ const ext = @import("procFunctions.zig").device.ProcTable;
 pub const check = @import("utils.zig").check;
 
 pub const PushConstant = extern struct {
+    model_matrix: [16]f32,
     buffer_address: c.VkDeviceAddress,
 };
 

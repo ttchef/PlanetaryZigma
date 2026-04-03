@@ -46,22 +46,58 @@ pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Window)
 }
 
 pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
-    // const  vk_extensions = yes.vulkan.getRequiredInstanceExtensions( [*:0]const u8, yes.Platform.Cross.Inner. )
-
     const extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",
             "VK_KHR_win32_surface",
-            Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
         },
-        else => &.{
-            // "VK_KHR_xlib_surface",
-            "VK_KHR_wayland_surface",
-            Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-            Vulkan.c.VK_KHR_SURFACE_EXTENSION_NAME,
-            Vulkan.c.VK_KHR_DISPLAY_EXTENSION_NAME,
+        .macos => &.{
+            "VK_KHR_surface",
+            "VK_MVK_macos_surface",
         },
+        .ios => &.{
+            "VK_KHR_surface",
+            "VK_MVK_ios_surface",
+        },
+        .linux, .freebsd, .netbsd, .openbsd => if (builtin.abi == .android) &.{
+            "VK_KHR_surface",
+            "VK_KHR_android_surface",
+        } else switch (window.native(platform)) {
+            .wayland => &.{
+                Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+                Vulkan.c.VK_KHR_SURFACE_EXTENSION_NAME,
+                Vulkan.c.VK_KHR_DISPLAY_EXTENSION_NAME,
+
+                "VK_KHR_surface",
+                "VK_KHR_display",
+                "VK_KHR_wayland_surface",
+            },
+            .x11 => &.{
+                Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+                Vulkan.c.VK_KHR_SURFACE_EXTENSION_NAME,
+                Vulkan.c.VK_KHR_DISPLAY_EXTENSION_NAME,
+
+                "VK_KHR_surface",
+                "VK_KHR_display",
+                "VK_KHR_xlib_surface",
+                "VK_KHR_xcb_surface",
+            },
+            else => &.{},
+        },
+        else => &.{},
     };
+
+    // var extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
+    //     .windows => &.{
+    //         "VK_KHR_surface",
+    //         "VK_KHR_win32_surface",
+    //         Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    //     },
+    //     else => &.{
+    //         // "VK_KHR_xlib_surface",
+    //         // "VK_KHR_wayland_surface",
+    //     },
+    // };
 
     var yes_surface_create_user_data: YesSurfaceCreateUserData = .{ .platform = platform, .window = window };
 

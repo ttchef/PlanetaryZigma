@@ -136,8 +136,8 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
             },
             .horizontal => {},
         },
-        .focus => |focus| {
-            if (focus == .unfocused) self.input_map = .{};
+        .focus => |focused| {
+            if (focused) self.input_map = .{};
         },
 
         else => {},

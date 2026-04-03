@@ -321,7 +321,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_NONE);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_FRONT_BIT);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
@@ -432,12 +432,13 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var offset: c.VkDeviceSize = 0;
     ext.vkCmdSetDescriptorBufferOffsetsEXT(cmd, c.VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout.handle, 0, 1, &buffer_index, &offset);
 
-    var push: Shader.PushConstant = .{ .buffer_address = self.planet_mesh.vertex_buffer.gpu_address };
+    const identity_matrix: nz.Mat4x4(f32) = .identity;
+    var push: Shader.PushConstant = .{ .buffer_address = self.planet_mesh.vertex_buffer.gpu_address, .model_matrix = identity_matrix.d };
     c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
 
     ext.vkCmdBeginRendering(cmd, &render_info);
     c.vkCmdBindIndexBuffer(cmd, self.planet_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
-    // c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
+    c.vkCmdDraw(cmd, Mesh.vertex_array.len, 1, 0, 0);
     c.vkCmdDrawIndexed(
         cmd,
         @intCast(self.planet_mesh.index_buffer.len),
@@ -448,15 +449,15 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     );
 
     var query_mesh = info.world.ec.query(&.{ system.Mesh, system.Transform });
-    push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address };
-    c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
     c.vkCmdBindIndexBuffer(cmd, self.box_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
     while (query_mesh.next()) |entry| {
-        std.log.debug("draw box", .{});
         const mesh_id = entry.get(system.Mesh, info.world.ec).?;
         _ = mesh_id;
         const transform = entry.get(system.Transform, info.world.ec).?;
-        _ = transform;
+        const matrix = transform.toMat4x4();
+        std.log.debug("matrix: {any}", .{matrix});
+        push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
+        c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         c.vkCmdDrawIndexed(
             cmd,
             @intCast(self.box_mesh.index_buffer.len),
