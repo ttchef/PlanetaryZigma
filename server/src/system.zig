@@ -69,6 +69,7 @@ pub const Context = struct {
             const client = pair.value_ptr;
             const client_address = pair.key_ptr;
             try client.command_queue.mutex.lock(self.io);
+
             for (client.command_queue.commands.items) |command| {
                 var fixed_writer_buffer: [1024]u8 = undefined;
                 var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
@@ -94,19 +95,13 @@ pub const Context = struct {
                     .input => {
                         const input = command.input;
                         var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-                        const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
+
                         if (input.left) transform.position[0] -= dt;
                         if (input.right) transform.position[0] += dt;
                         if (input.up) transform.position[1] -= dt;
                         if (input.down) transform.position[1] += dt;
-                        if (input.forward) {
-                            transform.position[2] -= dt;
-                            std.debug.print("client_address : {any}\n", .{client_address});
-                        }
-
+                        if (input.forward) transform.position[2] -= dt;
                         if (input.backward) transform.position[2] += dt;
-                        try command_update_transform.write(writer);
-                        try self.socket.send(self.io, client_address, writer.buffered());
                     },
                     else => {
                         std.log.err("Unhandled command {s}", .{@tagName(command)});
@@ -122,6 +117,18 @@ pub const Context = struct {
             }
             client.command_queue.commands.clearAndFree(self.allocator);
             client.command_queue.mutex.unlock(self.io);
+            var query = world.ec.query(&.{nz.Transform3D(f32)});
+            while (query.next()) |entry| {
+                var fixed_writer_buffer: [1024]u8 = undefined;
+                var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+                const writer = &fix_writer;
+                std.log.debug("Transform Entry ID {d}", .{@intFromEnum(entry)});
+
+                const transform = entry.get(nz.Transform3D(f32), world.ec).?;
+                const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = @intCast(@intFromEnum(entry)), .pos = transform.position } };
+                try command_update_transform.write(writer);
+                try self.socket.send(self.io, client_address, writer.buffered());
+            }
         }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {

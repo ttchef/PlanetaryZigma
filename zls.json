@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/zigtools/zls/main/schema.json",
+  "build_options": {
+    "build_file": "server/build.zig"
+  }
+}

@@ -16,6 +16,7 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",
         "zig-out/lib/",
+        "client/zig-out/lib/",
         "./",
     };
     const found_path: []const u8 = path: for (search_paths) |path| {
@@ -23,8 +24,15 @@ pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
             error.FileNotFound => continue,
             else => return err,
         };
-        break :path path;
-    } else return error.NoAssetDir;
+
+        const dir = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
+        defer dir.close(io);
+        var it = dir.iterate();
+        while (try it.next(io)) |entry| {
+            if (entry.kind != .file) continue;
+            if (std.mem.startsWith(u8, entry.name, lib_name)) break :path path;
+        }
+    } else return error.NoLibraryPathFound;
 
     return .{
         .dir_path = found_path,

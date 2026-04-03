@@ -40,6 +40,10 @@ pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Strea
 
         const parsed = try shared.net.Command.parse(reader);
 
+        if (parsed.command == .update_transform) {
+            std.log.debug("Data: {any}", .{parsed.command});
+        }
+
         try command_queue.mutex.lock(io);
         try command_queue.commands.append(allocator, parsed.command);
         command_queue.mutex.unlock(io);
@@ -62,12 +66,13 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 var new_entity = try info.world.ec.addEntity();
                 new_entity.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 0 } }, info.world.ec);
                 new_entity.set(system.Mesh, .{ .id = 0 }, info.world.ec);
+                try info.world.enitity_mapping.put(command.spawn_entity.id, @intCast(@intFromEnum(new_entity)));
                 std.debug.print("spawn enetiess : {d}\n", .{info.world.ec.entity_count});
             },
             .update_transform => {
                 const update_transform_command = command.update_transform;
-                const id = info.world.enitity_mapping.get(update_transform_command.id);
                 std.log.debug("server ID: {d},  ", .{update_transform_command.id});
+                const id = info.world.enitity_mapping.get(update_transform_command.id);
                 if (id == null) continue;
                 std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
                 const transform = info.world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(id.?));

@@ -45,7 +45,6 @@ pub const Client = struct {
                 },
                 else => {
                     var client = clients.getPtr(msg.from).?;
-                    // std.log.debug("recived from: {any}", .{msg.from});
                     try client.command_queue.commands.append(allocator, parsed.command);
                 },
             }

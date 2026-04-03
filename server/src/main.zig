@@ -6,7 +6,6 @@ const nz = shared.nz;
 
 pub fn main(init: std.process.Init) !void {
     std.debug.print("server\n", .{});
-
     var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
