@@ -27,6 +27,7 @@ pub const World = struct {
         Mesh,
     }),
     enitity_mapping: std.AutoHashMap(u32, u32),
+    my_server_id: u32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
@@ -77,6 +78,11 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         var query = info.world.ec.query(&.{ Camera, nz.Transform3D(f32) });
         if (query.next()) |entry| {
+            // std.log.debug("Camera!, local_client_ID: {d}, server_ID: {d} ", .{ @intFromEnum(entry), info.world.my_server_id });
+
+            // const id = info.world.enitity_mapping.get(info.world.my_server_id);
+            // if (id != null) std.log.debug("[RECIEVD] client ID: {d}", .{id.?});
+
             const camera = entry.getPtr(Camera, info.world.ec).?;
             const transform = entry.getPtr(nz.Transform3D(f32), info.world.ec).?;
             camera.update(info);
@@ -89,6 +95,7 @@ pub const Context = struct {
             try input_command.write(writer);
             try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
 
+            // std.log.debug("pos {any},  ", .{transform.position});
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
