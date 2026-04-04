@@ -62,8 +62,14 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
+        var update_game_state: bool = false;
         const world = info.world;
         const dt = info.delta_time;
+
+        var fixed_writer_buffer: [1024]u8 = undefined;
+        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+        const writer = &fix_writer;
+
         var it = self.clients.iterator();
         while (it.next()) |pair| {
             const client = pair.value_ptr;
@@ -71,11 +77,11 @@ pub const Context = struct {
             try client.command_queue.mutex.lock(self.io);
 
             for (client.command_queue.commands.items) |command| {
-                var fixed_writer_buffer: [1024]u8 = undefined;
-                var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-                const writer = &fix_writer;
+                writer.end = 0;
                 switch (command) {
                     .connect => {
+                        update_game_state = true;
+                        std.debug.print("connect ", .{});
                         var entity = try world.ec.addEntity();
                         entity.set(nz.Transform3D(f32), .{}, world.ec);
                         client.entity_id = @intCast(@intFromEnum(entity));
@@ -97,6 +103,9 @@ pub const Context = struct {
                         var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
 
                         if (input.left) transform.position[0] -= dt;
+                        // if (input.left) {
+                        //     transform.position = .{ 0, 0, 100 };
+                        // }
                         if (input.right) transform.position[0] += dt;
                         if (input.up) transform.position[1] -= dt;
                         if (input.down) transform.position[1] += dt;
@@ -107,22 +116,33 @@ pub const Context = struct {
                         std.log.err("Unhandled command {s}", .{@tagName(command)});
                     },
                 }
-                // var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-                // var command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = transform.position } };
-                // command_update_transform.update_transform.id = client.entity_id;
-                // transform.position[2] += dt;
-                // command_update_transform.update_transform.pos = transform.position;
-                // try command_update_transform.write(writer);
-                // try self.socket.send(self.io, client_address, writer.buffered());
             }
-            client.command_queue.commands.clearAndFree(self.allocator);
+            client.command_queue.commands.items.len = 0;
+            if (update_game_state == true) {
+                var query = world.ec.query(&.{nz.Transform3D(f32)});
+                while (query.next()) |entry| {
+                    const id = @intFromEnum(entry);
+                    if (client.entity_id == id) continue;
+                    std.debug.print("ent in ecs ID {d}\n", .{id});
+                    writer.end = 0;
+                    const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = @intCast(id) } };
+                    try client.command_queue.commands.append(self.allocator, spawn_entitiy_cmd);
+                }
+            }
+            writer.end = 0;
+            // var xtransform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
+            // var xcommand_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = xtransform.position } };
+            // xcommand_update_transform.update_transform.id = client.entity_id;
+            // xtransform.position = .{ 0, 0, 0 };
+            // xcommand_update_transform.update_transform.pos = .{ 0, 0, 0 };
+            // try xcommand_update_transform.write(writer);
+            // try self.socket.send(self.io, client_address, writer.buffered());
+
             client.command_queue.mutex.unlock(self.io);
             var query = world.ec.query(&.{nz.Transform3D(f32)});
             while (query.next()) |entry| {
-                var fixed_writer_buffer: [1024]u8 = undefined;
-                var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-                const writer = &fix_writer;
-                std.log.debug("Transform Entry ID {d}", .{@intFromEnum(entry)});
+                writer.end = 0;
+                // std.log.debug("Transform Entry ID {d}", .{@intFromEnum(entry)});
 
                 const transform = entry.get(nz.Transform3D(f32), world.ec).?;
                 const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = @intCast(@intFromEnum(entry)), .pos = transform.position } };
@@ -133,6 +153,7 @@ pub const Context = struct {
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         if (pre_reload) try self.accept_client_future.cancel(self.io) else {
+            std.log.debug("RELOAD", .{});
             self.accept_client_future = try self.io.concurrent(net.Client.accept, .{ self.allocator, self.io, self.socket, &self.clients });
         }
     }

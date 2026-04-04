@@ -22,32 +22,20 @@ pub const Client = struct {
 
             const parsed = try shared.net.Command.parse(reader);
 
-            switch (parsed.command) {
-                .connect => {
-                    const connect = parsed.command.connect;
-                    try clients.put(msg.from, undefined);
-                    var client = clients.getPtr(msg.from).?;
-
-                    client.* = .{
-                        .allocator = allocator,
-                        .name = try allocator.dupe(u8, connect.name),
-                    };
-                    try client.command_queue.commands.append(allocator, parsed.command);
-                    const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = 0 } };
-                    var it = clients.iterator();
-                    while (it.next()) |pair| {
-                        if (pair.key_ptr.*.eql(&msg.from)) continue;
-                        const it_client = pair.value_ptr;
-                        try it_client.command_queue.commands.append(allocator, spawn_entitiy_cmd);
-                        const it_spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = @intCast(it_client.entity_id) } };
-                        try client.command_queue.commands.append(allocator, it_spawn_entitiy_cmd);
-                    }
-                },
-                else => {
-                    var client = clients.getPtr(msg.from).?;
-                    try client.command_queue.commands.append(allocator, parsed.command);
-                },
+            if (parsed.command == .connect) {
+                const connect = parsed.command.connect;
+                try clients.put(msg.from, undefined);
+                const client = clients.getPtr(msg.from).?;
+                client.* = .{
+                    .allocator = allocator,
+                    .name = try allocator.dupe(u8, connect.name),
+                };
             }
+
+            var client = clients.getPtr(msg.from).?;
+            try client.command_queue.mutex.lock(io);
+            try client.command_queue.commands.append(allocator, parsed.command);
+            client.command_queue.mutex.unlock(io);
         }
     }
 

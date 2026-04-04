@@ -317,7 +317,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 1);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_FRONT_BIT);
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
         // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
@@ -406,7 +406,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var query = info.world.ec.query(&.{system.Camera});
     const camera = query.next().?.get(system.Camera, info.world.ec).?;
     const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
-    // const cam_rot = nz.Mat4x4(f32).rotate(1, .{ 1, 0, 0 });
+    // const cam_rot = nz.Mat4x4(f32).rotate(@sin(elapsed_time), .{ 0, 0, 1 });
     // const view = cam_pos.mul(cam_rot).inverse();
     const view = cam_pos.inverse();
     const proj = nz.Mat4x4(f32).perspective(camera.fov_rad, aspect, 0.01, 100);
@@ -455,7 +455,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         _ = mesh_id;
         const transform = entry.get(system.Transform, info.world.ec).?;
         const matrix = transform.toMat4x4();
-        std.log.debug("matrix: {any}", .{matrix});
+        // std.log.debug("matrix: {any}", .{matrix});
         push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         c.vkCmdDrawIndexed(
