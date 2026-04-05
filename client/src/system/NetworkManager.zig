@@ -21,8 +21,17 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io, stream: st
 }
 
 pub fn deinit(self: *@This()) !void {
-    try self.server_listen.cancel(self.io);
-    // self.enitity_mapping.deinit();
+    self.server_listen.cancel(self.io) catch |err| {
+        switch (err) {
+            error.Canceled => std.log.err("err: {s}", .{@errorName(err)}),
+            error.Unexpected => std.log.err("err: {s}", .{@errorName(err)}),
+            else => {
+                std.log.err("err: {s}", .{@errorName(err)});
+                return err;
+            },
+        }
+    };
+    try self.command_queue.deinit(self.allocator, self.io);
 }
 
 pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, command_queue: *shared.net.CommandQueue) !void {
@@ -96,6 +105,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
             },
         }
     }
-    self.command_queue.commands.clearAndFree(self.allocator);
+    // self.command_queue.commands.clearAndFree(self.allocator);
+    self.command_queue.commands.items.len = 0;
     self.command_queue.mutex.unlock(self.io);
 }

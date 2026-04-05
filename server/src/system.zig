@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = @import("test.zig");
 const shared = @import("shared");
-const net = @import("system/net.zig");
+const NetworkManager = @import("system/NetworkManager.zig");
 const nz = shared.nz;
 pub const ec = shared.ec;
 // const Physics = @import("Physics.zig");
@@ -31,12 +31,11 @@ pub const World = struct {
 };
 
 pub const Context = struct {
+    request_exit: bool,
     allocator: std.mem.Allocator,
     world: *World,
     io: std.Io,
-    accept_client_future: std.Io.Future(@typeInfo(@TypeOf(net.Client.accept)).@"fn".return_type.?),
-    socket: std.Io.net.Socket,
-    clients: std.AutoHashMap(std.Io.net.IpAddress, net.Client),
+    network_manager: NetworkManager,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -45,117 +44,25 @@ pub const Context = struct {
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
-        const address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port);
         self.* = .{
+            .request_exit = false,
             .allocator = data.allocator,
             .io = data.io,
-            .socket = try address.bind(data.io, .{ .protocol = .udp, .mode = .dgram }),
             .world = data.world,
-            .accept_client_future = undefined,
-            .clients = .init(data.allocator),
+            .network_manager = undefined,
         };
-        self.accept_client_future = try data.io.concurrent(net.Client.accept, .{ data.allocator, data.io, self.socket, &self.clients });
+        try self.network_manager.init(data.allocator, data.io);
     }
 
     pub fn deinit(self: *@This()) !void {
-        try self.accept_client_future.cancel(self.io);
+        try self.network_manager.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        var update_game_state: bool = false;
-        const world = info.world;
-        const dt = info.delta_time;
-
-        var fixed_writer_buffer: [1024]u8 = undefined;
-        var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-        const writer = &fix_writer;
-
-        var it = self.clients.iterator();
-        while (it.next()) |pair| {
-            const client = pair.value_ptr;
-            const client_address = pair.key_ptr;
-            try client.command_queue.mutex.lock(self.io);
-
-            for (client.command_queue.commands.items) |command| {
-                writer.end = 0;
-                switch (command) {
-                    .connect => {
-                        update_game_state = true;
-                        std.debug.print("connect ", .{});
-                        var entity = try world.ec.addEntity();
-                        entity.set(nz.Transform3D(f32), .{}, world.ec);
-                        client.entity_id = @intCast(@intFromEnum(entity));
-                        const acknowledge_command: shared.net.Command = .{ .acknowledge = .{ .id = client.entity_id } };
-                        try acknowledge_command.write(writer);
-                        try self.socket.send(self.io, client_address, writer.buffered());
-                        std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ec.entity_count, client.entity_id });
-                    },
-                    .disconnect => {
-                        try world.ec.remove(@enumFromInt(client.entity_id));
-                        std.debug.print("enetiess : {d}\n", .{world.ec.entity_count});
-                    },
-                    .spawn_entity => {
-                        try command.write(writer);
-                        try self.socket.send(self.io, client_address, writer.buffered());
-                    },
-                    .input => {
-                        const input = command.input;
-                        var transform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-
-                        if (input.left) transform.position[0] -= dt;
-                        // if (input.left) {
-                        //     transform.position = .{ 0, 0, 100 };
-                        // }
-                        if (input.right) transform.position[0] += dt;
-                        if (input.up) transform.position[1] -= dt;
-                        if (input.down) transform.position[1] += dt;
-                        if (input.forward) transform.position[2] -= dt;
-                        if (input.backward) transform.position[2] += dt;
-                    },
-                    else => {
-                        std.log.err("Unhandled command {s}", .{@tagName(command)});
-                    },
-                }
-            }
-            client.command_queue.commands.items.len = 0;
-            if (update_game_state == true) {
-                var query = world.ec.query(&.{nz.Transform3D(f32)});
-                while (query.next()) |entry| {
-                    const id = @intFromEnum(entry);
-                    if (client.entity_id == id) continue;
-                    std.debug.print("ent in ecs ID {d}\n", .{id});
-                    writer.end = 0;
-                    const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = @intCast(id) } };
-                    try client.command_queue.commands.append(self.allocator, spawn_entitiy_cmd);
-                }
-            }
-            writer.end = 0;
-            // var xtransform = world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(client.entity_id)).?;
-            // var xcommand_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = xtransform.position } };
-            // xcommand_update_transform.update_transform.id = client.entity_id;
-            // xtransform.position = .{ 0, 0, 0 };
-            // xcommand_update_transform.update_transform.pos = .{ 0, 0, 0 };
-            // try xcommand_update_transform.write(writer);
-            // try self.socket.send(self.io, client_address, writer.buffered());
-
-            client.command_queue.mutex.unlock(self.io);
-            var query = world.ec.query(&.{nz.Transform3D(f32)});
-            while (query.next()) |entry| {
-                writer.end = 0;
-                // std.log.debug("Transform Entry ID {d}", .{@intFromEnum(entry)});
-
-                const transform = entry.get(nz.Transform3D(f32), world.ec).?;
-                const command_update_transform: shared.net.Command = .{ .update_transform = .{ .id = @intCast(@intFromEnum(entry)), .pos = transform.position } };
-                try command_update_transform.write(writer);
-                try self.socket.send(self.io, client_address, writer.buffered());
-            }
-        }
+        try self.network_manager.update(info);
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
-        if (pre_reload) try self.accept_client_future.cancel(self.io) else {
-            std.log.debug("RELOAD", .{});
-            self.accept_client_future = try self.io.concurrent(net.Client.accept, .{ self.allocator, self.io, self.socket, &self.clients });
-        }
+        try self.network_manager.reload(pre_reload);
     }
 };
 
