@@ -6,7 +6,7 @@ const nz = shared.nz;
 
 pub fn main(init: std.process.Init) !void {
     std.debug.print("server\n", .{});
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false, .safety = true }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true, .safety = true }) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -31,15 +31,20 @@ pub fn main(init: std.process.Init) !void {
 
     var count: usize = 0;
     var accumlated_time: f32 = 0;
+    var elapsed_time: f32 = 0;
+    var delta_time: f32 = 0;
     const time_step: f32 = 0.0167;
     while (true) {
-        accumlated_time += getDeltaTime(io);
+        if (system_context.request_exit) break;
+        delta_time = getDeltaTime(io);
+        accumlated_time += delta_time;
+        elapsed_time += delta_time;
         if (accumlated_time < time_step) continue;
         accumlated_time -= time_step;
         try world.mutex.lock(io);
         count += 1;
 
-        system_table.systemContextUpdate(&system_context, &.{ .delta_time = 1, .elapsed_time = 0, .world = &world });
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = 1, .elapsed_time = elapsed_time, .world = &world });
         if (try watcher.reload(io)) {
             system_table.systemContextReload(&system_context, true);
             std.log.debug("system table updated", .{});

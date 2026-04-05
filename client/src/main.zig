@@ -6,7 +6,7 @@ const World = system.World;
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init) !void {
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = false }) = .init;
+    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true }) = .init;
     // var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .init;
     defer _ = gpa.deinit();
     const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
@@ -93,7 +93,7 @@ pub fn main(init: std.process.Init) !void {
         system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world }, null);
 
         if (try watcher.reload(io)) {
-            std.log.debug("system table updated", .{});
+            std.log.err("system table updated", .{});
             system_table.systemContextDeinit(&system_context);
             watcher.old_dynlib.?.close();
             system_table = try .load(&watcher.dynlib.?);

@@ -14,6 +14,11 @@ pub const net = struct {
     pub const CommandQueue = struct {
         commands: std.ArrayList(Command) = .empty,
         mutex: std.Io.Mutex = .init,
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
+            try self.mutex.lock(io);
+            self.commands.deinit(allocator);
+            self.mutex.unlock(io);
+        }
     };
 
     pub const Command = union(Opcode) {
@@ -21,6 +26,7 @@ pub const net = struct {
         disconnect: void,
         acknowledge: Acknowledge,
         spawn_entity: SpawnEntity,
+        despawn_entity: DespawnEntity,
         input: Input,
         update_transform: UpdateTransform,
 
@@ -29,6 +35,7 @@ pub const net = struct {
             disconnect,
             acknowledge,
             spawn_entity,
+            despawn_entity,
             input,
             update_transform,
         };
@@ -52,6 +59,9 @@ pub const net = struct {
         };
 
         pub const SpawnEntity = struct {
+            id: u32,
+        };
+        pub const DespawnEntity = struct {
             id: u32,
         };
 
