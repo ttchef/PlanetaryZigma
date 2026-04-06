@@ -2,8 +2,8 @@ const std = @import("std");
 const testing = @import("test.zig");
 const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
-const nz = @import("numz");
-pub const ecz = @import("ecz");
+const nz = shared.numz;
+pub const ecz = shared.ecz;
 // const Physics = @import("Physics.zig");
 // physics: *Physics,
 
@@ -27,7 +27,7 @@ pub const World = struct {
     pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .mutex = .init,
-            .ecz = try .init(allocator, null),
+            .ecz = .init(allocator),
         };
     }
     pub fn deinit(self: *@This()) void {

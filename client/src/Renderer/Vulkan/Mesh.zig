@@ -1,6 +1,6 @@
 const std = @import("std");
 const c = @import("vulkan");
-const nz = @import("shared").nz;
+const nz = @import("shared").numz;
 const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");

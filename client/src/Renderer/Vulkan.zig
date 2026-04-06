@@ -1,5 +1,5 @@
 const std = @import("std");
-const nz = @import("shared").nz;
+const nz = @import("shared").numz;
 const AssetServer = @import("shared").AssetServer;
 const system = @import("../system.zig");
 const Info = system.Info;
@@ -403,8 +403,9 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    var query = info.world.ec.query(&.{system.Camera});
-    const camera = query.next().?.get(system.Camera, info.world.ec).?;
+    const comp = system.World.component;
+    var query = info.world.ecz.query(&.{comp.camera});
+    const camera = query.next().?.getComponent(comp.camera);
     const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
     // const cam_rot = nz.Mat4x4(f32).rotate(@sin(elapsed_time), .{ 0, 0, 1 });
     // const view = cam_pos.mul(cam_rot).inverse();
@@ -448,12 +449,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         0,
     );
 
-    var query_mesh = info.world.ec.query(&.{ system.Mesh, system.Transform });
+    var query_mesh = info.world.ecz.query(&.{ comp.mesh, comp.transform });
     c.vkCmdBindIndexBuffer(cmd, self.box_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
     while (query_mesh.next()) |entry| {
-        const mesh_id = entry.get(system.Mesh, info.world.ec).?;
+        const mesh_id = entry.getComponent(comp.mesh);
         _ = mesh_id;
-        const transform = entry.get(system.Transform, info.world.ec).?;
+        const transform = entry.getComponent(comp.transform);
         const matrix = transform.toMat4x4();
         // std.log.debug("matrix: {any}", .{matrix});
         push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };

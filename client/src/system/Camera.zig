@@ -1,5 +1,5 @@
 const std = @import("std");
-const nz = @import("shared").nz;
+const nz = @import("shared").numz;
 const system = @import("../system.zig");
 const shared = @import("shared");
 const Info = system.Info;
