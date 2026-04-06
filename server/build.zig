@@ -5,14 +5,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
-    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
+    const ec = b.dependency("ecz", .{ .target = target, .optimize = optimize }).module("ecz");
 
     _ = b.addModule("shared", .{
         .root_source_file = b.path("../shared/root.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "ecs", .module = ec },
+            .{ .name = "ecz", .module = ec },
             .{ .name = "numz", .module = numz },
         },
     });
