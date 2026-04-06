@@ -4,23 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
-    const ec = b.dependency("ecs", .{ .target = target, .optimize = optimize }).module("ecs");
-
-    _ = b.addModule("shared", .{
-        .root_source_file = b.path("../shared/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "ecs", .module = ec },
-            .{ .name = "numz", .module = numz },
-        },
-    });
     const io = b.graph.io;
     std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
 
-    const shared = b.modules.get("shared").?;
-
+    const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");

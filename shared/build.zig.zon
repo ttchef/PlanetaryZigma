@@ -1,0 +1,21 @@
+.{
+    .name = .shared,
+    .version = "0.0.0",
+    .fingerprint = 0x138cf4bb2dfb7a8d,
+    .minimum_zig_version = "0.16.0-dev.3013+abd131e33",
+    .dependencies = .{
+        .numz = .{
+            .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
+            .hash = "numz-0.0.2-V-sGm0ewAAAVATHTuvzqC2LVu7uHpaWxR_o8CIf5qu2F",
+        },
+        .ecz = .{
+            .url = "git+https://github.com/HaraldWik/ecz#ced6fd683a2d062ff63e2323beee5cf7e03e1a28",
+            .hash = "ecz-0.0.0-V6ubhy8fAACH4zBe3d6LFxg-yGLy6u7auPMAHbJ2zQaP",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
