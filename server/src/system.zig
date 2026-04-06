@@ -2,8 +2,8 @@ const std = @import("std");
 const testing = @import("test.zig");
 const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
-const nz = shared.nz;
-pub const ec = shared.ec;
+const nz = @import("numz");
+pub const ecz = @import("ecz");
 // const Physics = @import("Physics.zig");
 // physics: *Physics,
 
@@ -15,18 +15,23 @@ pub const Info = struct {
 
 pub const World = struct {
     mutex: std.Io.Mutex,
-    ec: ec.World(&.{
-        nz.Transform3D(f32),
+
+    ecz: ecz.World(&.{
+        component.transform,
     }),
+
+    pub const component = struct {
+        pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
+    };
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .mutex = .init,
-            .ec = try .init(allocator, null),
+            .ecz = try .init(allocator, null),
         };
     }
     pub fn deinit(self: *@This()) void {
-        self.ec.deinit();
+        self.ecz.deinit();
     }
 };
 
