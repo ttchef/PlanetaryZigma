@@ -1,9 +1,13 @@
 const std = @import("std");
 
-pub const nz = @import("numz");
-pub const ec = @import("ecs");
+pub const numz = @import("numz");
+pub const ecz = @import("ecz");
 pub const Watcher = @import("watcher.zig");
 pub const AssetServer = @import("AssetServer.zig");
+
+pub const EntityType = enum(u16) {
+    player,
+};
 
 pub const net = struct {
     pub const server_ip: []const u8 = "127.0.0.1";
@@ -76,7 +80,7 @@ pub const net = struct {
 
         pub const UpdateTransform = struct {
             id: u32,
-            pos: nz.Vec3(f32),
+            pos: numz.Vec3(f32),
         };
 
         pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {

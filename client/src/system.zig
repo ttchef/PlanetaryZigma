@@ -1,8 +1,8 @@
 const std = @import("std");
 const shared = @import("shared");
-const nz = shared.nz;
+const nz = shared.numz;
 const yes = @import("yes");
-pub const ec = shared.ec;
+pub const ecz = shared.ecz;
 const NetworkManager = @import("system/NetworkManager.zig");
 const AssetServer = @import("shared").AssetServer;
 pub const Renderer = @import("Renderer.zig");
@@ -21,23 +21,29 @@ pub const Info = struct {
 
 pub const World = struct {
     mutex: std.Io.Mutex,
-    ec: ec.World(&.{
-        nz.Transform3D(f32),
-        Camera,
-        Mesh,
+    ecz: ecz.World(&.{
+        component.transform,
+        component.camera,
+        component.mesh,
     }),
     enitity_mapping: std.AutoHashMap(u32, u32),
     my_server_id: u32 = 0,
 
+    pub const component = struct {
+        pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
+        pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
+        pub const mesh: ecz.Component = .{ .name = .mesh, .type = Mesh };
+    };
+
     pub fn init(allocator: std.mem.Allocator) !@This() {
         return .{
             .mutex = .init,
-            .ec = try .init(allocator, null),
+            .ecz = .init(allocator),
             .enitity_mapping = .init(allocator),
         };
     }
     pub fn deinit(self: *@This()) void {
-        self.ec.deinit();
+        self.ecz.deinit();
         self.enitity_mapping.deinit();
     }
 };
@@ -76,15 +82,11 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        var query = info.world.ec.query(&.{ Camera, nz.Transform3D(f32) });
+        const comp = World.component;
+        var query = info.world.ecz.query(&.{ comp.camera, comp.transform });
         if (query.next()) |entry| {
-            // std.log.debug("Camera!, local_client_ID: {d}, server_ID: {d} ", .{ @intFromEnum(entry), info.world.my_server_id });
-
-            // const id = info.world.enitity_mapping.get(info.world.my_server_id);
-            // if (id != null) std.log.debug("[RECIEVD] client ID: {d}", .{id.?});
-
-            const camera = entry.getPtr(Camera, info.world.ec).?;
-            const transform = entry.getPtr(nz.Transform3D(f32), info.world.ec).?;
+            const camera = entry.getComponentPtr(comp.camera);
+            const transform = entry.getComponentPtr(comp.transform);
             camera.update(info);
             try self.renderer.update(info);
 
@@ -104,9 +106,9 @@ pub const Context = struct {
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
-        var query = info.world.ec.query(&.{Camera});
+        var query = info.world.ecz.query(&.{World.component.camera});
         if (query.next()) |entry| {
-            try entry.getPtr(Camera, info.world.ec).?.eventUpdate(info, event);
+            try entry.getComponentPtr(World.component.camera).eventUpdate(info, event);
         }
     }
 };

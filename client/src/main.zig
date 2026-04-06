@@ -96,6 +96,7 @@ pub fn main(init: std.process.Init) !void {
             std.log.err("system table updated", .{});
             system_table.systemContextDeinit(&system_context);
             watcher.old_dynlib.?.close();
+            watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             asset_server.deinit();
             asset_server = try shared.AssetServer.init(allocator, init.io);

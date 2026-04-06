@@ -1,5 +1,5 @@
 const std = @import("std");
-const nz = @import("shared").nz;
+const nz = @import("shared").numz;
 const Vertex = @import("../Mesh.zig").Vertex;
 
 vertices: std.ArrayList(Vertex),

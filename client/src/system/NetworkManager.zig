@@ -3,7 +3,7 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const World = system.World;
 const Info = system.Info;
-const nz = shared.nz;
+const component = World.component;
 
 stream: std.Io.net.Stream,
 server_address: std.Io.net.IpAddress,
@@ -64,25 +64,33 @@ pub fn update(self: *@This(), info: *const Info) !void {
     for (self.command_queue.commands.items) |command| {
         switch (command) {
             .acknowledge => {
-                var new_camera = try info.world.ec.addEntity();
-                const id: u32 = @intCast(@intFromEnum(new_camera));
-                new_camera.set(system.Camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } }, info.world.ec);
-                new_camera.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 40 } }, info.world.ec);
-                try info.world.enitity_mapping.put(command.acknowledge.id, id);
+                var new_camera = try info.world.ecz.spawnEntity();
+                try new_camera.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
+                try new_camera.putComponent(component.transform, .{ .position = .{ 0, 0, 40 } });
+                try info.world.enitity_mapping.put(command.acknowledge.id, new_camera.id);
                 info.world.my_server_id = command.acknowledge.id;
-                std.log.debug("ack enetiess : {d}\n", .{info.world.ec.entity_count});
-                std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ id, command.acknowledge.id });
+                std.log.debug("ack enetiess : {d}\n", .{info.world.ecz.last_id});
+                std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_camera.id, command.acknowledge.id });
             },
             .spawn_entity => {
                 const server_id = command.spawn_entity.id;
                 if (info.world.enitity_mapping.contains(server_id)) continue; //TODO: maybe dont send enteties that exists already?
-                var new_entity = try info.world.ec.addEntity();
-                const id: u32 = @intCast(@intFromEnum(new_entity));
-                new_entity.set(nz.Transform3D(f32), .{ .position = .{ 0, 0, 0 } }, info.world.ec);
-                new_entity.set(system.Mesh, .{ .id = 0 }, info.world.ec);
-                try info.world.enitity_mapping.put(command.spawn_entity.id, @intCast(@intFromEnum(new_entity)));
-                std.log.debug("spawn enetiess : {d}\n", .{info.world.ec.entity_count});
-                std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ id, command.spawn_entity.id });
+                var new_entity = try info.world.ecz.spawnEntity();
+                try new_entity.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
+                try new_entity.putComponent(component.mesh, .{ .id = 0 });
+                try info.world.enitity_mapping.put(command.spawn_entity.id, new_entity.id);
+                std.log.debug("spawn enetiess : {d}\n", .{info.world.ecz.last_id});
+                std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, command.spawn_entity.id });
+            },
+            .despawn_entity => {
+                const server_id = command.despawn_entity.id;
+                const my_id = info.world.enitity_mapping.get(command.despawn_entity.id) orelse {
+                    std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{server_id});
+                    continue;
+                };
+                const entity = info.world.ecz.entityFromId(my_id);
+                try entity.despawn();
+                std.log.debug("DE-SPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
             },
             .update_transform => {
                 const update_transform_command = command.update_transform;
@@ -95,7 +103,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 }
 
                 // std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
-                const transform = info.world.ec.entityGetPtr(nz.Transform3D(f32), @enumFromInt(id.?)).?;
+                const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
+                const transform = entity.getComponentPtr(component.transform);
 
                 transform.position = update_transform_command.pos;
                 // std.log.debug("update pos {any},  ", .{transform.position});

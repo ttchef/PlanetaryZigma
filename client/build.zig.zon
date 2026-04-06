@@ -32,6 +32,10 @@
             .hash = "zig_objc-0.0.0-Ir_Sp3IfAQDUK5DWXJvWDmZqeMFjgSg26Ju7VlVhEeYz",
             .lazy = true,
         },
+        .ecz = .{
+            .url = "git+https://github.com/HaraldWik/ecz.git#ced6fd683a2d062ff63e2323beee5cf7e03e1a28",
+            .hash = "ecz-0.0.0-V6ubhy8fAACH4zBe3d6LFxg-yGLy6u7auPMAHbJ2zQaP",
+        },
     },
     .paths = .{
         "build.zig",
