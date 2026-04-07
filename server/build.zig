@@ -6,10 +6,11 @@ pub fn build(b: *std.Build) void {
 
     const io = b.graph.io;
     std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
-    // const zphysics = b.dependency("zphysics", .{
-    //     .use_double_precision = false,
-    //     .enable_cross_platform_determinism = true,
-    // });
+    const zphysics = b.dependency("zphysics", .{
+        .use_double_precision = false,
+        .enable_cross_platform_determinism = true,
+        .shared = true,
+    });
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
 
@@ -22,15 +23,16 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "shared", .module = shared },
-                // .{ .name = "zphy", .module = zphysics.module("root") },
+                .{ .name = "zphy", .module = zphysics.module("root") },
             },
             .link_libc = true,
         }),
         .linkage = .dynamic,
     });
 
+    system.root_module.linkLibrary(zphysics.artifact("joltc"));
+
     b.installArtifact(system);
-    // system.root_module.linkLibrary(zphysics.artifact("joltc"));
 
     const exe = b.addExecutable(.{
         .name = "server",

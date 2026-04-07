@@ -97,7 +97,7 @@ pub const Context = struct {
             try input_command.write(writer);
             try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
 
-            // std.log.debug("pos {any},  ", .{transform.position});
+            std.log.debug("pos {any},  ", .{transform.position});
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
