@@ -101,7 +101,6 @@ pub fn reload(self: *@This(), pre_reload: bool) !void {
 
 pub fn update(self: *@This(), info: *const Info) !void {
     const world = info.world;
-    const dt = info.delta_time;
 
     var fixed_writer_buffer: [1024]u8 = undefined;
     var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
@@ -121,6 +120,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     std.log.debug("connect ", .{});
                     var entity = try world.ecz.spawnEntity();
                     _ = try entity.addComponent(component.transform);
+                    _ = try entity.putComponent(component.collider, .{ .shape = .box });
+                    _ = try entity.addComponent(component.input);
                     client.entity_id = entity.id;
                     try client.sendCommand(self.io, self.socket, writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     try self.pending_spawn.append(self.allocator, .{ .id = entity.id, .entity_type = .player });
@@ -134,19 +135,9 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     // try clients_to_remove.append(self.allocator, .{ .ip = client_address, .client = client });
                 },
                 .input => {
-                    const input = command.input;
                     const input_entity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-                    var transform = input_entity.getComponentPtr(component.transform);
-
-                    if (input.left) transform.position[0] -= dt;
-                    // if (input.left) {
-                    //     transform.position = .{ 0, 0, 100 };
-                    // }
-                    if (input.right) transform.position[0] += dt;
-                    if (input.up) transform.position[1] -= dt;
-                    if (input.down) transform.position[1] += dt;
-                    if (input.forward) transform.position[2] -= dt;
-                    if (input.backward) transform.position[2] += dt;
+                    const input = input_entity.getComponentPtr(component.input);
+                    input.* = command.input;
                 },
                 else => {
                     std.log.err("Unhandled command {s}", .{@tagName(command)});

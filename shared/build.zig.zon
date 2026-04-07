@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0-dev.3013+abd131e33",
     .dependencies = .{
         .numz = .{
-            .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
-            .hash = "numz-0.0.2-V-sGm0ewAAAVATHTuvzqC2LVu7uHpaWxR_o8CIf5qu2F",
+            .url = "git+https://github.com/HaraldWik/numz#5dd4b32686ee58eca6dc1d0462b6887245a29043",
+            .hash = "numz-0.0.2-V-sGm_TFAADvFpAaR-rHZX9j3AyJ8aOChYPIdZFAONax",
         },
         .ecz = .{
             .url = "git+https://github.com/HaraldWik/ecz#88bf5bcc69406017c6a455a6200a455c428e7e1b",

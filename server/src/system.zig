@@ -4,8 +4,7 @@ const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
 const nz = shared.numz;
 pub const ecz = shared.ecz;
-// const Physics = @import("Physics.zig");
-// physics: *Physics,
+const Physics = @import("system/Physics.zig");
 
 pub const Info = struct {
     delta_time: f32,
@@ -18,10 +17,14 @@ pub const World = struct {
 
     ecz: ecz.World(&.{
         component.transform,
+        component.collider,
+        component.input,
     }),
 
     pub const component = struct {
         pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
+        pub const collider: ecz.Component = .{ .name = .collider, .type = Physics.Collider };
+        pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
     };
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
@@ -41,6 +44,7 @@ pub const Context = struct {
     world: *World,
     io: std.Io,
     network_manager: NetworkManager,
+    physics: Physics,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -55,19 +59,28 @@ pub const Context = struct {
             .io = data.io,
             .world = data.world,
             .network_manager = undefined,
+            .physics = undefined,
         };
         try self.network_manager.init(data.allocator, data.io);
+        try self.physics.init(data.allocator, data.io);
     }
 
     pub fn deinit(self: *@This()) !void {
         try self.network_manager.deinit();
+        self.physics.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
         try self.network_manager.update(info);
+        try self.physics.update(info);
+        // self.request_exit = true;
+        // if (info.elapsed_time > 1) self.request_exit = true;
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
+        std.log.debug("before-1", .{});
+        self.physics.reload(pre_reload, self.world);
         try self.network_manager.reload(pre_reload);
+        std.log.debug("before-0", .{});
     }
 };
 
