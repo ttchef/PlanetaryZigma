@@ -213,7 +213,7 @@ const PipelineResource = struct {
     topology: PrimitiveTopology,
 };
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 window: *glfw.GLFWwindow,
 device: objc.Object,
 command_queue: objc.Object,
@@ -235,7 +235,7 @@ index_buffer: ?objc.Object = null,
 index_type: IndexType = .uint16,
 index_offset: NSUInteger = 0,
 
-pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !MetalRenderer {
+pub fn init(gpa: std.mem.Allocator, window: *glfw.GLFWwindow) !MetalRenderer {
     const cocoa_window = glfwGetCocoaWindow(window) orelse return error.NoCocoaWindow;
     const ns_window = objc.Object.fromId(cocoa_window);
     const content_view = ns_window.msgSend(objc.Object, "contentView", .{});
@@ -254,7 +254,7 @@ pub fn init(allocator: std.mem.Allocator, window: *glfw.GLFWwindow) !MetalRender
     content_view.msgSend(void, "setLayer:", .{metal_layer});
 
     return .{
-        .allocator = allocator,
+        .gpa = gpa,
         .window = window,
         .device = device,
         .command_queue = command_queue,
@@ -282,7 +282,7 @@ pub fn deinit(self: *MetalRenderer) void {
         if (entry) |shader| {
             shader.function.msgSend(void, "release", .{});
             shader.library.msgSend(void, "release", .{});
-            self.allocator.free(shader.msl_source);
+            self.gpa.free(shader.msl_source);
         }
     }
     for (self.samplers.items) |entry| {
@@ -295,11 +295,11 @@ pub fn deinit(self: *MetalRenderer) void {
         if (entry) |buffer| buffer.object.msgSend(void, "release", .{});
     }
 
-    self.pipelines.deinit(self.allocator);
-    self.shaders.deinit(self.allocator);
-    self.samplers.deinit(self.allocator);
-    self.textures.deinit(self.allocator);
-    self.buffers.deinit(self.allocator);
+    self.pipelines.deinit(self.gpa);
+    self.shaders.deinit(self.gpa);
+    self.samplers.deinit(self.gpa);
+    self.textures.deinit(self.gpa);
+    self.buffers.deinit(self.gpa);
 
     self.command_queue.msgSend(void, "release", .{});
     self.device.msgSend(void, "release", .{});
@@ -355,7 +355,7 @@ pub fn createBuffer(self: *MetalRenderer, desc: BufferDesc) !BufferHandle {
     return try appendHandle(
         BufferHandle,
         BufferResource,
-        self.allocator,
+        self.gpa,
         &self.buffers,
         .{ .object = buffer, .size = desc.size },
     );
@@ -380,7 +380,7 @@ pub fn createTexture(self: *MetalRenderer, desc: TextureDesc) !TextureHandle {
     return try appendHandle(
         TextureHandle,
         TextureResource,
-        self.allocator,
+        self.gpa,
         &self.textures,
         .{ .object = texture, .desc = desc },
     );
@@ -402,16 +402,16 @@ pub fn createSampler(self: *MetalRenderer, desc: SamplerDesc) !SamplerHandle {
     return try appendHandle(
         SamplerHandle,
         SamplerResource,
-        self.allocator,
+        self.gpa,
         &self.samplers,
         .{ .object = sampler },
     );
 }
 
 pub fn createShader(self: *MetalRenderer, desc: ShaderDesc) !ShaderHandle {
-    const compiled_msl = try compileGlslToMsl(self.allocator, desc.glsl_source, desc.stage, desc.entry_point);
-    errdefer self.allocator.free(compiled_msl.source);
-    errdefer self.allocator.free(compiled_msl.entry_point);
+    const compiled_msl = try compileGlslToMsl(self.gpa, desc.glsl_source, desc.stage, desc.entry_point);
+    errdefer self.gpa.free(compiled_msl.source);
+    errdefer self.gpa.free(compiled_msl.entry_point);
 
     const NSString = objc.getClass("NSString") orelse return error.NoNSString;
     const MTLCompileOptions = objc.getClass("MTLCompileOptions") orelse return error.NoMTLCompileOptions;
@@ -436,16 +436,16 @@ pub fn createShader(self: *MetalRenderer, desc: ShaderDesc) !ShaderHandle {
     const function = library.msgSend(objc.Object, "newFunctionWithName:", .{entry_nsstring});
     if (function.value == null) {
         library.msgSend(void, "release", .{});
-        self.allocator.free(compiled_msl.entry_point);
+        self.gpa.free(compiled_msl.entry_point);
         return error.ShaderEntryPointMissing;
     }
 
-    self.allocator.free(compiled_msl.entry_point);
+    self.gpa.free(compiled_msl.entry_point);
 
     return try appendHandle(
         ShaderHandle,
         ShaderResource,
-        self.allocator,
+        self.gpa,
         &self.shaders,
         .{
             .stage = desc.stage,
@@ -502,7 +502,7 @@ pub fn createPipeline(self: *MetalRenderer, desc: PipelineDesc) !PipelineHandle 
     return try appendHandle(
         PipelineHandle,
         PipelineResource,
-        self.allocator,
+        self.gpa,
         &self.pipelines,
         .{
             .object = pipeline,
@@ -557,7 +557,7 @@ pub fn destroyShader(self: *MetalRenderer, handle: ShaderHandle) !void {
     const resource = entry.*.?;
     resource.function.msgSend(void, "release", .{});
     resource.library.msgSend(void, "release", .{});
-    self.allocator.free(resource.msl_source);
+    self.gpa.free(resource.msl_source);
     entry.* = null;
 }
 
@@ -794,7 +794,7 @@ pub fn dispatch(_: *MetalRenderer, _: u32, _: u32, _: u32) !void {
 }
 
 fn compileGlslToMsl(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     glsl_source: [:0]const u8,
     stage: ShaderStage,
     entry_point: [:0]const u8,
@@ -841,8 +841,8 @@ fn compileGlslToMsl(
     if (spirv_len_bytes == 0 or spirv_len_bytes % @sizeOf(u32) != 0) return error.InvalidSpirvOutput;
 
     const spirv_word_count = spirv_len_bytes / @sizeOf(u32);
-    const spirv_words = try allocator.alloc(u32, spirv_word_count);
-    defer allocator.free(spirv_words);
+    const spirv_words = try gpa.alloc(u32, spirv_word_count);
+    defer gpa.free(spirv_words);
 
     const spirv_bytes_ptr = shaderc.shaderc_result_get_bytes(result) orelse return error.InvalidSpirvOutput;
     const spirv_bytes = @as([*]const u8, @ptrCast(spirv_bytes_ptr))[0..spirv_len_bytes];
@@ -924,9 +924,9 @@ fn compileGlslToMsl(
     );
     if (msl_source_ptr == null) return error.SpirvCrossCompileFailed;
 
-    const out_source = try allocator.dupeZ(u8, std.mem.sliceTo(msl_source_ptr, 0));
-    errdefer allocator.free(out_source);
-    const out_entry = try allocator.dupeZ(u8, std.mem.sliceTo(cleansed_entry_name, 0));
+    const out_source = try gpa.dupeZ(u8, std.mem.sliceTo(msl_source_ptr, 0));
+    errdefer gpa.free(out_source);
+    const out_entry = try gpa.dupeZ(u8, std.mem.sliceTo(cleansed_entry_name, 0));
 
     return .{
         .source = out_source,
@@ -1125,11 +1125,11 @@ fn castSelf(ptr: *anyopaque) *MetalRenderer {
 fn appendHandle(
     comptime Handle: type,
     comptime T: type,
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     list: *std.ArrayListUnmanaged(?T),
     value: T,
 ) !Handle {
-    try list.append(allocator, value);
+    try list.append(gpa, value);
     return @enumFromInt(list.items.len);
 }
 

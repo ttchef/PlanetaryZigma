@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = @import("test.zig");
 const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
 const nz = shared.numz;
@@ -13,7 +12,7 @@ pub const Info = struct {
 };
 
 pub const World = struct {
-    mutex: std.Io.Mutex,
+    mutex: std.Io.Mutex = .init,
 
     ecz: ecz.World(&.{
         component.transform,
@@ -27,11 +26,8 @@ pub const World = struct {
         pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
     };
 
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        return .{
-            .mutex = .init,
-            .ecz = .init(allocator),
-        };
+    pub fn init(gpa: std.mem.Allocator) !@This() {
+        return .{ .ecz = .init(gpa) };
     }
     pub fn deinit(self: *@This()) void {
         self.ecz.deinit();
@@ -39,30 +35,29 @@ pub const World = struct {
 };
 
 pub const Context = struct {
-    request_exit: bool,
-    allocator: std.mem.Allocator,
-    world: *World,
+    gpa: std.mem.Allocator,
     io: std.Io,
+    world: *World,
     network_manager: NetworkManager,
     physics: Physics,
+    request_exit: bool = false,
 
     pub const Data = struct {
-        allocator: std.mem.Allocator,
+        gpa: std.mem.Allocator,
         world: *World,
         io: std.Io,
     };
 
     pub fn init(self: *@This(), data: *const Data) !void {
         self.* = .{
-            .request_exit = false,
-            .allocator = data.allocator,
+            .gpa = data.gpa,
             .io = data.io,
             .world = data.world,
             .network_manager = undefined,
             .physics = undefined,
         };
-        try self.network_manager.init(data.allocator, data.io);
-        try self.physics.init(data.allocator, data.io);
+        try self.network_manager.init(data.gpa, data.io);
+        try self.physics.init(data.gpa, data.io);
     }
 
     pub fn deinit(self: *@This()) !void {

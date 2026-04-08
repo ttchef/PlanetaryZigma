@@ -4,7 +4,7 @@ const check = @import("utils.zig").check;
 
 handle: c.VkInstance,
 
-pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
+pub fn init(gpa: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
     var version: u32 = undefined;
     try check(c.vkEnumerateInstanceVersion(&version));
     if (c.VK_API_VERSION_MAJOR(version) < 1 or c.VK_API_VERSION_MINOR(version) < 3) return error.DynamicRenderingUnsupported;
@@ -12,8 +12,8 @@ pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]cons
     var count: u32 = undefined;
     try check(c.vkEnumerateInstanceExtensionProperties(null, &count, null));
 
-    const enum_extensions: []c.VkExtensionProperties = try allocator.alloc(c.VkExtensionProperties, count);
-    defer allocator.free(enum_extensions);
+    const enum_extensions: []c.VkExtensionProperties = try gpa.alloc(c.VkExtensionProperties, count);
+    defer gpa.free(enum_extensions);
 
     try check(c.vkEnumerateInstanceExtensionProperties(null, &count, enum_extensions.ptr));
 

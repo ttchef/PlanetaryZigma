@@ -7,7 +7,6 @@ const NetworkManager = @import("system/NetworkManager.zig");
 const AssetServer = @import("shared").AssetServer;
 pub const Renderer = @import("Renderer.zig");
 
-pub const Transform = nz.Transform3D(f32);
 pub const Camera = @import("system/Camera.zig");
 pub const Mesh = struct {
     id: u32,
@@ -19,74 +18,69 @@ pub const Info = struct {
     world: *World,
 };
 
+pub const component = struct {
+    pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
+    pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
+    pub const mesh: ecz.Component = .{ .name = .mesh, .type = Mesh };
+};
+
 pub const World = struct {
-    mutex: std.Io.Mutex,
+    mutex: std.Io.Mutex = .init,
     ecz: ecz.World(&.{
         component.transform,
         component.camera,
         component.mesh,
     }),
-    enitity_mapping: std.AutoHashMap(u32, u32),
+    enitity_mapping: std.AutoHashMapUnmanaged(u32, u32) = .empty,
     my_server_id: u32 = 0,
 
-    pub const component = struct {
-        pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
-        pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
-        pub const mesh: ecz.Component = .{ .name = .mesh, .type = Mesh };
-    };
-
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        return .{
-            .mutex = .init,
-            .ecz = .init(allocator),
-            .enitity_mapping = .init(allocator),
-        };
+    pub fn init(gpa: std.mem.Allocator) !@This() {
+        return .{ .ecz = .init(gpa) };
     }
     pub fn deinit(self: *@This()) void {
         self.ecz.deinit();
-        self.enitity_mapping.deinit();
+        self.enitity_mapping.deinit(self.ecz.gpa);
     }
 };
 
 pub const Context = struct {
+    gpa: std.mem.Allocator,
+    io: std.Io,
     asset_server: *AssetServer,
     renderer: Renderer,
-    allocator: std.mem.Allocator,
-    io: std.Io,
     network_manager: NetworkManager,
 
     pub const Data = struct {
-        allocator: std.mem.Allocator,
+        gpa: std.mem.Allocator,
+        io: std.Io,
         asset_server: *AssetServer,
         platform: yes.Platform,
         window: *yes.Window,
         stream: std.Io.net.Stream,
-        io: std.Io,
         server_address: std.Io.net.IpAddress,
     };
 
     pub fn init(self: *@This(), data: Data) !void {
         self.* = .{
-            .asset_server = data.asset_server,
-            .renderer = try .init(data.allocator, data.asset_server, data.platform, data.window),
-            .allocator = data.allocator,
+            .gpa = data.gpa,
             .io = data.io,
-            .network_manager = .{ .stream = undefined, .server_address = undefined, .server_listen = undefined },
+            .asset_server = data.asset_server,
+            .renderer = try .init(data.gpa, data.asset_server, data.platform, data.window),
+            .network_manager = undefined,
         };
-        try self.network_manager.init(data.allocator, data.io, data.stream, data.server_address);
+        try self.network_manager.init(data.gpa, data.io, data.stream, data.server_address);
     }
 
     pub fn deinit(self: *@This()) !void {
-        self.renderer.deinit(self.allocator);
+        self.renderer.deinit(self.gpa);
         try self.network_manager.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        const comp = World.component;
-        var query = info.world.ecz.query(&.{ comp.camera, comp.transform });
-        if (query.next()) |entry| {
-            const camera = entry.getComponentPtr(comp.camera);
-            const transform = entry.getComponentPtr(comp.transform);
+        var query = info.world.ecz.query(&.{ component.camera, component.transform });
+        if (query.next()) |entity| {
+            const camera = entity.getComponentPtr(component.camera);
+            const transform = entity.getComponentPtr(component.transform);
             camera.update(info);
             try self.renderer.update(info);
 
@@ -97,7 +91,7 @@ pub const Context = struct {
             try input_command.write(writer);
             try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
 
-            std.log.debug("pos {any},  ", .{transform.position});
+            // std.log.debug("pos {any},  ", .{transform.position});
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
@@ -106,9 +100,9 @@ pub const Context = struct {
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
-        var query = info.world.ecz.query(&.{World.component.camera});
-        if (query.next()) |entry| {
-            try entry.getComponentPtr(World.component.camera).eventUpdate(info, event);
+        var query = info.world.ecz.query(&.{component.camera});
+        if (query.next()) |entity| {
+            try entity.getComponentPtr(component.camera).eventUpdate(info, event);
         }
     }
 };

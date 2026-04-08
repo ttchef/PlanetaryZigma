@@ -3,41 +3,42 @@ const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const AssetServer = @import("shared").AssetServer;
 const Device = @import("device.zig").Logical;
-const ext = @import("procFunctions.zig").device.ProcTable;
+const ext = @import("procs.zig").device.ProcTable;
 pub const check = @import("utils.zig").check;
+
+handle: c.VkShaderEXT = null,
+device: *const Device,
+shader_create_info: c.VkShaderCreateInfoEXT,
+shader_name: []const u8,
 
 pub const PushConstant = extern struct {
     model_matrix: [16]f32,
     buffer_address: c.VkDeviceAddress,
 };
 
-device: Device,
-shader_create_info: c.VkShaderCreateInfoEXT,
-shader_name: []const u8,
-handle: c.VkShaderEXT = null,
-
-pub fn init(allocator: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
-    const self = try allocator.create(@This());
-    self.device = device;
-    self.shader_create_info = sahder_create_info;
-    self.shader_name = shader_name;
-    self.handle = null;
+pub fn init(gpa: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
+    const self = try gpa.create(@This());
+    self.* = .{
+        .device = &device,
+        .shader_create_info = sahder_create_info,
+        .shader_name = shader_name,
+    };
     try asset_server.loadAsset(@This(), self, shader_name, loadShader);
     return self;
 }
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     ext.vkDestroyShaderEXT(self.device.handle, self.handle, null);
     self.* = undefined;
-    allocator.destroy(self);
+    gpa.destroy(self);
 }
 
-fn loadShader(user_data: *anyopaque, path: []const u8, io: std.Io, allocator: std.mem.Allocator, file: std.Io.File) !void {
-    _ = path;
+fn loadShader(user_data: *anyopaque, gpa: std.mem.Allocator, io: std.Io, file: std.Io.File, file_path: []const u8) !void {
+    _ = file_path;
     const self: *@This() = @ptrCast(@alignCast(user_data));
     var buffer: [4096]u8 = undefined;
     var reader = file.reader(io, &buffer);
-    const content = try reader.interface.allocRemaining(allocator, .unlimited);
-    defer allocator.free(content);
+    const content = try reader.interface.allocRemaining(gpa, .unlimited);
+    defer gpa.free(content);
     std.debug.print("size:  {d}\n", .{content.len});
 
     const compiler = shaderc.shaderc_compiler_initialize();

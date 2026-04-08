@@ -1,9 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-// lib_path_buffer: [std.fs.max_path_bytes]u8,
-// lib_path_len: usize,
-
 dynlib: ?std.DynLib = null,
 old_dynlib: ?std.DynLib = null,
 dir_path: []const u8,
@@ -11,7 +8,6 @@ mtime: std.Io.Timestamp,
 lib_name: []const u8,
 
 pub fn init(comptime library_name: []const u8, io: std.Io) !@This() {
-    // const lib_name = "lib" ++ library_name ++ comptime builtin.target.dynamicLibSuffix();
     const lib_name = "lib" ++ library_name;
     const search_paths: []const [:0]const u8 = &.{
         "../lib/",

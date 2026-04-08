@@ -4,7 +4,7 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const nz = shared.numz;
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 io: std.Io,
 global_state_reload: zphy.GlobalState,
 physics_system: *zphy.PhysicsSystem,
@@ -163,15 +163,15 @@ const ContactListener = extern struct {
     }
 };
 
-pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
-    try zphy.init(allocator, io, .{});
-    const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
+pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
+    try zphy.init(gpa, io, .{});
+    const broad_phase_layer_interface = try gpa.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
-    const object_layer_pair_filter = try allocator.create(ObjectLayerPairFilter);
+    const object_layer_pair_filter = try gpa.create(ObjectLayerPairFilter);
     object_layer_pair_filter.* = .{};
-    const object_vs_broad_phase_layer_filter = try allocator.create(ObjectVsBroadPhaseLayerFilter);
+    const object_vs_broad_phase_layer_filter = try gpa.create(ObjectVsBroadPhaseLayerFilter);
     object_vs_broad_phase_layer_filter.* = .{};
-    const contact_listener = try allocator.create(ContactListener);
+    const contact_listener = try gpa.create(ContactListener);
     contact_listener.* = .{};
 
     // Create physics system
@@ -193,7 +193,7 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
 
     self.* = .{
         .global_state_reload = undefined,
-        .allocator = allocator,
+        .gpa = gpa,
         .io = io,
         .contact_listener = contact_listener,
         .physics_system = physics_system,
@@ -205,10 +205,10 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
 
 pub fn deinit(self: *@This()) void {
     zphy.PhysicsSystem.destroy(self.physics_system);
-    self.allocator.destroy(self.contact_listener);
-    self.allocator.destroy(self.broad_phase_layer_interface);
-    self.allocator.destroy(self.object_layer_pair_filter);
-    self.allocator.destroy(self.object_vs_broad_phase_layer_filter);
+    self.gpa.destroy(self.contact_listener);
+    self.gpa.destroy(self.broad_phase_layer_interface);
+    self.gpa.destroy(self.object_layer_pair_filter);
+    self.gpa.destroy(self.object_vs_broad_phase_layer_filter);
     zphy.deinit();
 }
 
@@ -225,7 +225,7 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
         self.physics_system = undefined;
         self.global_state_reload = zphy.preReload();
     } else {
-        zphy.postReload(self.allocator, self.io, self.global_state_reload);
+        zphy.postReload(self.gpa, self.io, self.global_state_reload);
         std.log.debug("XDDD", .{});
 
         // Refresh vtable pointers FIRST - before creating physics system
@@ -248,8 +248,8 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
         ) catch unreachable;
         self.physics_system.setGravity(.{ 0, 0, 0 });
         var query = world.ecz.query(&.{system.World.component.collider});
-        while (query.next()) |entry| {
-            const collider = entry.getComponentPtr(system.World.component.collider);
+        while (query.next()) |entity| {
+            const collider = entity.getComponentPtr(system.World.component.collider);
             collider.body_id = null;
         }
         // TODO: Restore body states here when you have active bodies
@@ -259,9 +259,9 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
 pub fn update(self: *@This(), info: *const system.Info) !void {
     var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.transform });
     const body_interface = self.physics_system.getBodyInterfaceMut();
-    while (query.next()) |entry| {
-        const collider = entry.getComponentPtr(system.World.component.collider);
-        const transform = entry.getComponent(system.World.component.transform);
+    while (query.next()) |entity| {
+        const collider = entity.getComponentPtr(system.World.component.collider);
+        const transform = entity.getComponent(system.World.component.transform);
         if (collider.body_id == null) {
             std.debug.print("PHYSOCS\n", .{});
             const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
@@ -277,7 +277,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 .shape = box_shape,
                 // .motion_type = collider.motion_type,
                 .object_layer = object_layers.moving,
-                .user_data = entry.id,
+                .user_data = entity.id,
                 .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
                 // .max_angular_velocity = collider.max_angular_velocity,
                 //.allow_sleeping = false,
@@ -329,9 +329,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 fn playerInput(self: *@This(), info: *const system.Info) !void {
     const body = self.physics_system.getBodyInterfaceMut();
     var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.input });
-    while (query.next()) |entry| {
-        const collider = entry.getComponentPtr(system.World.component.collider);
-        const input: shared.net.Command.Input = entry.getComponent(system.World.component.input);
+    while (query.next()) |entity| {
+        const collider = entity.getComponentPtr(system.World.component.collider);
+        const input: shared.net.Command.Input = entity.getComponent(system.World.component.input);
         if (collider.body_id) |id| {
             // var move = nz.Vec3(f32){ 0, 0, 0 };
             // const velocity = 10;
