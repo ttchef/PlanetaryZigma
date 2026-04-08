@@ -4,7 +4,6 @@ const AssetServer = @import("shared").AssetServer;
 const system = @import("../system.zig");
 const Info = system.Info;
 const World = system.World;
-pub const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
@@ -19,9 +18,12 @@ const Buffer = @import("Vulkan/Buffer.zig");
 const descriptor = @import("Vulkan/desrciptor.zig");
 const pipeline = @import("Vulkan/pipeline.zig");
 const Shader = @import("Vulkan/Shader.zig");
-pub const check = @import("Vulkan/utils.zig").check;
-const proc = @import("Vulkan/procFunctions.zig");
-const ext = proc.device.ProcTable;
+const procs = @import("Vulkan/procs.zig");
+const ext = procs.device.ProcTable;
+
+const check = @import("Vulkan/utils.zig").check;
+
+pub const c = @import("vulkan");
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -60,7 +62,7 @@ pub const InitOptions = struct {
 pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
     const self = try allocator.create(@This());
     self.instance = try .init(allocator, options.instance.extensions, options.instance.layers);
-    proc.instance.load(self.instance.handle, null);
+    procs.instance.load(self.instance.handle, null);
     self.debug_messenger = try .init(self.instance, .{
         .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
@@ -74,7 +76,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     } else return error.configSurface;
     self.physical_device = try .pick(self.instance, self.surface.handle);
     self.device = try .init(self.physical_device, options.device.extensions);
-    proc.device.load(self.device.handle, null);
+    procs.device.load(self.device.handle, null);
     self.vma = try .init(self.instance, self.physical_device, self.device);
     self.swapchain = try .init(allocator, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
 
@@ -187,11 +189,11 @@ pub fn update(self: *@This(), info: *const Info) !void {
 
     try render(self, cmd_buffer, current_frame, info);
 
-    var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
+    var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
     self.swapchain.draw_image.copyOntoImage(
         cmd_buffer,
-        .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
+        .{ .vk_image = self.swapchain.images[image_index], .extent = self.swapchain.extent },
     );
 
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
@@ -403,7 +405,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    const comp = system.World.component;
+    const comp = system.component;
     var query = info.world.ecz.query(&.{comp.camera});
     const camera = query.next().?.getComponent(comp.camera);
     const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);

@@ -22,4 +22,6 @@ pub fn deinit(self: *@This()) void {
     self.spawn_queue.deinit(self.allocator);
 }
 
-pub fn update(self: *@This()) !void {}
+pub fn update(self: *@This()) !void {
+    _ = self;
+}

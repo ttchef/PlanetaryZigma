@@ -87,18 +87,6 @@ pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, plat
         else => &.{},
     };
 
-    // var extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
-    //     .windows => &.{
-    //         "VK_KHR_surface",
-    //         "VK_KHR_win32_surface",
-    //         Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-    //     },
-    //     else => &.{
-    //         // "VK_KHR_xlib_surface",
-    //         // "VK_KHR_wayland_surface",
-    //     },
-    // };
-
     var yes_surface_create_user_data: YesSurfaceCreateUserData = .{ .platform = platform, .window = window };
 
     const vulkan_renderer: *Vulkan = try .init(allocator, asset_server, .{

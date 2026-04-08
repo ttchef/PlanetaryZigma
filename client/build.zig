@@ -79,17 +79,16 @@ pub fn build(b: *std.Build) void {
         });
 
         const shaderc_dep = b.dependency("shaderc", .{});
-        const shaderc_c = b.addTranslateC(.{
+        const shaderc = b.addTranslateC(.{
             .root_source_file = shaderc_dep.path("libshaderc/include/shaderc/shaderc.h"),
             .target = target,
             .optimize = optimize,
         });
-        const shaderc = shaderc_c.createModule();
-        system.root_module.addImport("shaderc", shaderc);
+        system.root_module.addImport("shaderc", shaderc.createModule());
 
         system.root_module.addImport("vulkan", vulkan);
         exe.root_module.linkSystemLibrary("vulkan", .{});
-        exe.root_module.linkSystemLibrary("shaderc_shared", .{});
+        exe.root_module.linkSystemLibrary("shaderc", .{});
         exe.root_module.link_libcpp = true;
     }
 

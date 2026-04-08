@@ -248,8 +248,8 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
         ) catch unreachable;
         self.physics_system.setGravity(.{ 0, 0, 0 });
         var query = world.ecz.query(&.{system.World.component.collider});
-        while (query.next()) |entry| {
-            const collider = entry.getComponentPtr(system.World.component.collider);
+        while (query.next()) |entity| {
+            const collider = entity.getComponentPtr(system.World.component.collider);
             collider.body_id = null;
         }
         // TODO: Restore body states here when you have active bodies
@@ -259,9 +259,9 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
 pub fn update(self: *@This(), info: *const system.Info) !void {
     var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.transform });
     const body_interface = self.physics_system.getBodyInterfaceMut();
-    while (query.next()) |entry| {
-        const collider = entry.getComponentPtr(system.World.component.collider);
-        const transform = entry.getComponent(system.World.component.transform);
+    while (query.next()) |entity| {
+        const collider = entity.getComponentPtr(system.World.component.collider);
+        const transform = entity.getComponent(system.World.component.transform);
         if (collider.body_id == null) {
             std.debug.print("PHYSOCS\n", .{});
             const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
@@ -277,7 +277,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 .shape = box_shape,
                 // .motion_type = collider.motion_type,
                 .object_layer = object_layers.moving,
-                .user_data = entry.id,
+                .user_data = entity.id,
                 .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
                 // .max_angular_velocity = collider.max_angular_velocity,
                 //.allow_sleeping = false,
@@ -329,9 +329,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 fn playerInput(self: *@This(), info: *const system.Info) !void {
     const body = self.physics_system.getBodyInterfaceMut();
     var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.input });
-    while (query.next()) |entry| {
-        const collider = entry.getComponentPtr(system.World.component.collider);
-        const input: shared.net.Command.Input = entry.getComponent(system.World.component.input);
+    while (query.next()) |entity| {
+        const collider = entity.getComponentPtr(system.World.component.collider);
+        const input: shared.net.Command.Input = entity.getComponent(system.World.component.input);
         if (collider.body_id) |id| {
             // var move = nz.Vec3(f32){ 0, 0, 0 };
             // const velocity = 10;

@@ -1,5 +1,4 @@
 const std = @import("std");
-const testing = @import("test.zig");
 const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
 const nz = shared.numz;
@@ -13,7 +12,7 @@ pub const Info = struct {
 };
 
 pub const World = struct {
-    mutex: std.Io.Mutex,
+    mutex: std.Io.Mutex = .init,
 
     ecz: ecz.World(&.{
         component.transform,
@@ -28,10 +27,7 @@ pub const World = struct {
     };
 
     pub fn init(allocator: std.mem.Allocator) !@This() {
-        return .{
-            .mutex = .init,
-            .ecz = .init(allocator),
-        };
+        return .{ .ecz = .init(allocator) };
     }
     pub fn deinit(self: *@This()) void {
         self.ecz.deinit();
@@ -39,12 +35,12 @@ pub const World = struct {
 };
 
 pub const Context = struct {
-    request_exit: bool,
     allocator: std.mem.Allocator,
-    world: *World,
     io: std.Io,
+    world: *World,
     network_manager: NetworkManager,
     physics: Physics,
+    request_exit: bool = false,
 
     pub const Data = struct {
         allocator: std.mem.Allocator,
@@ -54,7 +50,6 @@ pub const Context = struct {
 
     pub fn init(self: *@This(), data: *const Data) !void {
         self.* = .{
-            .request_exit = false,
             .allocator = data.allocator,
             .io = data.io,
             .world = data.world,

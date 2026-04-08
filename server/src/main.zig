@@ -2,7 +2,7 @@ const std = @import("std");
 const system = @import("system");
 const shared = @import("shared");
 const World = system.World;
-const nz = shared.nz;
+const nz = shared.numz;
 
 pub fn main(init: std.process.Init) !void {
     std.debug.print("server\n", .{});

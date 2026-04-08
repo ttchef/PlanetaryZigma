@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("vulkan");
 const Instance = @import("Instance.zig");
 const check = @import("utils.zig").check;
-const ext = @import("procFunctions.zig").instance.ProcTable;
+const ext = @import("procs.zig").instance.ProcTable;
 
 handle: c.VkDebugUtilsMessengerEXT,
 
@@ -47,14 +47,6 @@ pub fn deinit(self: @This(), instance: Instance) void {
 }
 
 fn callback(severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT, _: c.VkDebugUtilsMessageTypeFlagsEXT, callback_data: [*c]const c.VkDebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) c.VkBool32 {
-    //NOTE: for deperate times if Vulkan Validation layers crashes.
-    // const cc = @cImport({
-    //     @cInclude("vulkan/vulkan.h");
-    //     @cInclude("stdio.h");
-    // });
-    // const cbd = callback_data orelse return c.VK_FALSE;
-    // const msg_ptr = cbd.*.pMessage;
-    // const msg: []const u8 = if (msg_ptr != null) std.mem.span(msg_ptr) else "<null>";
     _ = switch (severity) {
         c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),
         c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => _ = std.c.printf("VK:  %s\n", callback_data.*.pMessage),

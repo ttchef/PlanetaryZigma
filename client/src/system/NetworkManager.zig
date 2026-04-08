@@ -1,23 +1,25 @@
 const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
+const component = system.component;
 const World = system.World;
 const Info = system.Info;
-const component = World.component;
 
+allocator: std.mem.Allocator,
+io: std.Io,
 stream: std.Io.net.Stream,
 server_address: std.Io.net.IpAddress,
 server_listen: std.Io.Future(@typeInfo(@TypeOf(listen)).@"fn".return_type.?),
 command_queue: shared.net.CommandQueue = .{},
-io: std.Io = undefined,
-allocator: std.mem.Allocator = undefined,
 
 pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, server_address: std.Io.net.IpAddress) !void {
-    self.server_listen = try io.concurrent(listen, .{ allocator, io, stream, &self.command_queue });
-    self.stream = stream;
-    self.server_address = server_address;
-    self.io = io;
-    self.allocator = allocator;
+    self.* = .{
+        .allocator = allocator,
+        .io = io,
+        .stream = stream,
+        .server_address = server_address,
+        .server_listen = try io.concurrent(listen, .{ allocator, io, stream, &self.command_queue }),
+    };
 }
 
 pub fn deinit(self: *@This()) !void {
@@ -67,19 +69,19 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 var new_camera = try info.world.ecz.spawnEntity();
                 try new_camera.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
                 try new_camera.putComponent(component.transform, .{ .position = .{ 0, 0, 40 } });
-                try info.world.enitity_mapping.put(command.acknowledge.id, new_camera.id);
+                try info.world.enitity_mapping.put(self.allocator, command.acknowledge.id, new_camera.id);
                 info.world.my_server_id = command.acknowledge.id;
-                std.log.debug("ack enetiess : {d}\n", .{info.world.ecz.last_id});
+                std.log.debug("ack entities: {d}", .{info.world.ecz.last_id});
                 std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_camera.id, command.acknowledge.id });
             },
             .spawn_entity => {
                 const server_id = command.spawn_entity.id;
-                if (info.world.enitity_mapping.contains(server_id)) continue; //TODO: maybe dont send enteties that exists already?
+                if (info.world.enitity_mapping.contains(server_id)) continue; //TODO: maybe dont send entities that exists already?
                 var new_entity = try info.world.ecz.spawnEntity();
                 try new_entity.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
                 try new_entity.putComponent(component.mesh, .{ .id = 0 });
-                try info.world.enitity_mapping.put(command.spawn_entity.id, new_entity.id);
-                std.log.debug("spawn enetiess : {d}\n", .{info.world.ecz.last_id});
+                try info.world.enitity_mapping.put(self.allocator, command.spawn_entity.id, new_entity.id);
+                std.log.debug("spawn entities : {d}", .{info.world.ecz.last_id});
                 std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, command.spawn_entity.id });
             },
             .despawn_entity => {
@@ -90,7 +92,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 };
                 const entity = info.world.ecz.entityFromId(my_id);
                 try entity.despawn();
-                std.log.debug("DE-SPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
+                std.log.debug("DESPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
             },
             .update_transform => {
                 const update_transform_command = command.update_transform;
@@ -106,7 +108,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
                 const transform = entity.getComponentPtr(component.transform);
 
-                transform.position = update_transform_command.pos;
+                transform.position = update_transform_command.position;
                 // std.log.debug("update pos {any},  ", .{transform.position});
             },
             else => {

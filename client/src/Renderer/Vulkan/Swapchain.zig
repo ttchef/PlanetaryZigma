@@ -9,9 +9,9 @@ const Surface = @import("Surface.zig");
 const Image = @import("Image.zig");
 const check = @import("utils.zig").check;
 
-const max_frames_inflight: usize = 3;
 swapchain: c.VkSwapchainKHR,
-vk_images: [16]c.VkImage,
+present_mode: c.VkPresentModeKHR,
+images: [16]c.VkImage,
 render_semaphores: [16]c.VkSemaphore,
 image_count: u32,
 format: c.VkFormat,
@@ -22,6 +22,8 @@ depth_image: Image,
 current_frame_inflight: u32 = 0,
 frames: [max_frames_inflight]FrameData = undefined,
 
+const max_frames_inflight: usize = 3;
+
 pub fn init(
     allocator: std.mem.Allocator,
     vma: Vma,
@@ -31,8 +33,9 @@ pub fn init(
     width: u32,
     height: u32,
 ) !@This() {
+    const present_mode = try getPresentMode(allocator, physical_device, surface);
     const surface_format = try surface.getFormat(allocator, physical_device);
-    const swapchain = try create(physical_device, device, surface, surface_format, width, height);
+    const swapchain = try create(physical_device, device, surface, surface_format, present_mode, width, height);
 
     var image_count: u32 = undefined;
     try check(c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, null));
@@ -84,7 +87,8 @@ pub fn init(
 
     return .{
         .swapchain = swapchain,
-        .vk_images = vk_images,
+        .present_mode = present_mode,
+        .images = vk_images,
         .render_semaphores = render_semaphores,
         .image_count = image_count,
         .format = surface_format.format,
@@ -115,6 +119,7 @@ fn create(
     device: Device,
     surface: Surface,
     chosen_format: c.VkSurfaceFormatKHR,
+    present_mode: c.VkPresentModeKHR,
     width: u32,
     height: u32,
 ) !c.VkSwapchainKHR {
@@ -137,7 +142,7 @@ fn create(
         .imageSharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = capabilities.currentTransform,
         .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = c.VK_PRESENT_MODE_IMMEDIATE_KHR,
+        .presentMode = present_mode,
         .clipped = 1,
     };
 
@@ -162,7 +167,7 @@ pub fn recreate(
     const actual_extent = try surface.getExtent(physical_device, width, height);
 
     const surface_format = try surface.getFormat(allocator, physical_device);
-    const swapchain = try create(physical_device, device, surface, surface_format, actual_extent.width, actual_extent.height);
+    const swapchain = try create(physical_device, device, surface, surface_format, self.present_mode, actual_extent.width, actual_extent.height);
     self.swapchain = swapchain;
 
     self.extent = .{ .width = actual_extent.width, .height = actual_extent.height, .depth = 1 };
@@ -172,7 +177,7 @@ pub fn recreate(
 
     var vk_images: [16]c.VkImage = undefined;
     try check(c.vkGetSwapchainImagesKHR(device.handle, swapchain, &image_count, &vk_images[0]));
-    self.vk_images = vk_images;
+    self.images = vk_images;
 
     self.draw_image.deinit(vma, device);
     self.draw_image = try .init(
@@ -199,16 +204,40 @@ pub fn recreate(
     );
 }
 
-pub const FrameData = struct {
-    pub const GPUScene = extern struct {
-        view_proj: [16]f32,
-        time: f32,
-    };
+fn getPresentMode(allocator: std.mem.Allocator, physical_device: PhysicalDevice, surface: Surface) !c.VkPresentModeKHR {
+    var present_modes_count: u32 = undefined;
+    try check(c.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, null));
+    const present_modes: []c.VkPresentModeKHR = try allocator.alloc(c.VkPresentModeKHR, present_modes_count);
+    defer allocator.free(present_modes);
+    try check(c.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, present_modes.ptr));
 
+    var found_present_mode: u32 = c.VK_PRESENT_MODE_FIFO_KHR;
+
+    for (present_modes) |mode| {
+        if (mode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
+            found_present_mode = mode;
+            break;
+        }
+
+        if (mode == c.VK_PRESENT_MODE_IMMEDIATE_KHR) {
+            found_present_mode = mode;
+        } else if (mode == c.VK_PRESENT_MODE_FIFO_RELAXED_KHR and found_present_mode == c.VK_PRESENT_MODE_FIFO_KHR) {
+            found_present_mode = mode;
+        }
+    }
+    return found_present_mode;
+}
+
+pub const FrameData = struct {
     swapchain_semaphore: c.VkSemaphore,
     render_fence: c.VkFence,
     command_buffer: c.VkCommandBuffer,
     gpu_scene: Buffer,
+
+    pub const GPUScene = extern struct {
+        view_proj: [16]f32,
+        time: f32,
+    };
 
     pub fn init(vma: Vma, device: Device) !@This() {
         var alloc_info: c.VkCommandBufferAllocateInfo = .{

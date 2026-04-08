@@ -3,18 +3,18 @@ const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const AssetServer = @import("shared").AssetServer;
 const Device = @import("device.zig").Logical;
-const ext = @import("procFunctions.zig").device.ProcTable;
+const ext = @import("procs.zig").device.ProcTable;
 pub const check = @import("utils.zig").check;
-
-pub const PushConstant = extern struct {
-    model_matrix: [16]f32,
-    buffer_address: c.VkDeviceAddress,
-};
 
 device: Device,
 shader_create_info: c.VkShaderCreateInfoEXT,
 shader_name: []const u8,
 handle: c.VkShaderEXT = null,
+
+pub const PushConstant = extern struct {
+    model_matrix: [16]f32,
+    buffer_address: c.VkDeviceAddress,
+};
 
 pub fn init(allocator: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
     const self = try allocator.create(@This());

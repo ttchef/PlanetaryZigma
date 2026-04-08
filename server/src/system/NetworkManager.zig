@@ -69,11 +69,10 @@ pub const Client = struct {
 };
 
 pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
-    const address = try std.Io.net.IpAddress.parse(shared.net.server_ip, shared.net.server_port);
     self.* = .{
         .allocator = allocator,
         .io = io,
-        .socket = try address.bind(io, .{ .protocol = .udp, .mode = .dgram }),
+        .socket = try shared.net.address.bind(io, .{ .protocol = .udp, .mode = .dgram }),
         .clients = .init(allocator),
         .accept_client_future = try io.concurrent(Client.accept, .{ allocator, io, self.socket, &self.clients }),
     };
@@ -148,11 +147,11 @@ pub fn update(self: *@This(), info: *const Info) !void {
         // if (update_game_state == true) {
         //     std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
         //     var query = world.ecz.query(&.{component.transform});
-        //     while (query.next()) |entry| {
-        //         if (client.entity_id == entry.id) continue;
-        //         std.debug.print("ent in ecs ID {d}\n", .{entry.id});
+        //     while (query.next()) |entity| {
+        //         if (client.entity_id == entity.id) continue;
+        //         std.debug.print("ent in ecs ID {d}\n", .{entity.id});
         //         writer.end = 0;
-        //         const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = entry.id } };
+        //         const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = entity.id } };
         //         try client.command_queue.commands.append(self.allocator, spawn_entitiy_cmd);
         //     }
         // }
@@ -174,8 +173,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
         const client = pair.value_ptr;
         if (client.needs_full_sync) {
             var query = world.ecz.query(&.{component.transform});
-            while (query.next()) |entry| {
-                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entry.id } }); //TODO: The type! figure it out!
+            while (query.next()) |entity| {
+                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entity.id } }); //TODO: The type! figure it out!
             }
             client.needs_full_sync = false;
         } else {
@@ -196,9 +195,9 @@ pub fn update(self: *@This(), info: *const Info) !void {
             }
         }
         var query = world.ecz.query(&.{component.transform});
-        while (query.next()) |entry| {
-            const transform = entry.getComponent(component.transform);
-            try client.sendCommand(self.io, self.socket, writer, .{ .update_transform = .{ .id = entry.id, .pos = transform.position } });
+        while (query.next()) |entity| {
+            const transform = entity.getComponent(component.transform);
+            try client.sendCommand(self.io, self.socket, writer, .{ .update_transform = .{ .id = entity.id, .position = transform.position } });
         }
     }
     self.pending_spawn.items.len = 0;
