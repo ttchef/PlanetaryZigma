@@ -10,8 +10,8 @@ pub fn main(init: std.process.Init) !void {
     defer {
         if (builtin.mode == .Debug) _ = gpa_impl.deinit();
     }
-    const io = init.io;
     const gpa = gpa_impl.allocator();
+    const io = init.io;
 
     const addr: std.Io.net.IpAddress = try .parse("127.0.0.1", 8080);
     var stream = try addr.connect(io, .{ .mode = .dgram, .protocol = .udp });

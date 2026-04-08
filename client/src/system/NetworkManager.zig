@@ -5,20 +5,20 @@ const component = system.component;
 const World = system.World;
 const Info = system.Info;
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 io: std.Io,
 stream: std.Io.net.Stream,
 server_address: std.Io.net.IpAddress,
 server_listen: std.Io.Future(@typeInfo(@TypeOf(listen)).@"fn".return_type.?),
 command_queue: shared.net.CommandQueue = .{},
 
-pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, server_address: std.Io.net.IpAddress) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, server_address: std.Io.net.IpAddress) !void {
     self.* = .{
-        .allocator = allocator,
+        .gpa = gpa,
         .io = io,
         .stream = stream,
         .server_address = server_address,
-        .server_listen = try io.concurrent(listen, .{ allocator, io, stream, &self.command_queue }),
+        .server_listen = try io.concurrent(listen, .{ gpa, io, stream, &self.command_queue }),
     };
 }
 
@@ -33,10 +33,10 @@ pub fn deinit(self: *@This()) !void {
             },
         }
     };
-    try self.command_queue.deinit(self.allocator, self.io);
+    try self.command_queue.deinit(self.gpa, self.io);
 }
 
-pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, command_queue: *shared.net.CommandQueue) !void {
+pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, command_queue: *shared.net.CommandQueue) !void {
     std.log.debug("hello 1", .{});
     var buffer: [1024]u8 = undefined;
     while (true) {
@@ -56,7 +56,7 @@ pub fn listen(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Strea
         }
 
         try command_queue.mutex.lock(io);
-        try command_queue.commands.append(allocator, parsed.command);
+        try command_queue.commands.append(gpa, parsed.command);
         command_queue.mutex.unlock(io);
     }
 }
@@ -69,7 +69,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 var new_camera = try info.world.ecz.spawnEntity();
                 try new_camera.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
                 try new_camera.putComponent(component.transform, .{ .position = .{ 0, 0, 40 } });
-                try info.world.enitity_mapping.put(self.allocator, command.acknowledge.id, new_camera.id);
+                try info.world.enitity_mapping.put(self.gpa, command.acknowledge.id, new_camera.id);
                 info.world.my_server_id = command.acknowledge.id;
                 std.log.debug("ack entities: {d}", .{info.world.ecz.last_id});
                 std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_camera.id, command.acknowledge.id });
@@ -80,7 +80,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 var new_entity = try info.world.ecz.spawnEntity();
                 try new_entity.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
                 try new_entity.putComponent(component.mesh, .{ .id = 0 });
-                try info.world.enitity_mapping.put(self.allocator, command.spawn_entity.id, new_entity.id);
+                try info.world.enitity_mapping.put(self.gpa, command.spawn_entity.id, new_entity.id);
                 std.log.debug("spawn entities : {d}", .{info.world.ecz.last_id});
                 std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, command.spawn_entity.id });
             },

@@ -41,7 +41,7 @@ pub const GltfMetallicRoughness = struct {
         data_buffer_offset: vk.VkDeviceSize,
     };
 
-    pub fn initBuildPipelines(allocator: std.mem.Allocator, device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
+    pub fn initBuildPipelines(gpa: std.mem.Allocator, device: Device, gpu_scene_data_descriptor_layout: descriptor.Layout, draw_image: Image, depth_image: Image) !@This() {
         const mesh_frag_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.frag.spv");
         const mesh_vertex_shader: vk.VkShaderModule = try LoadShader(device.handle, "zig-out/shaders/mesh.vert.spv");
         defer vk.vkDestroyShaderModule(device.handle, mesh_frag_shader, null);
@@ -53,7 +53,7 @@ pub const GltfMetallicRoughness = struct {
             .stageFlags = vk.VK_SHADER_STAGE_VERTEX_BIT,
         };
 
-        var material_layout: descriptor.Layout = try .init(device, &.{
+        const material_layout: descriptor.Layout = try .init(device, &.{
             .{
                 .binding = 0,
                 .descriptorCount = 1,
@@ -101,12 +101,12 @@ pub const GltfMetallicRoughness = struct {
         mesh_pipeline_config.enableDepthTesting(vk.VK_TRUE, vk.VK_COMPARE_OP_LESS);
 
         // mesh_pipeline_config.rasterization_state.polygonMode = vk.VK_POLYGON_MODE_LINE;
-        const opaque_pipeline = try allocator.create(Pipeline);
+        const opaque_pipeline = try gpa.create(Pipeline);
         opaque_pipeline.* = try .initGraphics(device, &mesh_pipeline_config);
 
         mesh_pipeline_config.setBlendingDestinationColorBlendFactor(vk.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
         mesh_pipeline_config.enableDepthTesting(vk.VK_FALSE, vk.VK_COMPARE_OP_LESS);
-        const transparent_pipeline = try allocator.create(Pipeline);
+        const transparent_pipeline = try gpa.create(Pipeline);
         transparent_pipeline.* = try .initGraphics(device, &mesh_pipeline_config);
 
         return .{
@@ -117,11 +117,11 @@ pub const GltfMetallicRoughness = struct {
         };
     }
 
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, device: Device) void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, device: Device) void {
         self.opaque_pipeline.deinit(device);
         self.transparent_pipeline.deinit(device);
-        allocator.destroy(self.opaque_pipeline);
-        allocator.destroy(self.transparent_pipeline);
+        gpa.destroy(self.opaque_pipeline);
+        gpa.destroy(self.transparent_pipeline);
         vk.vkDestroyDescriptorSetLayout(device.handle, self.descriptor_set_layout, null);
     }
 

@@ -7,13 +7,13 @@ indices: std.ArrayList(u32),
 
 //if size < 3, size = 3. It beaks other ways.
 pub fn init(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     size: u32,
 ) !@This() {
     const clamped_size = @max(size, 3);
     const radius: f32 = (@as(f32, @floatFromInt(clamped_size)) / 2);
-    var points = try allocator.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
-    defer allocator.free(points);
+    var points = try gpa.alloc(f32, (clamped_size + 1) * (clamped_size + 1) * (clamped_size + 1));
+    defer gpa.free(points);
     const center_pos: nz.Vec3(f32) = .{ 0, 0, 0 };
 
     for (0..clamped_size + 1) |x| {
@@ -57,7 +57,7 @@ pub fn init(
                 b_y = @as(f32, @floatFromInt(y)) + center_pos[1] - radius + 0.5;
                 b_z = @as(f32, @floatFromInt(z)) + center_pos[2] - radius + 0.5;
                 cube_pos = .{ b_x, b_y, b_z };
-                try marchCube(allocator, cube_pos, cube, &gen_vertices, &gen_indices);
+                try marchCube(gpa, cube_pos, cube, &gen_vertices, &gen_indices);
             }
         }
     }
@@ -70,13 +70,13 @@ pub fn init(
         .vertices = gen_vertices,
     };
 }
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-    self.vertices.deinit(allocator);
-    self.indices.deinit(allocator);
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    self.vertices.deinit(gpa);
+    self.indices.deinit(gpa);
 }
 
 fn marchCube(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     postion: nz.Vec3(f32),
     corners: [8]f32,
     gen_vertices: *std.ArrayList(Vertex),
@@ -99,7 +99,7 @@ fn marchCube(
             const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
 
             try gen_vertices.append(
-                allocator,
+                gpa,
                 .{
                     .position = (vert1 + vert2) / devision,
                     .color = .{ 1, 0, 0, 1 },
@@ -108,7 +108,7 @@ fn marchCube(
                     .uv_y = @ceil(@mod(index + 2, 3)),
                 },
             );
-            try gen_indices.append(allocator, @intCast(gen_vertices.items.len - 1));
+            try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
             edge_index += 1;
         }
     }

@@ -4,7 +4,7 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const nz = shared.numz;
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 io: std.Io,
 global_state_reload: zphy.GlobalState,
 physics_system: *zphy.PhysicsSystem,
@@ -163,15 +163,15 @@ const ContactListener = extern struct {
     }
 };
 
-pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
-    try zphy.init(allocator, io, .{});
-    const broad_phase_layer_interface = try allocator.create(BroadPhaseLayerInterface);
+pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
+    try zphy.init(gpa, io, .{});
+    const broad_phase_layer_interface = try gpa.create(BroadPhaseLayerInterface);
     broad_phase_layer_interface.* = BroadPhaseLayerInterface.init();
-    const object_layer_pair_filter = try allocator.create(ObjectLayerPairFilter);
+    const object_layer_pair_filter = try gpa.create(ObjectLayerPairFilter);
     object_layer_pair_filter.* = .{};
-    const object_vs_broad_phase_layer_filter = try allocator.create(ObjectVsBroadPhaseLayerFilter);
+    const object_vs_broad_phase_layer_filter = try gpa.create(ObjectVsBroadPhaseLayerFilter);
     object_vs_broad_phase_layer_filter.* = .{};
-    const contact_listener = try allocator.create(ContactListener);
+    const contact_listener = try gpa.create(ContactListener);
     contact_listener.* = .{};
 
     // Create physics system
@@ -193,7 +193,7 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
 
     self.* = .{
         .global_state_reload = undefined,
-        .allocator = allocator,
+        .gpa = gpa,
         .io = io,
         .contact_listener = contact_listener,
         .physics_system = physics_system,
@@ -205,10 +205,10 @@ pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
 
 pub fn deinit(self: *@This()) void {
     zphy.PhysicsSystem.destroy(self.physics_system);
-    self.allocator.destroy(self.contact_listener);
-    self.allocator.destroy(self.broad_phase_layer_interface);
-    self.allocator.destroy(self.object_layer_pair_filter);
-    self.allocator.destroy(self.object_vs_broad_phase_layer_filter);
+    self.gpa.destroy(self.contact_listener);
+    self.gpa.destroy(self.broad_phase_layer_interface);
+    self.gpa.destroy(self.object_layer_pair_filter);
+    self.gpa.destroy(self.object_vs_broad_phase_layer_filter);
     zphy.deinit();
 }
 
@@ -225,7 +225,7 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
         self.physics_system = undefined;
         self.global_state_reload = zphy.preReload();
     } else {
-        zphy.postReload(self.allocator, self.io, self.global_state_reload);
+        zphy.postReload(self.gpa, self.io, self.global_state_reload);
         std.log.debug("XDDD", .{});
 
         // Refresh vtable pointers FIRST - before creating physics system

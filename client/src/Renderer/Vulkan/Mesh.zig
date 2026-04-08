@@ -81,7 +81,7 @@ pub const Vertex = extern struct {
 // };
 //
 pub fn init(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     vma: Vma,
     name: []const u8,
     device: Device,
@@ -123,13 +123,13 @@ pub fn init(
         .index_buffer = index_buffer,
         .vertex_buffer = vertex_buffer,
         // .surfaces = allocated_surfaces,
-        .name = try allocator.dupe(u8, name),
+        .name = try gpa.dupe(u8, name),
     };
 }
 
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator, vma: Vma) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator, vma: Vma) void {
     self.index_buffer.deinit(vma);
     self.vertex_buffer.deinit(vma);
-    allocator.free(self.name);
+    gpa.free(self.name);
     // self.surfaces.deinit(allocator);
 }

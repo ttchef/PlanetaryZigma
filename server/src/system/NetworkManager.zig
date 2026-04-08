@@ -9,7 +9,7 @@ const SpawnEntity = struct {
     id: u32,
 };
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 io: std.Io,
 pending_spawn: std.ArrayList(SpawnEntity) = .empty,
 pending_despawn: std.ArrayList(SpawnEntity) = .empty,
@@ -18,14 +18,14 @@ socket: std.Io.net.Socket,
 clients: std.AutoHashMap(std.Io.net.IpAddress, Client),
 
 pub const Client = struct {
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     name: []const u8,
     entity_id: u32 = 0,
     needs_full_sync: bool = true,
     command_queue: shared.net.CommandQueue = .{},
     ip_address: std.Io.net.IpAddress,
 
-    pub fn accept(allocator: std.mem.Allocator, io: std.Io, socket: std.Io.net.Socket, clients: *std.AutoHashMap(std.Io.net.IpAddress, @This())) !void {
+    pub fn accept(gpa: std.mem.Allocator, io: std.Io, socket: std.Io.net.Socket, clients: *std.AutoHashMap(std.Io.net.IpAddress, @This())) !void {
         var buffer: [1024]u8 = undefined;
         while (true) {
             const msg = try socket.receive(io, &buffer);
@@ -43,15 +43,15 @@ pub const Client = struct {
                 try clients.put(msg.from, undefined);
                 const client = clients.getPtr(msg.from).?;
                 client.* = .{
-                    .allocator = allocator,
-                    .name = try allocator.dupe(u8, connect.name),
+                    .gpa = gpa,
+                    .name = try gpa.dupe(u8, connect.name),
                     .ip_address = msg.from,
                 };
             }
 
             var client = clients.getPtr(msg.from).?;
             try client.command_queue.mutex.lock(io);
-            try client.command_queue.commands.append(allocator, parsed.command);
+            try client.command_queue.commands.append(gpa, parsed.command);
             client.command_queue.mutex.unlock(io);
         }
     }
@@ -63,18 +63,18 @@ pub const Client = struct {
     }
 
     pub fn deinit(self: *@This()) !void {
-        self.allocator.free(self.name);
-        self.command_queue.deinit(self.allocator, self.io);
+        self.gpa.free(self.name);
+        self.command_queue.deinit(self.gpa, self.io);
     }
 };
 
-pub fn init(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
     self.* = .{
-        .allocator = allocator,
+        .gpa = gpa,
         .io = io,
         .socket = try shared.net.address.bind(io, .{ .protocol = .udp, .mode = .dgram }),
-        .clients = .init(allocator),
-        .accept_client_future = try io.concurrent(Client.accept, .{ allocator, io, self.socket, &self.clients }),
+        .clients = .init(gpa),
+        .accept_client_future = try io.concurrent(Client.accept, .{ gpa, io, self.socket, &self.clients }),
     };
 }
 
@@ -94,7 +94,7 @@ pub fn deinit(self: *@This()) !void {
 pub fn reload(self: *@This(), pre_reload: bool) !void {
     if (pre_reload) try self.accept_client_future.cancel(self.io) else {
         std.log.debug("RELOAD", .{});
-        self.accept_client_future = try self.io.concurrent(Client.accept, .{ self.allocator, self.io, self.socket, &self.clients });
+        self.accept_client_future = try self.io.concurrent(Client.accept, .{ self.gpa, self.io, self.socket, &self.clients });
     }
 }
 
@@ -123,13 +123,13 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     _ = try entity.addComponent(component.input);
                     client.entity_id = entity.id;
                     try client.sendCommand(self.io, self.socket, writer, .{ .acknowledge = .{ .id = client.entity_id } });
-                    try self.pending_spawn.append(self.allocator, .{ .id = entity.id, .entity_type = .player });
+                    try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
                     std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ecz.last_id, client.entity_id });
                 },
                 .disconnect => {
                     const entity_to_remove = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
                     try entity_to_remove.despawn();
-                    try self.pending_despawn.append(self.allocator, .{ .id = entity_to_remove.id, .entity_type = .player });
+                    try self.pending_despawn.append(self.gpa, .{ .id = entity_to_remove.id, .entity_type = .player });
                     std.debug.print("enteties in ECS : {d}\n", .{world.ecz.last_id});
                     // try clients_to_remove.append(self.allocator, .{ .ip = client_address, .client = client });
                 },

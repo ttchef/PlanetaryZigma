@@ -1,22 +1,23 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const system = @import("system");
 const shared = @import("shared");
 const World = system.World;
 const nz = shared.numz;
 
 pub fn main(init: std.process.Init) !void {
-    std.debug.print("server\n", .{});
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true, .safety = true }) = .init;
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
+    var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = true }).init else init.gpa;
+    defer {
+        if (builtin.mode == .Debug) _ = gpa_impl.deinit();
+    }
+    const gpa = gpa_impl.allocator();
     const io = init.io;
 
     var watcher: shared.Watcher = try .init("system_server_", io);
     defer watcher.deinit(io);
     try watcher.load(io);
 
-    var world: World = try .init(allocator);
+    var world: World = try .init(gpa);
     defer world.deinit();
 
     var system_context: system.Context = undefined;
@@ -25,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
     system_table.systemContextInit(&system_context, &system.Context.Data{
         .io = io,
         .world = &world,
-        .allocator = allocator,
+        .gpa = gpa,
     });
     defer system_table.systemContextDeinit(&system_context);
 

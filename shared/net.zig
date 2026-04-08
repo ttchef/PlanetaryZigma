@@ -7,9 +7,9 @@ pub const endian: std.builtin.Endian = .little;
 pub const CommandQueue = struct {
     commands: std.ArrayList(Command) = .empty,
     mutex: std.Io.Mutex = .init,
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator, io: std.Io) !void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
         try self.mutex.lock(io);
-        self.commands.deinit(allocator);
+        self.commands.deinit(gpa);
         self.mutex.unlock(io);
     }
 };

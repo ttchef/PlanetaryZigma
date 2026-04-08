@@ -10,12 +10,12 @@ pub fn deinit(self: @This(), instance: Instance) void {
     c.vkDestroySurfaceKHR(instance.handle, self.handle, null);
 }
 
-pub fn getFormat(self: @This(), allocator: std.mem.Allocator, physical_device: device.Physical) !c.VkSurfaceFormatKHR {
+pub fn getFormat(self: @This(), gpa: std.mem.Allocator, physical_device: device.Physical) !c.VkSurfaceFormatKHR {
     var format_count: u32 = 0;
     try check(c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, self.handle, &format_count, null));
 
-    const formats = try allocator.alloc(c.VkSurfaceFormatKHR, format_count);
-    defer allocator.free(formats);
+    const formats = try gpa.alloc(c.VkSurfaceFormatKHR, format_count);
+    defer gpa.free(formats);
     try check(c.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, self.handle, &format_count, formats.ptr));
 
     var chosen_format: c.VkSurfaceFormatKHR = formats[0];

@@ -34,10 +34,8 @@ pub const World = struct {
     enitity_mapping: std.AutoHashMapUnmanaged(u32, u32) = .empty,
     my_server_id: u32 = 0,
 
-    pub fn init(allocator: std.mem.Allocator) !@This() {
-        return .{
-            .ecz = .init(allocator),
-        };
+    pub fn init(gpa: std.mem.Allocator) !@This() {
+        return .{ .ecz = .init(gpa) };
     }
     pub fn deinit(self: *@This()) void {
         self.ecz.deinit();

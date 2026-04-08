@@ -25,7 +25,7 @@ frames: [max_frames_inflight]FrameData = undefined,
 const max_frames_inflight: usize = 3;
 
 pub fn init(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     vma: Vma,
     physical_device: PhysicalDevice,
     device: Device,
@@ -33,8 +33,8 @@ pub fn init(
     width: u32,
     height: u32,
 ) !@This() {
-    const present_mode = try getPresentMode(allocator, physical_device, surface);
-    const surface_format = try surface.getFormat(allocator, physical_device);
+    const present_mode = try getPresentMode(gpa, physical_device, surface);
+    const surface_format = try surface.getFormat(gpa, physical_device);
     const swapchain = try create(physical_device, device, surface, surface_format, present_mode, width, height);
 
     var image_count: u32 = undefined;
@@ -153,7 +153,7 @@ fn create(
 
 pub fn recreate(
     self: *@This(),
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     vma: Vma,
     physical_device: PhysicalDevice,
     device: Device,
@@ -166,7 +166,7 @@ pub fn recreate(
 
     const actual_extent = try surface.getExtent(physical_device, width, height);
 
-    const surface_format = try surface.getFormat(allocator, physical_device);
+    const surface_format = try surface.getFormat(gpa, physical_device);
     const swapchain = try create(physical_device, device, surface, surface_format, self.present_mode, actual_extent.width, actual_extent.height);
     self.swapchain = swapchain;
 
@@ -204,11 +204,11 @@ pub fn recreate(
     );
 }
 
-fn getPresentMode(allocator: std.mem.Allocator, physical_device: PhysicalDevice, surface: Surface) !c.VkPresentModeKHR {
+fn getPresentMode(gpa: std.mem.Allocator, physical_device: PhysicalDevice, surface: Surface) !c.VkPresentModeKHR {
     var present_modes_count: u32 = undefined;
     try check(c.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, null));
-    const present_modes: []c.VkPresentModeKHR = try allocator.alloc(c.VkPresentModeKHR, present_modes_count);
-    defer allocator.free(present_modes);
+    const present_modes: []c.VkPresentModeKHR = try gpa.alloc(c.VkPresentModeKHR, present_modes_count);
+    defer gpa.free(present_modes);
     try check(c.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, present_modes.ptr));
 
     var found_present_mode: u32 = c.VK_PRESENT_MODE_FIFO_KHR;
