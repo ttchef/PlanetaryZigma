@@ -65,6 +65,7 @@ pub const Command = union(Opcode) {
         left: bool = false,
         up: bool = false,
         down: bool = false,
+        mouse_delta: [2]f64 = .{ 0, 0 },
     };
 
     pub const UpdateTransform = struct {

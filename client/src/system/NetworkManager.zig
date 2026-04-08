@@ -62,6 +62,14 @@ pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, com
 }
 
 pub fn update(self: *@This(), info: *const Info) !void {
+    var fixed_writer_buffer: [1024]u8 = undefined;
+    var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+    const writer = &fix_writer;
+    var query = info.world.ecz.query(&.{ component.camera, component.transform });
+    if (query.next()) |entity| {
+        const camera = entity.getComponentPtr(component.camera);
+        try self.sendCommand(writer, .{ .input = camera.input_map });
+    }
     try self.command_queue.mutex.lock(self.io);
     for (self.command_queue.commands.items) |command| {
         switch (command) {
@@ -119,4 +127,9 @@ pub fn update(self: *@This(), info: *const Info) !void {
     // self.command_queue.commands.clearAndFree(self.allocator);
     self.command_queue.commands.items.len = 0;
     self.command_queue.mutex.unlock(self.io);
+}
+pub fn sendCommand(self: @This(), writer: *std.Io.Writer, command: shared.net.Command) !void {
+    writer.end = 0;
+    try command.write(writer);
+    try self.stream.socket.send(self.io, &self.server_address, writer.buffer);
 }

@@ -12,6 +12,8 @@ far: f32 = 1000,
 speed: f32 = 5,
 sensitivity: f32 = 1,
 was_rotating: bool = false,
+mouse_pos: [2]f64 = .{ 0, 0 },
+mouse_prev_pos: [2]f64 = .{ 0, 0 },
 
 input_map: shared.net.Command.Input = .{},
 
@@ -19,6 +21,10 @@ transform: nz.Transform3D(f32) = .{},
 
 pub fn update(self: *@This(), info: *const Info) void {
     _ = info;
+    self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
+    self.input_map.mouse_delta[1] = self.mouse_pos[1] - self.mouse_prev_pos[1];
+    self.mouse_prev_pos[0] = self.mouse_pos[0];
+    self.mouse_prev_pos[1] = self.mouse_pos[1];
     // const world = info.world;
     // const current_pitch_rad = self.transform.rotation[0];
     // const current_yaw_rad = self.transform.rotation[1];
@@ -138,6 +144,10 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
         },
         .focus => |focused| {
             if (focused) self.input_map = .{};
+        },
+        .mouse_motion => |motion| {
+            self.mouse_pos[0] = motion.x;
+            self.mouse_pos[1] = motion.y;
         },
 
         else => {},

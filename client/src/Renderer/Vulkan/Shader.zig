@@ -7,7 +7,7 @@ const ext = @import("procs.zig").device.ProcTable;
 pub const check = @import("utils.zig").check;
 
 handle: c.VkShaderEXT = null,
-device: *const Device,
+device: Device,
 shader_create_info: c.VkShaderCreateInfoEXT,
 shader_name: []const u8,
 
@@ -19,9 +19,10 @@ pub const PushConstant = extern struct {
 pub fn init(gpa: std.mem.Allocator, device: Device, asset_server: *AssetServer, sahder_create_info: c.VkShaderCreateInfoEXT, shader_name: []const u8) !*@This() {
     const self = try gpa.create(@This());
     self.* = .{
-        .device = &device,
+        .device = device,
         .shader_create_info = sahder_create_info,
         .shader_name = shader_name,
+        .handle = null,
     };
     try asset_server.loadAsset(@This(), self, shader_name, loadShader);
     return self;

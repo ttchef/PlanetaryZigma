@@ -83,15 +83,7 @@ pub const Context = struct {
             const transform = entity.getComponentPtr(component.transform);
             camera.update(info);
             try self.renderer.update(info);
-
-            var fixed_writer_buffer: [1024]u8 = undefined;
-            var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-            const writer = &fix_writer;
-            const input_command: shared.net.Command = .{ .input = camera.input_map };
-            try input_command.write(writer);
-            try self.network_manager.stream.socket.send(self.io, &self.network_manager.server_address, writer.buffered());
-
-            // std.log.debug("pos {any},  ", .{transform.position});
+            std.log.debug("pos {any},  ", .{transform.position});
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
