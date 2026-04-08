@@ -105,7 +105,9 @@ pub fn deinit(
     vma: Vma,
     device: Device,
 ) void {
+    std.log.debug("hello", .{});
     self.draw_image.deinit(vma, device);
+    std.log.debug("hello2", .{});
     self.depth_image.deinit(vma, device);
     for (&self.frames) |*frame| frame.deinit(vma, device);
     for (0..self.image_count) |i| {

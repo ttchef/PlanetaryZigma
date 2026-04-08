@@ -137,6 +137,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     const input_entity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
                     const input = input_entity.getComponentPtr(component.input);
                     input.* = command.input;
+                    std.debug.print("mouse :{any}\n", .{input.*.mouse_delta});
                 },
                 else => {
                     std.log.err("Unhandled command {s}", .{@tagName(command)});
