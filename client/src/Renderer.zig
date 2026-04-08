@@ -20,19 +20,19 @@ const YesSurfaceCreateUserData = struct {
     window: *yes.Window,
 };
 
-pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
+pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     return switch (builtin.os.tag) {
-        .macos => .{ .inner = Metal.init(allocator, platform, window) },
-        else => initVulkan(allocator, asset_server, platform, window),
+        .macos => .{ .inner = Metal.init(gpa, platform, window) },
+        else => initVulkan(gpa, asset_server, platform, window),
     };
 }
 
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-    self.inner.deinit(allocator);
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+    self.inner.deinit(gpa);
     switch (builtin.os.tag) {
         .macos => self.inner.deinit(),
         else => {
-            allocator.destroy(self.inner);
+            gpa.destroy(self.inner);
         },
     }
 }
@@ -41,11 +41,11 @@ pub fn update(self: *@This(), info: *const Info) !void {
     try self.inner.update(info);
 }
 
-pub fn resize(self: *@This(), allocator: std.mem.Allocator, window: *yes.Window) !void {
-    try self.inner.resize(allocator, window.size.width, window.size.height);
+pub fn resize(self: *@This(), gpa: std.mem.Allocator, window: *yes.Window) !void {
+    try self.inner.resize(gpa, window.size.width, window.size.height);
 }
 
-pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
+pub fn initVulkan(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     const extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",
@@ -87,21 +87,9 @@ pub fn initVulkan(allocator: std.mem.Allocator, asset_server: *AssetServer, plat
         else => &.{},
     };
 
-    // var extensions: []const [*:0]const u8 = switch (builtin.os.tag) {
-    //     .windows => &.{
-    //         "VK_KHR_surface",
-    //         "VK_KHR_win32_surface",
-    //         Vulkan.c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-    //     },
-    //     else => &.{
-    //         // "VK_KHR_xlib_surface",
-    //         // "VK_KHR_wayland_surface",
-    //     },
-    // };
-
     var yes_surface_create_user_data: YesSurfaceCreateUserData = .{ .platform = platform, .window = window };
 
-    const vulkan_renderer: *Vulkan = try .init(allocator, asset_server, .{
+    const vulkan_renderer: *Vulkan = try .init(gpa, asset_server, .{
         .surface = .{
             .data = @ptrCast(@alignCast(&yes_surface_create_user_data)),
             .init = @ptrCast(&createVulkanSurface),

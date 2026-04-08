@@ -6,17 +6,18 @@ const World = system.World;
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init) !void {
-    var gpa: std.heap.DebugAllocator(.{ .verbose_log = true }) = .init;
-    // var gpa: std.heap.GeneralPurposeAllocator(.{ .safety = false }) = .init;
-    defer _ = gpa.deinit();
-    const allocator = if (builtin.mode == .Debug) gpa.allocator() else init.gpa;
+    var gpa_impl = if (builtin.mode == .Debug) std.heap.DebugAllocator(.{ .verbose_log = true }).init else init.gpa;
+    defer {
+        if (builtin.mode == .Debug) _ = gpa_impl.deinit();
+    }
+    const gpa = gpa_impl.allocator();
     const io = init.io;
 
     const addr: std.Io.net.IpAddress = try .parse("127.0.0.1", 8080);
     var stream = try addr.connect(io, .{ .mode = .dgram, .protocol = .udp });
     defer stream.close(io);
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
     const platform = cross_platform.platform();
 
@@ -32,10 +33,10 @@ pub fn main(init: std.process.Init) !void {
     });
     defer window.close(platform);
 
-    var asset_server = try shared.AssetServer.init(allocator, init.io);
+    var asset_server = try shared.AssetServer.init(gpa, init.io);
     defer asset_server.deinit();
 
-    var world: World = try .init(allocator);
+    var world: World = try .init(gpa);
     defer world.deinit();
 
     var watcher: shared.Watcher = try .init("system_client_", io);
@@ -46,7 +47,7 @@ pub fn main(init: std.process.Init) !void {
     var system_table: system.ffi.Table = try .load(&watcher.dynlib.?);
 
     system_table.systemContextInit(&system_context, &system.Context.Data{
-        .allocator = allocator,
+        .gpa = gpa,
         .asset_server = &asset_server,
         .platform = platform,
         .window = window,
@@ -81,10 +82,9 @@ pub fn main(init: std.process.Init) !void {
                 .close => break :main_loop,
                 .resize => |size| {
                     std.log.info("resize: {d}x{d}", .{ size.width, size.height });
-                    try system_context.renderer.resize(allocator, window);
+                    try system_context.renderer.resize(gpa, window);
                 },
                 .key => |key| {
-                    std.log.debug("key: {t}", .{key.sym});
                     if (key.state == .released and key.sym == .escape) break :main_loop;
                 },
                 else => {},
@@ -99,14 +99,14 @@ pub fn main(init: std.process.Init) !void {
             watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             asset_server.deinit();
-            asset_server = try shared.AssetServer.init(allocator, init.io);
+            asset_server = try shared.AssetServer.init(gpa, init.io);
             system_table.systemContextInit(&system_context, &system.Context.Data{
-                .allocator = allocator,
+                .io = io,
+                .gpa = gpa,
                 .asset_server = &asset_server,
                 .platform = platform,
                 .window = window,
                 .stream = stream,
-                .io = io,
                 .server_address = addr,
             });
         }

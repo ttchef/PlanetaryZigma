@@ -4,7 +4,6 @@ const AssetServer = @import("shared").AssetServer;
 const system = @import("../system.zig");
 const Info = system.Info;
 const World = system.World;
-pub const c = @import("vulkan");
 const shaderc = @import("shaderc");
 const Instance = @import("Vulkan/Instance.zig");
 const DebugMessenger = @import("Vulkan/DebugMessenger.zig");
@@ -19,9 +18,12 @@ const Buffer = @import("Vulkan/Buffer.zig");
 const descriptor = @import("Vulkan/desrciptor.zig");
 const pipeline = @import("Vulkan/pipeline.zig");
 const Shader = @import("Vulkan/Shader.zig");
-pub const check = @import("Vulkan/utils.zig").check;
-const proc = @import("Vulkan/procFunctions.zig");
-const ext = proc.device.ProcTable;
+const procs = @import("Vulkan/procs.zig");
+const ext = procs.device.ProcTable;
+
+const check = @import("Vulkan/utils.zig").check;
+
+pub const c = @import("vulkan");
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -57,12 +59,12 @@ pub const InitOptions = struct {
     },
 };
 
-pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
-    const self = try allocator.create(@This());
-    self.instance = try .init(allocator, options.instance.extensions, options.instance.layers);
-    proc.instance.load(self.instance.handle, null);
+pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
+    const self = try gpa.create(@This());
+    self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
+    procs.instance.load(self.instance.handle, null);
     self.debug_messenger = try .init(self.instance, .{
-        .severities = if (try std.process.Environ.contains(.empty, allocator, "RENDERDOC_CAPFILE")) .{} else .{
+        .severities = if (try std.process.Environ.contains(.empty, gpa, "RENDERDOC_CAPFILE")) .{} else .{
             .warning = true,
             .verbose = true,
             .@"error" = true,
@@ -74,9 +76,9 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     } else return error.configSurface;
     self.physical_device = try .pick(self.instance, self.surface.handle);
     self.device = try .init(self.physical_device, options.device.extensions);
-    proc.device.load(self.device.handle, null);
+    procs.device.load(self.device.handle, null);
     self.vma = try .init(self.instance, self.physical_device, self.device);
-    self.swapchain = try .init(allocator, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
+    self.swapchain = try .init(gpa, self.vma, self.physical_device, self.device, self.surface, options.swapchain.width, options.swapchain.heigth);
 
     self.desciptor_layout = try .init(
         self.device,
@@ -90,10 +92,10 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     );
 
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
-    var planet_vertices: Mesh.Planet = try .init(allocator, 30);
-    defer planet_vertices.deinit(allocator);
+    var planet_vertices: Mesh.Planet = try .init(gpa, 30);
+    defer planet_vertices.deinit(gpa);
     self.planet_mesh = try .init(
-        allocator,
+        gpa,
         self.vma,
         "test",
         self.device,
@@ -102,7 +104,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         planet_vertices.vertices.items,
     );
     self.box_mesh = try .init(
-        allocator,
+        gpa,
         self.vma,
         "box",
         self.device,
@@ -110,7 +112,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         Mesh.Vertex,
         &Mesh.box.vertex_array,
     );
-    self.vertex_shader = try .init(allocator, self.device, asset_server, .{
+    self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
         .nextStage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -120,7 +122,7 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
         .pushConstantRangeCount = 1,
         .pName = "main",
     }, "shaders/vertex.vert");
-    self.fragment_shader = try .init(allocator, self.device, asset_server, .{
+    self.fragment_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .codeType = c.VK_SHADER_CODE_TYPE_SPIRV_EXT,
@@ -133,15 +135,15 @@ pub fn init(allocator: std.mem.Allocator, asset_server: *AssetServer, options: I
     return self;
 }
 
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    self.planet_mesh.deinit(allocator, self.vma);
-    self.box_mesh.deinit(allocator, self.vma);
+    self.planet_mesh.deinit(gpa, self.vma);
+    self.box_mesh.deinit(gpa, self.vma);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
-    self.vertex_shader.deinit(allocator);
-    self.fragment_shader.deinit(allocator);
+    self.vertex_shader.deinit(gpa);
+    self.fragment_shader.deinit(gpa);
     self.swapchain.deinit(self.vma, self.device);
     self.vma.deinit();
     self.device.deinit();
@@ -187,11 +189,11 @@ pub fn update(self: *@This(), info: *const Info) !void {
 
     try render(self, cmd_buffer, current_frame, info);
 
-    var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.vk_images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
+    var swapchain_image_barrier: Image.Barrier = .init(cmd_buffer, self.swapchain.images[image_index], c.VK_IMAGE_ASPECT_COLOR_BIT);
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_WRITE_BIT);
     self.swapchain.draw_image.copyOntoImage(
         cmd_buffer,
-        .{ .vk_image = self.swapchain.vk_images[image_index], .extent = self.swapchain.extent },
+        .{ .vk_image = self.swapchain.images[image_index], .extent = self.swapchain.extent },
     );
 
     swapchain_image_barrier.transition(c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
@@ -403,7 +405,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    const comp = system.World.component;
+    const comp = system.component;
     var query = info.world.ecz.query(&.{comp.camera});
     const camera = query.next().?.getComponent(comp.camera);
     const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
@@ -474,9 +476,9 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     draw_image_barrier.transition(c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, c.VK_PIPELINE_STAGE_TRANSFER_BIT, c.VK_ACCESS_TRANSFER_READ_BIT);
 }
 
-pub fn resize(self: *@This(), allocator: std.mem.Allocator, width: u32, height: u32) !void {
+pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !void {
     try self.swapchain.recreate(
-        allocator,
+        gpa,
         self.vma,
         self.physical_device,
         self.device,
