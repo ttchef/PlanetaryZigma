@@ -22,6 +22,7 @@ pub const Command = union(Opcode) {
     despawn_entity: DespawnEntity,
     input: Input,
     update_transform: UpdateTransform,
+    update_camera_rotation: UpdateCameraRotation,
 
     pub const Opcode = enum(u16) {
         connect,
@@ -31,6 +32,7 @@ pub const Command = union(Opcode) {
         despawn_entity,
         input,
         update_transform,
+        update_camera_rotation,
     };
 
     pub const Header = packed struct {
@@ -71,6 +73,11 @@ pub const Command = union(Opcode) {
     pub const UpdateTransform = struct {
         id: u32,
         position: @Vector(3, f32),
+        rotation: @Vector(4, f32),
+    };
+    pub const UpdateCameraRotation = struct {
+        id: u32,
+        rotation: @Vector(4, f32),
     };
 
     pub fn write(self: *const @This(), writer: *std.Io.Writer) !void {

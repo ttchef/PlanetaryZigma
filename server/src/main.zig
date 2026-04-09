@@ -39,8 +39,8 @@ pub fn main(init: std.process.Init) !void {
         if (system_context.request_exit) break;
         delta_time = getDeltaTime(io);
         accumlated_time += delta_time;
-        elapsed_time += delta_time;
         if (accumlated_time < time_step) continue;
+        elapsed_time += time_step;
         accumlated_time -= time_step;
         try world.mutex.lock(io);
         count += 1;
@@ -50,6 +50,7 @@ pub fn main(init: std.process.Init) !void {
             system_table.systemContextReload(&system_context, true);
             std.log.debug("system table updated", .{});
             watcher.old_dynlib.?.close();
+            watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             system_table.systemContextReload(&system_context, false);
         }

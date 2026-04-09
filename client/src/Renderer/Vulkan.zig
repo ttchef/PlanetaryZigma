@@ -409,10 +409,11 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var query = info.world.ecz.query(&.{comp.camera});
     const camera = query.next().?.getComponent(comp.camera);
     const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
-    // const cam_rot = nz.Mat4x4(f32).rotate(@sin(elapsed_time), .{ 0, 0, 1 });
-    // const view = cam_pos.mul(cam_rot).inverse();
-    const view = cam_pos.inverse();
-    const proj = nz.Mat4x4(f32).perspective(camera.fov_rad, aspect, 0.01, 100);
+    const cam_rot = camera.transform.rotation.toMat4x4();
+    // const view = cam_rot.mul(cam_pos);
+    const view = cam_pos.mul(cam_rot).inverse();
+    // const view = cam_pos.inverse();
+    const proj = nz.Mat4x4(f32).perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
 
     var scene_data: Swapchain.FrameData.GPUScene = .{

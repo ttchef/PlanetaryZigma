@@ -18,12 +18,14 @@ pub const World = struct {
         component.transform,
         component.collider,
         component.input,
+        component.camera,
     }),
 
     pub const component = struct {
         pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
         pub const collider: ecz.Component = .{ .name = .collider, .type = Physics.Collider };
         pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
+        pub const camera: ecz.Component = .{ .name = .camera, .type = nz.Transform3D(f32) };
     };
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
@@ -61,8 +63,8 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *@This()) !void {
-        try self.network_manager.deinit();
         self.physics.deinit();
+        try self.network_manager.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {

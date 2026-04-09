@@ -2,6 +2,7 @@ const std = @import("std");
 const zphy = @import("zphy");
 const shared = @import("shared");
 const system = @import("../system.zig");
+const component = system.World.component;
 const nz = shared.numz;
 
 gpa: std.mem.Allocator,
@@ -204,11 +205,11 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 }
 
 pub fn deinit(self: *@This()) void {
-    zphy.PhysicsSystem.destroy(self.physics_system);
     self.gpa.destroy(self.contact_listener);
     self.gpa.destroy(self.broad_phase_layer_interface);
     self.gpa.destroy(self.object_layer_pair_filter);
     self.gpa.destroy(self.object_vs_broad_phase_layer_filter);
+    zphy.PhysicsSystem.destroy(self.physics_system);
     zphy.deinit();
 }
 
@@ -322,56 +323,54 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             @as(f32, @floatCast(body.position[2])),
         };
 
-        transform.*.position = position;
+        transform.position = position;
+        // transform.*.position = .{ 0, 0, 100 };
+        // std.log.debug("time: {d}, {d}", .{ info.elapsed_time, @mod(info.elapsed_time, 5) });
+        // if (@mod(info.elapsed_time, 5) > 4) transform.*.position = .{ 0, 0, 100 };
     }
 }
 
 fn playerInput(self: *@This(), info: *const system.Info) !void {
     const body = self.physics_system.getBodyInterfaceMut();
-    var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.input });
+    var query = info.world.ecz.query(&.{ component.collider, component.input, component.camera });
     while (query.next()) |entity| {
-        const collider = entity.getComponentPtr(system.World.component.collider);
-        const input: shared.net.Command.Input = entity.getComponent(system.World.component.input);
-        if (collider.body_id) |id| {
-            // var move = nz.Vec3(f32){ 0, 0, 0 };
-            // const velocity = 10;
+        const collider = entity.getComponentPtr(component.collider);
+        const camera: *nz.Transform3D(f32) = entity.getComponentPtr(component.camera);
+        const input: shared.net.Command.Input = entity.getComponent(component.input);
 
-            // var forward = nz.vec.forwardFromEuler(nz.Vec3(f32){ current_pitch_rad, current_yaw_rad, 0 });
-            // const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
-            // const up = nz.vec.normalize(nz.vec.cross(right, forward));
-            //
-            // if (input.forward)
-            //     move += nz.vec.scale(forward, velocity);
-            // if (keyboard[sdl.SDL_SCANCODE_S])
-            //     move -= nz.vec.scale(forward, velocity);
-            // if (keyboard[sdl.SDL_SCANCODE_A])
-            //     move -= nz.vec.scale(right, velocity);
-            // if (keyboard[sdl.SDL_SCANCODE_D])
-            //     move += nz.vec.scale(right, velocity);
-            // if (keyboard[sdl.SDL_SCANCODE_Q])
-            //     move -= nz.vec.scale(up, velocity);
-            // if (keyboard[sdl.SDL_SCANCODE_E])
-            //     move += nz.vec.scale(up, velocity);
-            //
-            // if (keyboard[sdl.SDL_SCANCODE_SPACE])
-            //     move += nz.vec.scale(up, velocity);
-            //
-            // if (keyboard[sdl.SDL_SCANCODE_UP])
-            //     camera.speed += 10;
-            // if (keyboard[sdl.SDL_SCANCODE_DOWN])
-            //     camera.speed -= 10;
-            // camera.speed = std.math.clamp(camera.speed, 0, 1000);
-            //
-            // const speed_multiplier: f32 = if (keyboard[sdl.SDL_SCANCODE_LSHIFT]) 3 else 1;
-            // move = nz.vec.scale(move, speed_multiplier);
-            var move: [3]f32 = .{ 0, 0, 0 };
-            if (input.left) move[0] -= 1;
-            if (input.right) move[0] += 1;
-            if (input.up) move[1] -= 1;
-            if (input.down) move[1] += 1;
-            if (input.forward) move[2] -= 1;
-            if (input.backward) move[2] += 1;
-            body.setLinearVelocity(id, move);
+        const sensitivity: f32 = 0.001;
+        //Camera rotation
+        const delta_yaw: f32 = @floatCast(input.mouse_delta[0] * sensitivity * info.delta_time);
+        const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
+        const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 0, 1, 0 });
+        const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, nz.Vec3(f32){ 1, 0, 0 });
+        camera.rotation = yaw_quat.mul(camera.rotation).mul(pitch_quat);
+        camera.rotation = camera.rotation.normalize();
+        std.log.debug("rot {any}", .{camera.rotation});
+
+        //Collider movement
+        if (collider.body_id) |id| {
+            var move = nz.Vec3(f32){ 0, 0, 0 };
+            const velocity = 1;
+
+            const forward = camera.forward();
+            const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
+            const up = nz.vec.normalize(nz.vec.cross(right, forward));
+
+            if (input.forward)
+                move -= nz.vec.scale(forward, velocity);
+            if (input.backward)
+                move += nz.vec.scale(forward, velocity);
+            if (input.left)
+                move += nz.vec.scale(right, velocity);
+            if (input.right)
+                move -= nz.vec.scale(right, velocity);
+            if (input.up)
+                move -= nz.vec.scale(up, velocity);
+            if (input.down)
+                move += nz.vec.scale(up, velocity);
+            // if (input.forward) move[2] = 1;
+            body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
         }
     }
 }
