@@ -117,7 +117,25 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 const transform = entity.getComponentPtr(component.transform);
 
                 transform.position = update_transform_command.position;
-                // std.log.debug("update pos {any},  ", .{transform.position});
+                transform.rotation = .fromVec(update_transform_command.rotation);
+                // std.log.debug("update rot {any},  ", .{transform.rotation});
+            },
+            .update_camera_rotation => {
+                const rotation_command = command.update_camera_rotation;
+                // std.log.debug("server ID: {d},  ", .{update_transform_command.id});
+                const id = info.world.enitity_mapping.get(rotation_command.id);
+                if (id == null) {
+                    // std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{update_transform_command.id});
+
+                    continue;
+                }
+
+                // std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
+                const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
+                const camera = entity.getComponentPtr(component.camera);
+                // _ = camera;
+                camera.transform.rotation = .fromVec(rotation_command.rotation);
+                std.log.debug("update rot {any},  ", .{rotation_command.rotation});
             },
             else => {
                 std.log.err("Unhandled command {s}", .{@tagName(command)});

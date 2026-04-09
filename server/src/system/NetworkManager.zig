@@ -121,6 +121,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     _ = try entity.addComponent(component.transform);
                     _ = try entity.putComponent(component.collider, .{ .shape = .box });
                     _ = try entity.addComponent(component.input);
+                    _ = try entity.addComponent(component.camera);
                     client.entity_id = entity.id;
                     try client.sendCommand(self.io, self.socket, writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
@@ -172,6 +173,13 @@ pub fn update(self: *@This(), info: *const Info) !void {
     it = self.clients.iterator();
     while (it.next()) |pair| {
         const client = pair.value_ptr;
+
+        //update camera
+        const player_entity = world.ecz.entityFromId(client.entity_id);
+        const camera = player_entity.getComponent(component.camera);
+        try client.sendCommand(self.io, self.socket, writer, .{ .update_camera_rotation = .{ .rotation = camera.rotation.toVec(), .id = client.entity_id } });
+
+        //Update ECS spawns
         if (client.needs_full_sync) {
             var query = world.ecz.query(&.{component.transform});
             while (query.next()) |entity| {
@@ -188,6 +196,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 }
             }
         }
+        //Update ECS despawns
         for (self.pending_despawn.items) |entry| {
             switch (entry.entity_type) {
                 .player => {
@@ -195,10 +204,15 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 },
             }
         }
+        //Update ECS Transforms
         var query = world.ecz.query(&.{component.transform});
         while (query.next()) |entity| {
             const transform = entity.getComponent(component.transform);
-            try client.sendCommand(self.io, self.socket, writer, .{ .update_transform = .{ .id = entity.id, .position = transform.position } });
+            try client.sendCommand(self.io, self.socket, writer, .{ .update_transform = .{
+                .id = entity.id,
+                .position = transform.position,
+                .rotation = transform.rotation.toVec(),
+            } });
         }
     }
     self.pending_spawn.items.len = 0;
