@@ -74,13 +74,13 @@ pub fn update(self: *@This(), info: *const Info) !void {
     for (self.command_queue.commands.items) |command| {
         switch (command) {
             .acknowledge => {
-                var new_camera = try info.world.ecz.spawnEntity();
-                try new_camera.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
-                try new_camera.putComponent(component.transform, .{ .position = .{ 0, 0, 40 } });
-                try info.world.enitity_mapping.put(self.gpa, command.acknowledge.id, new_camera.id);
+                var new_player = try info.world.ecz.spawnEntity();
+                try new_player.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
+                try new_player.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
+                try info.world.enitity_mapping.put(self.gpa, command.acknowledge.id, new_player.id);
                 info.world.my_server_id = command.acknowledge.id;
                 std.log.debug("ack entities: {d}", .{info.world.ecz.last_id});
-                std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_camera.id, command.acknowledge.id });
+                std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, command.acknowledge.id });
             },
             .spawn_entity => {
                 const server_id = command.spawn_entity.id;
@@ -134,8 +134,10 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
                 const camera = entity.getComponentPtr(component.camera);
                 // _ = camera;
+                // camera.transform.rotation = .identity;
                 camera.transform.rotation = .fromVec(rotation_command.rotation);
-                std.log.debug("update rot {any},  ", .{rotation_command.rotation});
+                std.log.debug("client rot {any},  ", .{camera.transform.rotation});
+                std.log.debug("server rot {any},  ", .{rotation_command.rotation});
             },
             else => {
                 std.log.err("Unhandled command {s}", .{@tagName(command)});
