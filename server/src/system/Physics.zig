@@ -340,81 +340,51 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
         const transform: *nz.Transform3D(f32) = entity.getComponentPtr(component.transform);
         const input: shared.net.Command.Input = entity.getComponent(component.input);
 
-        //Surface-glued FPS camera rotation
+        //Simple free camera rotation
         if (input.mouse_button_right) {
             const sensitivity: f32 = 0.01;
             const delta_yaw: f32 = @floatCast(input.mouse_delta[0] * sensitivity * info.delta_time);
             const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
 
-            // Dynamic up: away from planet center
-            const planet_center = nz.Vec3(f32){ 0, 0, 0 };
-            const up = nz.vec.normalize(transform.position - planet_center);
+            // Yaw around world up (Y axis), pitch around local right
+            const world_up = nz.Vec3(f32){ 0, -1, 0 };
+            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, world_up);
 
-            // Yaw around dynamic up (planet normal at player position)
-            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, up);
-            camera.rotation = yaw_quat.mul(camera.rotation);
-
-            // Pitch around local right vector (prevents roll)
+            // Get local right for pitch rotation
             const right = camera.rotation.rotateVec(nz.Vec3(f32){ 1, 0, 0 });
             const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, right);
-            camera.rotation = camera.rotation.mul(pitch_quat);
 
+            // Apply: yaw first, then pitch in local space
+            camera.rotation = yaw_quat.mul(camera.rotation).mul(pitch_quat);
             camera.rotation = camera.rotation.normalize();
             std.log.debug("rot {any}", .{camera.rotation});
         }
 
-        //Keep body aligned to planet surface
-        const planet_center = nz.Vec3(f32){ 0, 0, 0 };
-        const up = nz.vec.normalize(transform.position - planet_center);
+        //Simple body orientation (just copy camera for now)
+        transform.rotation = camera.rotation;
 
-        //Get camera forward and project onto tangent plane
-        const camera_forward = camera.rotation.rotateVec(nz.Vec3(f32){ 0, 0, -1 });
-        const forward_dot_up = nz.vec.dot(camera_forward, up);
-        const tangent_forward = nz.vec.normalize(camera_forward - nz.vec.scale(up, forward_dot_up));
-
-        //Rebuild orthonormal basis for body orientation
-        const right = nz.vec.normalize(nz.vec.cross(up, tangent_forward));
-        const forward = nz.vec.cross(right, up); //Re-orthogonalize
-
-        //Construct orientation from basis vectors
-        const basis_matrix = nz.Mat4x4(f32).new(.{
-            right[0], up[0], forward[0], 0,
-            right[1], up[1], forward[1], 0,
-            right[2], up[2], forward[2], 0,
-            0,        0,     0,          1,
-        });
-        transform.rotation = nz.quat.Hamiltonian(f32).fromMat4x4(basis_matrix);
-
-        //Collider movement - surface-tangent movement
+        //Collider movement - simple free movement
         if (collider.body_id) |id| {
             var move = nz.Vec3(f32){ 0, 0, 0 };
             const velocity = 1;
 
-            //Dynamic up: away from planet center
-            // const planet_center = nz.Vec3(f32){ 0, 0, 0 };
-            // const up = nz.vec.normalize(transform.position - planet_center);
+            // Get directions from camera rotation
+            const forward = camera.rotation.rotateVec(nz.Vec3(f32){ 0, 0, -1 });
+            const right = camera.rotation.rotateVec(nz.Vec3(f32){ 1, 0, 0 });
+            const up = nz.Vec3(f32){ 0, 1, 0 };
 
-            //Get camera forward and project onto tangent plane
-            const camera_forward1 = camera.rotation.rotateVec(nz.Vec3(f32){ 0, 0, -1 });
-            const forward_dot_up2 = nz.vec.dot(camera_forward1, up);
-            const tangent_forward3 = nz.vec.normalize(camera_forward1 - nz.vec.scale(up, forward_dot_up2));
-
-            //Right is perpendicular to up and tangent forward
-            const right4 = nz.vec.normalize(nz.vec.cross(up, tangent_forward3));
-
-            //Movement along surface tangent
             if (input.forward)
-                move += nz.vec.scale(tangent_forward3, velocity);
+                move += nz.vec.scale(forward, velocity);
             if (input.backward)
-                move -= nz.vec.scale(tangent_forward3, velocity);
+                move -= nz.vec.scale(forward, velocity);
             if (input.left)
-                move -= nz.vec.scale(right4, velocity);
+                move -= nz.vec.scale(right, velocity);
             if (input.right)
-                move += nz.vec.scale(right4, velocity);
+                move += nz.vec.scale(right, velocity);
             if (input.up)
-                move += nz.vec.scale(up, velocity); //Move away from planet
+                move += nz.vec.scale(up, velocity);
             if (input.down)
-                move -= nz.vec.scale(up, velocity); //Move toward planet
+                move -= nz.vec.scale(up, velocity);
 
             body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
 

@@ -12,8 +12,8 @@
             .hash = "N-V-__8AAAh4EgD_1vyfeRQed3y6urhGewfbgX0yP6g04hGv",
         },
         .yes = .{
-            .url = "git+https://github.com/HaraldWik/yes#2b86248cff0f2642b44a3c49d9d324a95b2e90ee",
-            .hash = "yes-0.0.0-pN7MXeqrAgAg0FI56hP3P7frBgLgTCWpjQpz8KNncob-",
+            .url = "git+https://github.com/HaraldWik/yes#0dfc1633cb66347440f3b3051ba5f86e432d3f4c",
+            .hash = "yes-0.0.0-pN7MXadJAwDxEn60YZa5a7HodCAxzsb-EtTi-tSTDs-1",
         },
         .vulkan_headers = .{
             .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#33d7f512583b8de44d1b6384aa1cf482f92e53e9",

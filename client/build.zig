@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     std.Io.Dir.cwd().deleteTree(io, "zig-out/lib/") catch unreachable;
 
     const shared = b.dependency("shared", .{ .target = target, .optimize = optimize }).module("shared");
-    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize }).module("yes");
 
     const wasm_runtime = b.dependency("wasm_runtime", .{ .target = target, .optimize = optimize }).module("wasm_runtime");
     const time = std.Io.Timestamp.now(io, .real);
