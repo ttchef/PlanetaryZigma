@@ -144,7 +144,7 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
             .horizontal => {},
         },
         .focus => |focused| {
-            if (focused) self.input_map = .{};
+            if (!focused) self.input_map = .{};
         },
         .mouse_motion => |motion| {
             self.mouse_pos[0] = motion.x;

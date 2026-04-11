@@ -269,7 +269,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .color = .{
-                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                .float32 = .{ (@sin(info.elapsed_time) + 1) / 2, (@cos(info.elapsed_time) + 1) / 2, (@tan(info.elapsed_time) + 1) / 2, 1.0 },
             },
         },
     };
@@ -407,8 +407,6 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const comp = system.component;
     var query = info.world.ecz.query(&.{comp.camera});
     const camera = query.next().?.getComponent(comp.camera);
-    // Build view matrix as inverse of camera transform
-    // const cam_transform = camera.transform.toMat4x4();
     const view = getViewMatrix(&camera.transform);
     var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
@@ -487,19 +485,9 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
 }
 
 pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
-    // View matrix = inverse(camera transform)
-    // For a transform T * R * S, the inverse is: inverse(S) * inverse(R) * inverse(T)
-    // For uniform scale: inverse(S) = 1/scale
-    // For rotation: inverse(R) = conjugate (for unit quaternions)
-    // For translation: inverse(T) translates by -position
-
-    // Get inverse rotation (conjugate for unit quaternions)
     const inv_rotation = transform.rotation.conjugate().toMat4x4();
-
-    // Get inverse translation (translate by negative position)
     const inv_translation = nz.Mat4x4(f32).translate(-transform.position);
 
-    // View = inv_rotation * inv_translation
     return inv_rotation.mul(inv_translation);
 }
 

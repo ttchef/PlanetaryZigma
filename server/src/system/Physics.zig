@@ -340,22 +340,27 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
         const transform: *nz.Transform3D(f32) = entity.getComponentPtr(component.transform);
         const input: shared.net.Command.Input = entity.getComponent(component.input);
 
+        const forward = camera.forward();
+        const right = camera.right();
+        const up = camera.up2();
+
         //Simple free camera rotation
         if (input.mouse_button_right) {
             const sensitivity: f32 = 0.01;
-            const delta_yaw: f32 = @floatCast(input.mouse_delta[0] * sensitivity * info.delta_time);
+            const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
+            std.log.debug("delta_yaw: {d}", .{delta_yaw});
             const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
+            std.log.debug("delta_pitch: {d}", .{delta_pitch});
 
-            // Yaw around world up (Y axis), pitch around local right
-            const world_up = nz.Vec3(f32){ 0, -1, 0 };
+            const world_up = nz.Vec3(f32){ 0, 1, 0 };
             const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, world_up);
 
-            // Get local right for pitch rotation
-            const right = camera.rotation.rotateVec(nz.Vec3(f32){ 1, 0, 0 });
-            const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, right);
+            camera.rotation = yaw_quat.mul(camera.rotation);
+            camera.rotation = camera.rotation.normalize();
 
-            // Apply: yaw first, then pitch in local space
-            camera.rotation = yaw_quat.mul(camera.rotation).mul(pitch_quat);
+            const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
+
+            camera.rotation = camera.rotation.mul(pitch_quat);
             camera.rotation = camera.rotation.normalize();
             std.log.debug("rot {any}", .{camera.rotation});
         }
@@ -366,12 +371,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
         //Collider movement - simple free movement
         if (collider.body_id) |id| {
             var move = nz.Vec3(f32){ 0, 0, 0 };
-            const velocity = 1;
-
-            // Get directions from camera rotation
-            const forward = camera.rotation.rotateVec(nz.Vec3(f32){ 0, 0, -1 });
-            const right = camera.rotation.rotateVec(nz.Vec3(f32){ 1, 0, 0 });
-            const up = nz.Vec3(f32){ 0, 1, 0 };
+            const velocity = 0.1;
 
             if (input.forward)
                 move += nz.vec.scale(forward, velocity);
