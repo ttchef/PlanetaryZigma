@@ -324,6 +324,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         };
 
         transform.position = position;
+
         // transform.*.position = .{ 0, 0, 100 };
         // std.log.debug("time: {d}, {d}", .{ info.elapsed_time, @mod(info.elapsed_time, 5) });
         // if (@mod(info.elapsed_time, 5) > 4) transform.*.position = .{ 0, 0, 100 };
@@ -332,45 +333,67 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
 fn playerInput(self: *@This(), info: *const system.Info) !void {
     const body = self.physics_system.getBodyInterfaceMut();
-    var query = info.world.ecz.query(&.{ component.collider, component.input, component.camera });
+    var query = info.world.ecz.query(&.{ component.collider, component.input, component.camera, component.transform });
     while (query.next()) |entity| {
         const collider = entity.getComponentPtr(component.collider);
         const camera: *nz.Transform3D(f32) = entity.getComponentPtr(component.camera);
+        const transform: *nz.Transform3D(f32) = entity.getComponentPtr(component.transform);
         const input: shared.net.Command.Input = entity.getComponent(component.input);
 
-        const sensitivity: f32 = 0.001;
-        //Camera rotation
-        const delta_yaw: f32 = @floatCast(input.mouse_delta[0] * sensitivity * info.delta_time);
-        const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
-        const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 0, 1, 0 });
-        const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, nz.Vec3(f32){ 1, 0, 0 });
-        camera.rotation = yaw_quat.mul(camera.rotation).mul(pitch_quat);
-        camera.rotation = camera.rotation.normalize();
-        std.log.debug("rot {any}", .{camera.rotation});
+        const forward = camera.forward();
+        const right = camera.right();
+        const up = camera.up2();
 
-        //Collider movement
+        //Simple free camera rotation
+        if (input.mouse_button_right) {
+            const sensitivity: f32 = 0.01;
+            const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
+            std.log.debug("delta_yaw: {d}", .{delta_yaw});
+            const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
+            std.log.debug("delta_pitch: {d}", .{delta_pitch});
+
+            const world_up = nz.Vec3(f32){ 0, 1, 0 };
+            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, world_up);
+
+            camera.rotation = yaw_quat.mul(camera.rotation);
+            camera.rotation = camera.rotation.normalize();
+
+            const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
+
+            camera.rotation = camera.rotation.mul(pitch_quat);
+            camera.rotation = camera.rotation.normalize();
+            std.log.debug("rot {any}", .{camera.rotation});
+        }
+
+        //Simple body orientation (just copy camera for now)
+        transform.rotation = camera.rotation;
+
+        //Collider movement - simple free movement
         if (collider.body_id) |id| {
             var move = nz.Vec3(f32){ 0, 0, 0 };
-            const velocity = 1;
-
-            const forward = camera.forward();
-            const right = nz.vec.normalize(nz.vec.cross(forward, nz.Vec3(f32){ 0, 1, 0 }));
-            const up = nz.vec.normalize(nz.vec.cross(right, forward));
+            const velocity = 0.1;
 
             if (input.forward)
-                move -= nz.vec.scale(forward, velocity);
-            if (input.backward)
                 move += nz.vec.scale(forward, velocity);
+            if (input.backward)
+                move -= nz.vec.scale(forward, velocity);
             if (input.left)
-                move += nz.vec.scale(right, velocity);
-            if (input.right)
                 move -= nz.vec.scale(right, velocity);
+            if (input.right)
+                move += nz.vec.scale(right, velocity);
             if (input.up)
-                move -= nz.vec.scale(up, velocity);
-            if (input.down)
                 move += nz.vec.scale(up, velocity);
-            // if (input.forward) move[2] = 1;
+            if (input.down)
+                move -= nz.vec.scale(up, velocity);
+
             body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
+
+            if (input.r) {
+                camera.* = .{};
+                body.setLinearVelocity(id, .{ 0, 0, 0 });
+                body.setPosition(id, .{ 0, 0, 0 }, .activate);
+                body.setRotation(id, .{ 1, 0, 0, 0 }, .activate);
+            }
         }
     }
 }

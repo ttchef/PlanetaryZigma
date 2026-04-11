@@ -118,10 +118,10 @@ pub fn update(self: *@This(), info: *const Info) !void {
                 .connect => {
                     std.log.debug("connect ", .{});
                     var entity = try world.ecz.spawnEntity();
-                    _ = try entity.addComponent(component.transform);
+                    _ = try entity.putComponent(component.transform, .{ .position = .{ 0, 0, 100 } });
                     _ = try entity.putComponent(component.collider, .{ .shape = .box });
                     _ = try entity.addComponent(component.input);
-                    _ = try entity.addComponent(component.camera);
+                    _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
                     client.entity_id = entity.id;
                     try client.sendCommand(self.io, self.socket, writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
@@ -138,7 +138,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     const input_entity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
                     const input = input_entity.getComponentPtr(component.input);
                     input.* = command.input;
-                    std.debug.print("mouse :{any}\n", .{input.*.mouse_delta});
+                    // std.debug.print("mouse :{any}\n", .{input.*.mouse_delta});
                 },
                 else => {
                     std.log.err("Unhandled command {s}", .{@tagName(command)});

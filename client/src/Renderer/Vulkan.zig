@@ -269,7 +269,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .color = .{
-                .float32 = .{ 0.0, 0.0, 0.0, 1.0 },
+                .float32 = .{ (@sin(info.elapsed_time) + 1) / 2, (@cos(info.elapsed_time) + 1) / 2, (@tan(info.elapsed_time) + 1) / 2, 1.0 },
             },
         },
     };
@@ -319,11 +319,10 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     if (@mod(tmp, 2) == -1) {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_LINE);
         c.vkCmdSetLineWidth(cmd, 1);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_FRONT_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
-        // ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
-        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_FRONT_BIT);
+        ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
     ext.vkCmdSetDepthTestEnableEXT(cmd, c.VK_TRUE);
@@ -408,12 +407,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const comp = system.component;
     var query = info.world.ecz.query(&.{comp.camera});
     const camera = query.next().?.getComponent(comp.camera);
-    const cam_pos = nz.Mat4x4(f32).translate(camera.transform.position);
-    const cam_rot = camera.transform.rotation.toMat4x4();
-    // const view = cam_rot.mul(cam_pos);
-    const view = cam_pos.mul(cam_rot).inverse();
-    // const view = cam_pos.inverse();
-    const proj = nz.Mat4x4(f32).perspective(camera.fov_rad, aspect, 0.01, 1000);
+    const view = getViewMatrix(&camera.transform);
+    var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
 
     var scene_data: Swapchain.FrameData.GPUScene = .{
@@ -487,4 +482,28 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
         width,
         height,
     );
+}
+
+pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+    const inv_rotation = transform.rotation.conjugate().toMat4x4();
+    const inv_translation = nz.Mat4x4(f32).translate(-transform.position);
+
+    return inv_rotation.mul(inv_translation);
+}
+
+// pub fn getRotationMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+//     const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, nz.Vec3(f32){ 0, 1, 0 });
+//     const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
+//
+//     return yaw_rotation.mul(pitch_rotation).toMat4x4().inverse();
+// }
+
+pub fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+    const f = 1.0 / std.math.tan(fovy_rad / 2.0);
+    return .new(.{
+        f / aspect, 0, 0, 0,
+        0, -f, 0, 0, // flip Y for Vulkan
+        0, 0, far / (near - far),          -1, // <- note near-far here
+        0, 0, (far * near) / (near - far), 0,
+    });
 }

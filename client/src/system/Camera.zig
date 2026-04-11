@@ -25,6 +25,7 @@ pub fn update(self: *@This(), info: *const Info) void {
     self.input_map.mouse_delta[1] = self.mouse_pos[1] - self.mouse_prev_pos[1];
     self.mouse_prev_pos[0] = self.mouse_pos[0];
     self.mouse_prev_pos[1] = self.mouse_pos[1];
+
     // const world = info.world;
     // const current_pitch_rad = self.transform.rotation[0];
     // const current_yaw_rad = self.transform.rotation[1];
@@ -132,7 +133,7 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
                 .a => self.input_map.left = pressed,
                 .q => self.input_map.down = pressed,
                 .e => self.input_map.up = pressed,
-                .r => self.transform = .{},
+                .r => self.input_map.r = pressed,
                 else => {},
             }
         },
@@ -143,11 +144,23 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
             .horizontal => {},
         },
         .focus => |focused| {
-            if (focused) self.input_map = .{};
+            if (!focused) self.input_map = .{};
         },
         .mouse_motion => |motion| {
             self.mouse_pos[0] = motion.x;
             self.mouse_pos[1] = motion.y;
+        },
+        .mouse_button => |button| {
+            if (button.state == .pressed and button.button == .left)
+                self.input_map.mouse_button_left = true
+            else if (button.state == .released and button.button == .left) {
+                self.input_map.mouse_button_left = false;
+            }
+            if (button.state == .pressed and button.button == .right)
+                self.input_map.mouse_button_right = true
+            else if (button.state == .released and button.button == .right) {
+                self.input_map.mouse_button_right = false;
+            }
         },
 
         else => {},

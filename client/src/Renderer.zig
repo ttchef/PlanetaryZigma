@@ -117,6 +117,6 @@ pub fn initVulkan(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: 
     return .{ .inner = vulkan_renderer };
 }
 
-fn createVulkanSurface(instance: *yes.vulkan.Instance, user_data: *const YesSurfaceCreateUserData) !*yes.vulkan.Surface {
-    return yes.vulkan.Surface.create(user_data.platform, user_data.window, instance, null, @ptrCast(&Vulkan.c.vkGetInstanceProcAddr));
+fn createVulkanSurface(instance: *Vulkan.c.VkInstance, user_data: *const YesSurfaceCreateUserData) !Vulkan.c.VkSurfaceKHR {
+    return @ptrCast(try yes.vulkan.createSurface(user_data.platform, user_data.window, @ptrCast(instance), null, @ptrCast(&Vulkan.c.vkGetInstanceProcAddr)));
 }
