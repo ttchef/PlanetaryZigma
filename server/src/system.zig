@@ -19,6 +19,7 @@ pub const World = struct {
         component.collider,
         component.input,
         component.camera,
+        component.planet,
     }),
 
     pub const component = struct {
@@ -26,6 +27,7 @@ pub const World = struct {
         pub const collider: ecz.Component = .{ .name = .collider, .type = Physics.Collider };
         pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
         pub const camera: ecz.Component = .{ .name = .camera, .type = nz.Transform3D(f32) };
+        pub const planet: ecz.Component = .{ .name = .planet, .type = u32 };
     };
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
@@ -60,8 +62,22 @@ pub const Context = struct {
         };
         try self.network_manager.init(data.gpa, data.io);
         try self.physics.init(data.gpa, data.io);
-    }
 
+        //TODO: maybe not do planet init here?
+        var planet_entity = try data.world.ecz.spawnEntity();
+        try planet_entity.putComponent(World.component.planet, 10);
+        try planet_entity.putComponent(World.component.transform, .{});
+        const planet: shared.Planet = try .init(data.gpa, 10);
+        try planet_entity.putComponent(World.component.collider, .{
+            .shape = .{
+                .mesh = .{
+                    .indices = planet.indices,
+                    .vertices = planet.vertices,
+                },
+            },
+        });
+        //TODO: planet init
+    }
     pub fn deinit(self: *@This()) !void {
         self.physics.deinit();
         try self.network_manager.deinit();
