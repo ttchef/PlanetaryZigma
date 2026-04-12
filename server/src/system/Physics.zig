@@ -20,12 +20,12 @@ pub const Collider = struct {
         box,
         sphere,
     };
-    shape: Primitive,
-    // const Mesh = struct {
-    //     render_handle: usize,
-    //     indices: std.ArrayList(u32),
-    //     vertices: std.ArrayList([4]f32),
-    // };
+    const Mesh = struct {
+        // render_handle: usize,
+        indices: std.ArrayList(u32),
+        vertices: std.ArrayList([3]f32),
+    };
+    shape: union(enum) { primitive: Primitive, mesh: Mesh },
     body_id: ?zphy.BodyId = null,
     // motion_type: zphy.MotionType,
     // max_angular_velocity: f32 = 1,
@@ -192,6 +192,32 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 
     // physics_system.optimizeBroadPhase();
 
+    const planet: shared.Planet = try .init(gpa, 10);
+
+    const mesh_shape_setting = try zphy.MeshShapeSettings.create(
+        planet.vertices.items.ptr,
+        @intCast(planet.vertices.items.len),
+        @sizeOf([3]f32),
+        planet.indices.items[0..],
+    );
+    zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
+    defer mesh_shape_setting.asShapeSettings().release();
+    const custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
+
+    const body_interface = physics_system.getBodyInterfaceMut();
+    const body_id = try body_interface.createAndAddBody(.{
+        .position = .{ 0, 0, 0, 1 },
+        .rotation = .{ 0, 0, 0, 1 },
+        .shape = custom_shape,
+        .motion_type = .static,
+        .object_layer = object_layers.moving,
+        // .user_data = @intFromEnum(entry),
+        .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+        // .max_angular_velocity = collider.max_angular_velocity,
+        //.allow_sleeping = false,
+    }, .activate);
+    _ = body_id;
+
     self.* = .{
         .global_state_reload = undefined,
         .gpa = gpa,
@@ -263,19 +289,49 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     while (query.next()) |entity| {
         const collider = entity.getComponentPtr(system.World.component.collider);
         const transform = entity.getComponent(system.World.component.transform);
+        const matrix = transform.toMat4x4();
         if (collider.body_id == null) {
-            std.debug.print("PHYSOCS\n", .{});
-            const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
-            defer box_shape_settings.asShapeSettings().release();
-            const box_shape = try box_shape_settings.asShapeSettings().createShape();
-            defer box_shape.release();
+            const shape = switch (collider.shape) {
+                .primitive => |primitive_shape| switch (primitive_shape) {
+                    .box => shape: {
+                        const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
+                        defer box_shape_settings.asShapeSettings().release();
+                        const box_shape = try box_shape_settings.asShapeSettings().createShape();
+                        break :shape box_shape;
+                    },
+                    .sphere => shape: {
+                        const sphere_shape_settings = try zphy.SphereShapeSettings.create(1);
+                        defer sphere_shape_settings.asShapeSettings().release();
+                        const sphere_shape = try sphere_shape_settings.asShapeSettings().createShape();
+                        break :shape sphere_shape;
+                    },
+                    .capsule => shape: {
+                        const capsule_shape_settings = try zphy.CapsuleShapeSettings.create(1, 1);
+                        defer capsule_shape_settings.asShapeSettings().release();
+                        const capsule_shape = try capsule_shape_settings.asShapeSettings().createShape();
+                        break :shape capsule_shape;
+                    },
+                },
+                .mesh => |mesh_shape| shape: {
+                    std.log.debug("Spawned PLanet", .{});
+                    const mesh_shape_setting = try zphy.MeshShapeSettings.create(
+                        mesh_shape.vertices.items.ptr,
+                        @intCast(mesh_shape.vertices.items.len),
+                        @sizeOf(nz.Vec3(f32)),
+                        mesh_shape.indices.items[0..],
+                    );
+                    zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
+                    defer mesh_shape_setting.asShapeSettings().release();
+                    const custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
+                    break :shape custom_shape;
+                },
+            };
+            defer shape.release();
 
-            const matrix = transform.toMat4x4();
             const body_id = try body_interface.createAndAddBody(.{
                 .position = matrix.vec4Position(),
-                .rotation = .{ 1, 0, 0, 0 },
-                // .rotation = euler_to_quat.toVecReversed(),
-                .shape = box_shape,
+                .rotation = transform.rotation.toVec(),
+                .shape = shape,
                 // .motion_type = collider.motion_type,
                 .object_layer = object_layers.moving,
                 .user_data = entity.id,
@@ -348,9 +404,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
         if (input.mouse_button_right) {
             const sensitivity: f32 = 0.01;
             const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
-            std.log.debug("delta_yaw: {d}", .{delta_yaw});
             const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
-            std.log.debug("delta_pitch: {d}", .{delta_pitch});
 
             const world_up = nz.Vec3(f32){ 0, 1, 0 };
             const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, world_up);
@@ -362,7 +416,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
 
             camera.rotation = camera.rotation.mul(pitch_quat);
             camera.rotation = camera.rotation.normalize();
-            std.log.debug("rot {any}", .{camera.rotation});
+            // std.log.debug("rot {any}", .{camera.rotation});
         }
 
         //Simple body orientation (just copy camera for now)
@@ -371,7 +425,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
         //Collider movement - simple free movement
         if (collider.body_id) |id| {
             var move = nz.Vec3(f32){ 0, 0, 0 };
-            const velocity = 0.1;
+            const velocity = 1;
 
             if (input.forward)
                 move += nz.vec.scale(forward, velocity);

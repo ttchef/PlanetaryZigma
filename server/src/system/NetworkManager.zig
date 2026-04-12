@@ -119,7 +119,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     std.log.debug("connect ", .{});
                     var entity = try world.ecz.spawnEntity();
                     _ = try entity.putComponent(component.transform, .{ .position = .{ 0, 0, 100 } });
-                    _ = try entity.putComponent(component.collider, .{ .shape = .box });
+                    _ = try entity.putComponent(component.collider, .{ .shape = .{ .primitive = .box } });
                     _ = try entity.addComponent(component.input);
                     _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
                     client.entity_id = entity.id;
