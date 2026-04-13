@@ -20,6 +20,7 @@ pub const World = struct {
         component.input,
         component.camera,
         component.planet,
+        component.entity_type,
     }),
 
     pub const component = struct {
@@ -28,6 +29,7 @@ pub const World = struct {
         pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
         pub const camera: ecz.Component = .{ .name = .camera, .type = nz.Transform3D(f32) };
         pub const planet: ecz.Component = .{ .name = .planet, .type = u32 };
+        pub const entity_type: ecz.Component = .{ .name = .entity_type, .type = shared.EntityType };
     };
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
@@ -67,7 +69,10 @@ pub const Context = struct {
         var planet_entity = try data.world.ecz.spawnEntity();
         try planet_entity.putComponent(World.component.planet, 10);
         try planet_entity.putComponent(World.component.transform, .{});
-        const planet: shared.Planet = try .init(data.gpa, 10);
+        try planet_entity.putComponent(World.component.entity_type, .planet);
+        const planet: shared.Planet = try .init(data.gpa, 30);
+        std.log.debug("ptr: {*}, len:{d}", .{ planet.vertices.items.ptr, planet.vertices.items.len });
+
         try planet_entity.putComponent(World.component.collider, .{
             .shape = .{
                 .mesh = .{
@@ -75,7 +80,9 @@ pub const Context = struct {
                     .vertices = planet.vertices,
                 },
             },
+            .motion_type = .static,
         });
+        std.log.debug("OK ", .{});
         //TODO: planet init
     }
     pub fn deinit(self: *@This()) !void {

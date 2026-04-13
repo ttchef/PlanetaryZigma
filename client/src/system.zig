@@ -83,7 +83,7 @@ pub const Context = struct {
             const transform = entity.getComponentPtr(component.transform);
             camera.update(info);
             try self.renderer.update(info);
-            std.log.debug("pos {any},  ", .{transform.position});
+            // std.log.debug("pos {any},  ", .{transform.position});
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
