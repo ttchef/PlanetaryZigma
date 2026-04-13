@@ -38,7 +38,7 @@ vertex_shader: *Shader,
 fragment_shader: *Shader,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
-// planet_mesh: Mesh,
+planet_mesh: Mesh,
 box_mesh: Mesh,
 
 pub const InitOptions = struct {
@@ -92,17 +92,17 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
     );
 
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
-    // var planet_vertices: Mesh.Planet = try .init(gpa, 30);
-    // defer planet_vertices.deinit(gpa);
-    // self.planet_mesh = try .init(
-    //     gpa,
-    //     self.vma,
-    //     "test",
-    //     self.device,
-    //     planet_vertices.indices.items,
-    //     Mesh.Vertex,
-    //     planet_vertices.vertices.items,
-    // );
+    var planet_vertices: Mesh.Planet = try .init(gpa, 30);
+    defer planet_vertices.deinit(gpa);
+    self.planet_mesh = try .init(
+        gpa,
+        self.vma,
+        "test",
+        self.device,
+        planet_vertices.indices.items,
+        Mesh.Vertex,
+        planet_vertices.vertices.items,
+    );
     self.box_mesh = try .init(
         gpa,
         self.vma,
@@ -138,7 +138,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    // self.planet_mesh.deinit(gpa, self.vma);
+    self.planet_mesh.deinit(gpa, self.vma);
     self.box_mesh.deinit(gpa, self.vma);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
@@ -449,18 +449,18 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
     var query_mesh = info.world.ecz.query(&.{ comp.mesh, comp.transform });
-    c.vkCmdBindIndexBuffer(cmd, self.box_mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
     while (query_mesh.next()) |entry| {
-        const mesh_id = entry.getComponent(comp.mesh);
-        _ = mesh_id;
+        const mesh_id = entry.getComponent(comp.mesh).id;
+        const mesh = if (mesh_id == 0) self.box_mesh else self.planet_mesh;
         const transform = entry.getComponent(comp.transform);
         const matrix = transform.toMat4x4();
         // std.log.debug("matrix: {any}", .{matrix});
-        push = .{ .buffer_address = self.box_mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
+        push = .{ .buffer_address = mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
+        c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);
         c.vkCmdPushConstants(cmd, self.pipeline_layout.handle, c.VK_SHADER_STAGE_VERTEX_BIT, 0, @sizeOf(Shader.PushConstant), &push);
         c.vkCmdDrawIndexed(
             cmd,
-            @intCast(self.box_mesh.index_buffer.len),
+            @intCast(mesh.index_buffer.len),
             1,
             0,
             0,

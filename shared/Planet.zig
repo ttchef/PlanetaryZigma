@@ -1,7 +1,7 @@
 const std = @import("std");
 const nz = @import("numz");
 
-vertices: std.ArrayList([3]f32),
+vertices: std.ArrayList([4]f32),
 indices: std.ArrayList(u32),
 
 //if size < 3, size = 3. It beaks other ways.
@@ -37,7 +37,7 @@ pub fn init(
         }
     }
 
-    var gen_vertices: std.ArrayList([3]f32) = .empty;
+    var gen_vertices: std.ArrayList([4]f32) = .empty;
     var gen_indices: std.ArrayList(u32) = .empty;
     for (0..clamped_size) |x| {
         for (0..clamped_size) |y| {
@@ -78,7 +78,7 @@ fn marchCube(
     gpa: std.mem.Allocator,
     postion: nz.Vec3(f32),
     corners: [8]f32,
-    gen_vertices: *std.ArrayList([3]f32),
+    gen_vertices: *std.ArrayList([4]f32),
     gen_indices: *std.ArrayList(u32),
 ) !void {
     var config_index: u32 = 0;
@@ -96,10 +96,16 @@ fn marchCube(
             const vert1 = postion + edge_table[@intFromFloat(index)][0];
             const vert2 = postion + edge_table[@intFromFloat(index)][1];
             const devision: nz.Vec3(f32) = .{ 2, 2, 2 };
+            const pos: [3]f32 = @bitCast((vert1 + vert2) / devision);
 
             try gen_vertices.append(
                 gpa,
-                @bitCast((vert1 + vert2) / devision),
+                .{
+                    pos[0],
+                    pos[1],
+                    pos[2],
+                    1,
+                },
             );
             try gen_indices.append(gpa, @intCast(gen_vertices.items.len - 1));
             edge_index += 1;

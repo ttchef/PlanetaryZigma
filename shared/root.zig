@@ -10,4 +10,5 @@ pub const AssetServer = @import("AssetServer.zig");
 
 pub const EntityType = enum(u16) {
     player,
+    planet,
 };

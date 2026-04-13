@@ -23,13 +23,12 @@ pub const Collider = struct {
     const Mesh = struct {
         // render_handle: usize,
         indices: std.ArrayList(u32),
-        vertices: std.ArrayList([3]f32),
+        vertices: std.ArrayList([4]f32),
     };
     shape: union(enum) { primitive: Primitive, mesh: Mesh },
     body_id: ?zphy.BodyId = null,
-    // motion_type: zphy.MotionType,
+    motion_type: zphy.MotionType,
     // max_angular_velocity: f32 = 1,
-    // shape: union(enum) { primitive: Primitive, mesh: Mesh },
 };
 
 const object_layers = struct {
@@ -190,15 +189,15 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
 
     physics_system.setGravity(.{ 0, 0, 0 });
 
-    // physics_system.optimizeBroadPhase();
+    physics_system.optimizeBroadPhase();
 
     const planet: shared.Planet = try .init(gpa, 10);
 
     const mesh_shape_setting = try zphy.MeshShapeSettings.create(
         planet.vertices.items.ptr,
         @intCast(planet.vertices.items.len),
-        @sizeOf([3]f32),
-        planet.indices.items[0..],
+        @sizeOf([4]f32),
+        planet.indices.items,
     );
     zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
     defer mesh_shape_setting.asShapeSettings().release();
@@ -313,12 +312,11 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                     },
                 },
                 .mesh => |mesh_shape| shape: {
-                    std.log.debug("Spawned PLanet", .{});
                     const mesh_shape_setting = try zphy.MeshShapeSettings.create(
                         mesh_shape.vertices.items.ptr,
                         @intCast(mesh_shape.vertices.items.len),
-                        @sizeOf(nz.Vec3(f32)),
-                        mesh_shape.indices.items[0..],
+                        @sizeOf([4]f32),
+                        mesh_shape.indices.items,
                     );
                     zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
                     defer mesh_shape_setting.asShapeSettings().release();
@@ -328,11 +326,12 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             };
             defer shape.release();
 
+            std.log.debug("XDD", .{});
             const body_id = try body_interface.createAndAddBody(.{
                 .position = matrix.vec4Position(),
                 .rotation = transform.rotation.toVec(),
                 .shape = shape,
-                // .motion_type = collider.motion_type,
+                .motion_type = collider.motion_type,
                 .object_layer = object_layers.moving,
                 .user_data = entity.id,
                 .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
@@ -352,9 +351,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const entity = info.world.ecz.entityFromId(@intCast(body.user_data));
         const transform = entity.getComponent(system.World.component.transform);
         const up = nz.vec.normalize(transform.position);
-        _ = up;
-        // const force = -up;
-        // body.addForce(nz.vec.scale(force, 10000));
+        // _ = up;
+        const force = -up;
+        body.addForce(nz.vec.scale(force, 1000));
         // std.debug.print("GRAVITY {any}\n", .{force});
 
         // const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });

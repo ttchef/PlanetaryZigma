@@ -119,7 +119,12 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     std.log.debug("connect ", .{});
                     var entity = try world.ecz.spawnEntity();
                     _ = try entity.putComponent(component.transform, .{ .position = .{ 0, 0, 100 } });
-                    _ = try entity.putComponent(component.collider, .{ .shape = .{ .primitive = .box } });
+                    _ = try entity.putComponent(component.collider, .{
+                        .shape = .{
+                            .primitive = .box,
+                        },
+                        .motion_type = .dynamic,
+                    });
                     _ = try entity.addComponent(component.input);
                     _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
                     client.entity_id = entity.id;
@@ -181,28 +186,21 @@ pub fn update(self: *@This(), info: *const Info) !void {
 
         //Update ECS spawns
         if (client.needs_full_sync) {
-            var query = world.ecz.query(&.{component.transform});
+            var query = world.ecz.query(&.{ component.transform, component.entity_type });
             while (query.next()) |entity| {
-                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entity.id } }); //TODO: The type! figure it out!
+                const entity_type = entity.getComponent(component.entity_type);
+                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entity.id, .entity_type = entity_type } });
             }
             client.needs_full_sync = false;
         } else {
             // std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
             for (self.pending_spawn.items) |entry| {
-                switch (entry.entity_type) {
-                    .player => {
-                        try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entry.id } });
-                    },
-                }
+                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
             }
         }
         //Update ECS despawns
         for (self.pending_despawn.items) |entry| {
-            switch (entry.entity_type) {
-                .player => {
-                    try client.sendCommand(self.io, self.socket, writer, .{ .despawn_entity = .{ .id = entry.id } });
-                },
-            }
+            try client.sendCommand(self.io, self.socket, writer, .{ .despawn_entity = .{ .id = entry.id } });
         }
         //Update ECS Transforms
         var query = world.ecz.query(&.{component.transform});
