@@ -24,6 +24,7 @@ const ext = procs.device.ProcTable;
 const check = @import("Vulkan/utils.zig").check;
 
 pub const c = @import("vulkan");
+pub const Vertex = Mesh.Vertex;
 
 instance: Instance,
 debug_messenger: DebugMessenger,
@@ -32,14 +33,13 @@ physical_device: PhysicalDevice,
 device: Device,
 vma: Vma,
 swapchain: Swapchain,
+meshes: std.ArrayList(Mesh) = .empty,
 
 //Temporary
 vertex_shader: *Shader,
 fragment_shader: *Shader,
 desciptor_layout: descriptor.Layout,
 pipeline_layout: pipeline.Layout,
-planet_mesh: Mesh,
-box_mesh: Mesh,
 
 pub const InitOptions = struct {
     instance: struct {
@@ -61,6 +61,7 @@ pub const InitOptions = struct {
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOptions) !*@This() {
     const self = try gpa.create(@This());
+
     self.instance = try .init(gpa, options.instance.extensions, options.instance.layers);
     procs.instance.load(self.instance.handle, null);
     self.debug_messenger = try .init(self.instance, .{
@@ -90,20 +91,9 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         }},
         c.VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
     );
-
     self.pipeline_layout = try .init(self.device, Shader.PushConstant, self.desciptor_layout);
-    var planet_vertices: Mesh.Planet = try .init(gpa, 30);
-    defer planet_vertices.deinit(gpa);
-    self.planet_mesh = try .init(
-        gpa,
-        self.vma,
-        "test",
-        self.device,
-        planet_vertices.indices.items,
-        Mesh.Vertex,
-        planet_vertices.vertices.items,
-    );
-    self.box_mesh = try .init(
+    self.meshes = .empty;
+    try self.meshes.append(gpa, try .init(
         gpa,
         self.vma,
         "box",
@@ -111,7 +101,7 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
         &Mesh.box.indicies_array,
         Mesh.Vertex,
         &Mesh.box.vertex_array,
-    );
+    ));
     self.vertex_shader = try .init(gpa, self.device, asset_server, .{
         .sType = c.VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT,
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
@@ -138,8 +128,10 @@ pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, options: InitOpt
 pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     check(c.vkDeviceWaitIdle(self.device.handle)) catch {};
 
-    self.planet_mesh.deinit(gpa, self.vma);
-    self.box_mesh.deinit(gpa, self.vma);
+    for (self.meshes.items) |*mesh| {
+        mesh.deinit(gpa, self.vma);
+    }
+    self.meshes.deinit(gpa);
     self.desciptor_layout.deinit(self.device);
     self.pipeline_layout.deinit(self.device);
     self.vertex_shader.deinit(gpa);
@@ -451,7 +443,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var query_mesh = info.world.ecz.query(&.{ comp.mesh, comp.transform });
     while (query_mesh.next()) |entry| {
         const mesh_id = entry.getComponent(comp.mesh).id;
-        const mesh = if (mesh_id == 0) self.box_mesh else self.planet_mesh;
+        const mesh = self.meshes.items[mesh_id];
         const transform = entry.getComponent(comp.transform);
         const matrix = transform.toMat4x4();
         // std.log.debug("matrix: {any}", .{matrix});
@@ -485,21 +477,31 @@ pub fn resize(self: *@This(), gpa: std.mem.Allocator, width: u32, height: u32) !
     );
 }
 
-pub fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
+pub fn createMesh(self: *@This(), gpa: std.mem.Allocator, name: []const u8, indices: []u32, verices: []Mesh.Vertex) !usize {
+    const mesh = try Mesh.init(
+        gpa,
+        self.vma,
+        name,
+        self.device,
+        indices,
+        Mesh.Vertex,
+        verices,
+    );
+    try self.meshes.append(
+        gpa,
+        mesh,
+    );
+    return (self.meshes.items.len - 1);
+}
+
+fn getViewMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
     const inv_rotation = transform.rotation.conjugate().toMat4x4();
     const inv_translation = nz.Mat4x4(f32).translate(-transform.position);
 
     return inv_rotation.mul(inv_translation);
 }
 
-// pub fn getRotationMatrix(transform: *const nz.Transform3D(f32)) nz.Mat4x4(f32) {
-//     const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, nz.Vec3(f32){ 0, 1, 0 });
-//     const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
-//
-//     return yaw_rotation.mul(pitch_rotation).toMat4x4().inverse();
-// }
-
-pub fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
+fn perspective(fovy_rad: f32, aspect: f32, near: f32, far: f32) nz.Mat4x4(f32) {
     const f = 1.0 / std.math.tan(fovy_rad / 2.0);
     return .new(.{
         f / aspect, 0, 0, 0,

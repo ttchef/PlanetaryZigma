@@ -19,6 +19,8 @@ clients: std.AutoHashMap(std.Io.net.IpAddress, Client),
 
 pub const Client = struct {
     gpa: std.mem.Allocator,
+    io: std.Io,
+    server_socket: std.Io.net.Socket,
     name: []const u8,
     entity_id: u32 = 0,
     needs_full_sync: bool = true,
@@ -44,6 +46,8 @@ pub const Client = struct {
                 const client = clients.getPtr(msg.from).?;
                 client.* = .{
                     .gpa = gpa,
+                    .io = io,
+                    .server_socket = socket,
                     .name = try gpa.dupe(u8, connect.name),
                     .ip_address = msg.from,
                 };
@@ -56,10 +60,10 @@ pub const Client = struct {
         }
     }
 
-    pub fn sendCommand(self: @This(), io: std.Io, socket: std.Io.net.Socket, writer: *std.Io.Writer, command: shared.net.Command) !void {
+    pub fn sendCommand(self: *@This(), writer: *std.Io.Writer, command: shared.net.Command) !void {
         writer.end = 0;
         try command.write(writer);
-        try socket.send(io, &self.ip_address, writer.buffer);
+        try self.server_socket.send(self.io, &self.ip_address, writer.buffer);
     }
 
     pub fn deinit(self: *@This()) !void {
@@ -128,7 +132,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     _ = try entity.addComponent(component.input);
                     _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
                     client.entity_id = entity.id;
-                    try client.sendCommand(self.io, self.socket, writer, .{ .acknowledge = .{ .id = client.entity_id } });
+                    try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
                     std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ecz.last_id, client.entity_id });
                 },
@@ -182,31 +186,45 @@ pub fn update(self: *@This(), info: *const Info) !void {
         //update camera
         const player_entity = world.ecz.entityFromId(client.entity_id);
         const camera = player_entity.getComponent(component.camera);
-        try client.sendCommand(self.io, self.socket, writer, .{ .update_camera_rotation = .{ .rotation = camera.rotation.toVec(), .id = client.entity_id } });
+        try client.sendCommand(writer, .{ .update_camera_rotation = .{ .rotation = camera.rotation.toVec(), .id = client.entity_id } });
 
-        //Update ECS spawns
+        //ECS spawns
         if (client.needs_full_sync) {
             var query = world.ecz.query(&.{ component.transform, component.entity_type });
             while (query.next()) |entity| {
                 const entity_type = entity.getComponent(component.entity_type);
-                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entity.id, .entity_type = entity_type } });
+                var data: [4]u8 = @splat(0);
+                switch (entity_type) {
+                    .planet => {
+                        const planet = entity.getComponent(component.planet);
+                        data = @bitCast(planet);
+                    },
+                    else => {},
+                }
+                try client.sendCommand(writer, .{ .spawn_entity = .{
+                    .id = entity.id,
+                    .entity_type = entity_type,
+                    .data = data,
+                } });
+                // const entity_type = entity.getComponent(component.entity_type);
+                // try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entity.id, .entity_type = entity_type } });
             }
             client.needs_full_sync = false;
         } else {
             // std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
             for (self.pending_spawn.items) |entry| {
-                try client.sendCommand(self.io, self.socket, writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
+                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
             }
         }
-        //Update ECS despawns
+        //ECS despawns
         for (self.pending_despawn.items) |entry| {
-            try client.sendCommand(self.io, self.socket, writer, .{ .despawn_entity = .{ .id = entry.id } });
+            try client.sendCommand(writer, .{ .despawn_entity = .{ .id = entry.id } });
         }
         //Update ECS Transforms
         var query = world.ecz.query(&.{component.transform});
         while (query.next()) |entity| {
             const transform = entity.getComponent(component.transform);
-            try client.sendCommand(self.io, self.socket, writer, .{ .update_transform = .{
+            try client.sendCommand(writer, .{ .update_transform = .{
                 .id = entity.id,
                 .position = transform.position,
                 .rotation = transform.rotation.toVec(),

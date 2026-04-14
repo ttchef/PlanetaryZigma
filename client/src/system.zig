@@ -87,7 +87,7 @@ pub const Context = struct {
             camera.transform.position = transform.position;
         }
         try self.asset_server.update();
-        try self.network_manager.update(info);
+        try self.network_manager.update(self, info);
     }
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {

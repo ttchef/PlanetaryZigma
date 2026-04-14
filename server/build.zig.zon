@@ -2,7 +2,7 @@
     .name = .PlanetaryZigma,
     .version = "0.0.0",
     .fingerprint = 0x9145da0722fc95d5,
-    .minimum_zig_version = "0.16.0-dev.3073+28ae5d415",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .shared = .{
             .path = "../shared/",

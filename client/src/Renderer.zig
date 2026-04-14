@@ -7,13 +7,10 @@ const AssetServer = shared.AssetServer;
 
 inner: Inner,
 
-const Metal = @import("Renderer/Metal.zig");
 const Vulkan = @import("Renderer/Vulkan.zig");
+pub const Verted = Vulkan.Vertex;
 
-pub const Inner = switch (builtin.os.tag) {
-    .macos => *Metal,
-    else => *Vulkan,
-};
+pub const Inner = *Vulkan;
 
 const YesSurfaceCreateUserData = struct {
     platform: yes.Platform,
@@ -22,7 +19,6 @@ const YesSurfaceCreateUserData = struct {
 
 pub fn init(gpa: std.mem.Allocator, asset_server: *AssetServer, platform: yes.Platform, window: *yes.Window) !@This() {
     return switch (builtin.os.tag) {
-        .macos => .{ .inner = Metal.init(gpa, platform, window) },
         else => initVulkan(gpa, asset_server, platform, window),
     };
 }
