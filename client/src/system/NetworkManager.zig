@@ -4,6 +4,7 @@ const system = @import("../system.zig");
 const component = system.component;
 const World = system.World;
 const Info = system.Info;
+const nz = shared.numz;
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -61,7 +62,7 @@ pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, com
     }
 }
 
-pub fn update(self: *@This(), info: *const Info) !void {
+pub fn update(self: *@This(), system_context: *system.Context, info: *const Info) !void {
     var fixed_writer_buffer: [1024]u8 = undefined;
     var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
     const writer = &fix_writer;
@@ -90,9 +91,27 @@ pub fn update(self: *@This(), info: *const Info) !void {
             switch (spawn_entity.entity_type) {
                 .player => try new_entity.putComponent(component.mesh, .{ .id = 0 }),
                 .planet => {
+                    // _ = system_context;
+                    const size: u32 = @intCast(spawn_entity.data[0]);
+                    var planet_vertices: shared.Planet = try .init(self.gpa, size);
+                    defer planet_vertices.deinit(self.gpa);
+                    var vk_vertcies: std.ArrayList(system.Renderer.Verted) = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
+                    defer vk_vertcies.deinit(self.gpa);
+                    for (planet_vertices.vertices.items) |vertex| {
+                        vk_vertcies.appendAssumeCapacity(.{
+                            .position = vertex[0..3].*,
+                        });
+                    }
+                    std.log.debug("SPAWNED: Planet vert: {d}, vk_vert{d}, ind:{d} ", .{ planet_vertices.vertices.items.len, vk_vertcies.items.len, planet_vertices.indices.items.len });
+                    const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
+                        self.gpa,
+                        "planet",
+                        planet_vertices.indices.items,
+                        vk_vertcies.items,
+                    );
                     std.log.debug("SPAWNED: Planet ", .{});
-
-                    try new_entity.putComponent(component.mesh, .{ .id = 1 });
+                    // try new_entity.putComponent(component.mesh, .{ .id = 0 });
+                    try new_entity.putComponent(component.mesh, .{ .id = @intCast(vulkan_mesh_handle) });
                 },
             }
 

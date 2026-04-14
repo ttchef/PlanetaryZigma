@@ -67,10 +67,11 @@ pub const Context = struct {
 
         //TODO: maybe not do planet init here?
         var planet_entity = try data.world.ecz.spawnEntity();
-        try planet_entity.putComponent(World.component.planet, 10);
+        const planet_size: u32 = 10;
+        try planet_entity.putComponent(World.component.planet, planet_size);
         try planet_entity.putComponent(World.component.transform, .{});
         try planet_entity.putComponent(World.component.entity_type, .planet);
-        const planet: shared.Planet = try .init(data.gpa, 30);
+        const planet: shared.Planet = try .init(data.gpa, planet_size);
         std.log.debug("ptr: {*}, len:{d}", .{ planet.vertices.items.ptr, planet.vertices.items.len });
 
         try planet_entity.putComponent(World.component.collider, .{
@@ -134,7 +135,7 @@ pub const ffi = struct {
     pub export fn systemContextInit(context: *Context, data: *const Context.Data) void {
         std.log.debug("system context init", .{});
         context.init(data) catch |err| {
-            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
             std.log.err("context init: {s}", .{@errorName(err)});
             return;
         };
@@ -143,7 +144,7 @@ pub const ffi = struct {
     pub export fn systemContextDeinit(context: *Context) void {
         std.log.debug("system context deinit", .{});
         context.deinit() catch |err| {
-            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
             std.log.err("context init: {s}", .{@errorName(err)});
             return;
         };
@@ -153,7 +154,7 @@ pub const ffi = struct {
     pub export fn systemContextUpdate(context: *Context, info: *const Info) void {
         const result = context.update(info);
         result catch |err| {
-            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
             return;
         };
@@ -161,7 +162,7 @@ pub const ffi = struct {
     pub export fn systemContextReload(context: *Context, pre_reload: bool) void {
         const result = context.reload(pre_reload);
         result catch |err| {
-            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});
             return;
         };
