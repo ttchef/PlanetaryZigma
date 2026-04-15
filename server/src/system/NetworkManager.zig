@@ -129,6 +129,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                         },
                         .motion_type = .dynamic,
                     });
+                    _ = try entity.putComponent(component.entity_type, .player);
                     _ = try entity.addComponent(component.input);
                     _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
                     client.entity_id = entity.id;
