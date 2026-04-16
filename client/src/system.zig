@@ -46,34 +46,63 @@ pub const World = struct {
 pub const Context = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
+    platform: yes.Platform,
+    window: *yes.Window,
+    server_address: std.Io.net.IpAddress,
+    server_stream: std.Io.net.Stream,
     asset_server: *AssetServer,
     renderer: Renderer,
     network_manager: NetworkManager,
+    planet: PlanetVertices = undefined,
+
+    pub const PlanetVertices = struct {
+        vertices: std.ArrayList(Renderer.Vertex) = .empty,
+        indices: std.ArrayList(u32) = .empty,
+    };
 
     pub const Data = struct {
         gpa: std.mem.Allocator,
         io: std.Io,
-        asset_server: *AssetServer,
         platform: yes.Platform,
         window: *yes.Window,
-        stream: std.Io.net.Stream,
-        server_address: std.Io.net.IpAddress,
+        asset_server: *AssetServer,
     };
 
     pub fn init(self: *@This(), data: Data) !void {
-        self.* = .{
-            .gpa = data.gpa,
-            .io = data.io,
-            .asset_server = data.asset_server,
-            .renderer = try .init(data.gpa, data.asset_server, data.platform, data.window),
-            .network_manager = undefined,
-        };
-        try self.network_manager.init(data.gpa, data.io, data.stream, data.server_address);
+        self.server_address = try .parse("127.0.0.1", 8080);
+        self.server_stream = try self.server_address.connect(data.io, .{ .mode = .dgram, .protocol = .udp });
+        self.gpa = data.gpa;
+        self.io = data.io;
+        self.platform = data.platform;
+        self.window = data.window;
+        self.asset_server = data.asset_server;
+        self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
+        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_address);
+
+        const name = "lucas";
+        const connect_command: shared.net.Command = .{ .connect = .{
+            .name_len = name.len,
+            .name = name,
+        } };
+        var fixed_writer_buffer: [1024]u8 = undefined;
+        var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+        const writer = &fixed_writer;
+        try connect_command.write(writer);
+        try self.server_stream.socket.send(self.io, &self.server_address, writer.buffered());
     }
 
     pub fn deinit(self: *@This()) !void {
+        var fixed_writer_buffer: [1024]u8 = undefined;
+        var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
+        const writer = &fixed_writer;
+        const disconnect_command: shared.net.Command = .disconnect;
+        fixed_writer.end = 0;
+        try disconnect_command.write(writer);
+        try self.server_stream.socket.send(self.io, &self.server_stream.socket.address, writer.buffered());
+
         self.renderer.deinit(self.gpa);
         try self.network_manager.deinit();
+        self.server_stream.close(self.io);
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
@@ -97,6 +126,25 @@ pub const Context = struct {
             try entity.getComponentPtr(component.camera).eventUpdate(info, event);
         }
     }
+    fn reload(self: *@This(), pre_reload: bool) !void {
+        std.log.debug("before-0", .{});
+        if (pre_reload) {
+            self.renderer.deinit(self.gpa);
+            try self.network_manager.deinit();
+        } else {
+            self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
+            const vulkan_mesh_handle = try self.renderer.inner.createMesh(
+                self.gpa,
+                "planet",
+                self.planet.indices.items,
+                self.planet.vertices.items,
+            );
+            //TODO: take care of handle matching
+            _ = vulkan_mesh_handle;
+            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_address);
+        }
+        std.log.debug("before-1", .{});
+    }
 };
 
 comptime {
@@ -108,6 +156,7 @@ pub const ffi = struct {
         systemContextInit: *const fn (*Context, data: *const Context.Data) callconv(.c) void,
         systemContextDeinit: *const fn (*Context) callconv(.c) void,
         systemContextUpdate: *const fn (*Context, data: *const Info, event: ?*const yes.Window.Event) callconv(.c) void,
+        systemContextReload: *const fn (*Context, pre_reload: bool) callconv(.c) void,
 
         pub fn load(dynlib: *std.DynLib) !@This() {
             var self: @This() = undefined;
@@ -146,6 +195,14 @@ pub const ffi = struct {
 
     pub export fn systemContextUpdate(context: *Context, info: *const Info, event: ?*const yes.Window.Event) void {
         const result = if (event != null) context.eventUpdate(info, event.?) else context.update(info);
+        result catch |err| {
+            if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+            std.log.err("context update: {any}", .{@errorName(err)});
+            return;
+        };
+    }
+    pub export fn systemContextReload(context: *Context, pre_reload: bool) void {
+        const result = context.reload(pre_reload);
         result catch |err| {
             if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
             std.log.err("context update: {any}", .{@errorName(err)});

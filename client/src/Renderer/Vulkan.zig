@@ -428,9 +428,11 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
     var query_mesh = info.world.ecz.query(&.{ comp.mesh, comp.transform });
     while (query_mesh.next()) |entry| {
-        const mesh_id = entry.getComponent(comp.mesh).id;
-        _ = mesh_id;
-        const mesh = self.meshes.items[0];
+        var mesh_id = entry.getComponent(comp.mesh).id;
+        // _ = mesh_id;
+        // const mesh = self.meshes.items[0];
+        mesh_id = if (mesh_id >= self.meshes.items.len) 0 else mesh_id;
+        const mesh = self.meshes.items[mesh_id];
         const transform = entry.getComponent(comp.transform);
         const matrix = transform.toMat4x4();
         push = .{ .buffer_address = mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };

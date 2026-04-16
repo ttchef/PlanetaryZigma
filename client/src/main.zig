@@ -13,10 +13,6 @@ pub fn main(init: std.process.Init) !void {
     const gpa = gpa_impl.allocator();
     const io = init.io;
 
-    const addr: std.Io.net.IpAddress = try .parse("127.0.0.1", 8080);
-    var stream = try addr.connect(io, .{ .mode = .dgram, .protocol = .udp });
-    defer stream.close(io);
-
     var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
     const platform = cross_platform.platform();
@@ -51,23 +47,8 @@ pub fn main(init: std.process.Init) !void {
         .asset_server = &asset_server,
         .platform = platform,
         .window = window,
-        .stream = stream,
         .io = io,
-        .server_address = addr,
     });
-
-    //TODO: Intial connect: move out.
-    const name = "lucas";
-    const connect_command: shared.net.Command = .{ .connect = .{
-        .name_len = name.len,
-        .name = name,
-    } };
-    var fixed_writer_buffer: [1024]u8 = undefined;
-    var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
-    const writer = &fixed_writer;
-    try connect_command.write(writer);
-    std.log.debug("buffer: {any}", .{writer.buffered()});
-    try stream.socket.send(io, &system_context.network_manager.server_address, writer.buffered());
 
     var elapsed_time: f32 = 0;
     var accumlated_time: f32 = 0;
@@ -94,32 +75,17 @@ pub fn main(init: std.process.Init) !void {
 
         if (try watcher.reload(io)) {
             std.log.err("system table updated", .{});
-            system_table.systemContextDeinit(&system_context);
+            system_table.systemContextReload(&system_context, true);
             watcher.old_dynlib.?.close();
             watcher.old_dynlib = null;
             system_table = try .load(&watcher.dynlib.?);
             asset_server.deinit();
             asset_server = try shared.AssetServer.init(gpa, init.io);
-            system_table.systemContextInit(&system_context, &system.Context.Data{
-                .io = io,
-                .gpa = gpa,
-                .asset_server = &asset_server,
-                .platform = platform,
-                .window = window,
-                .stream = stream,
-                .server_address = addr,
-            });
+            system_table.systemContextReload(&system_context, false);
         }
 
         elapsed_time += time_step;
     }
-
-    //TODO: Intial connect: move out.
-    const disconnect_command: shared.net.Command = .disconnect;
-    fixed_writer.end = 0;
-    try disconnect_command.write(writer);
-    std.log.debug("buffer: {any}", .{writer.buffered()});
-    try stream.socket.send(io, &system_context.network_manager.server_address, writer.buffered());
 
     system_table.systemContextDeinit(&system_context);
 }

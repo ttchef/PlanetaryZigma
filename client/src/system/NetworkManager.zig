@@ -52,9 +52,9 @@ pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, com
 
         const parsed = try shared.net.Command.parse(reader);
 
-        if (parsed.command == .spawn_entity) {
-            std.log.debug("Spanned: {any}", .{parsed.command});
-        }
+        // if (parsed.command == .spawn_entity) {
+        // std.log.debug("Spanned: {any}", .{parsed.command});
+        // }
 
         try command_queue.mutex.lock(io);
         try command_queue.commands.append(gpa, parsed.command);
@@ -68,6 +68,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     const writer = &fix_writer;
     var query = info.world.ecz.query(&.{ component.camera, component.transform });
     if (query.next()) |entity| {
+        // std.log.debug("xddd", .{});
         const camera = entity.getComponentPtr(component.camera);
         try self.sendCommand(writer, .{ .input = camera.input_map });
     }
@@ -94,20 +95,21 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     // _ = system_context;
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     var planet_vertices: shared.Planet = try .init(self.gpa, size);
-                    defer planet_vertices.deinit(self.gpa);
-                    var vk_vertcies: std.ArrayList(system.Renderer.Verted) = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
-                    defer vk_vertcies.deinit(self.gpa);
+                    defer planet_vertices.vertices.deinit(self.gpa);
+                    system_context.planet.vertices = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
+                    system_context.planet.indices = try .initCapacity(self.gpa, planet_vertices.indices.items.len);
+                    system_context.planet.indices.appendSliceAssumeCapacity(planet_vertices.indices.items);
                     for (planet_vertices.vertices.items) |vertex| {
-                        vk_vertcies.appendAssumeCapacity(.{
+                        system_context.planet.vertices.appendAssumeCapacity(.{
                             .position = vertex[0..3].*,
                         });
                     }
-                    std.log.debug("SPAWNED: Planet vert: {d}, vk_vert{d}, ind:{d} ", .{ planet_vertices.vertices.items.len, vk_vertcies.items.len, planet_vertices.indices.items.len });
+                    // std.log.debug("SPAWNED: Planet vert: {d}, vk_vert{d}, ind:{d} ", .{ planet_vertices.vertices.items.len, system_context.planet.items.len, planet_vertices.indices.items.len });
                     const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
                         self.gpa,
                         "planet",
                         planet_vertices.indices.items,
-                        vk_vertcies.items,
+                        system_context.planet.vertices.items,
                     );
                     std.log.debug("SPAWNED: Planet ", .{});
                     // try new_entity.putComponent(component.mesh, .{ .id = 0 });
@@ -178,4 +180,5 @@ pub fn sendCommand(self: @This(), writer: *std.Io.Writer, command: shared.net.Co
     writer.end = 0;
     try command.write(writer);
     try self.stream.socket.send(self.io, &self.server_address, writer.buffer);
+    std.log.debug("send to addr {any}", .{self.server_address});
 }
