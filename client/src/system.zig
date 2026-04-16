@@ -53,6 +53,12 @@ pub const Context = struct {
     asset_server: *AssetServer,
     renderer: Renderer,
     network_manager: NetworkManager,
+    planet: PlanetVertices = undefined,
+
+    pub const PlanetVertices = struct {
+        vertices: std.ArrayList(Renderer.Vertex) = .empty,
+        indices: std.ArrayList(u32) = .empty,
+    };
 
     pub const Data = struct {
         gpa: std.mem.Allocator,
@@ -71,7 +77,7 @@ pub const Context = struct {
         self.window = data.window;
         self.asset_server = data.asset_server;
         self.renderer = try .init(data.gpa, data.asset_server, data.platform, data.window);
-        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_stream.socket.address);
+        try self.network_manager.init(data.gpa, data.io, self.server_stream, self.server_address);
 
         const name = "lucas";
         const connect_command: shared.net.Command = .{ .connect = .{
@@ -127,7 +133,15 @@ pub const Context = struct {
             try self.network_manager.deinit();
         } else {
             self.renderer = try .init(self.gpa, self.asset_server, self.platform, self.window);
-            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_stream.socket.address);
+            const vulkan_mesh_handle = try self.renderer.inner.createMesh(
+                self.gpa,
+                "planet",
+                self.planet.indices.items,
+                self.planet.vertices.items,
+            );
+            //TODO: take care of handle matching
+            _ = vulkan_mesh_handle;
+            try self.network_manager.init(self.gpa, self.io, self.server_stream, self.server_address);
         }
         std.log.debug("before-1", .{});
     }
