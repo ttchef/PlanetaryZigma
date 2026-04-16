@@ -52,9 +52,9 @@ pub fn listen(gpa: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, com
 
         const parsed = try shared.net.Command.parse(reader);
 
-        if (parsed.command == .spawn_entity) {
-            std.log.debug("Spanned: {any}", .{parsed.command});
-        }
+        // if (parsed.command == .spawn_entity) {
+        std.log.debug("Spanned: {any}", .{parsed.command});
+        // }
 
         try command_queue.mutex.lock(io);
         try command_queue.commands.append(gpa, parsed.command);
