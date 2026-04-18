@@ -67,7 +67,7 @@ pub const Context = struct {
 
         //TODO: maybe not do planet init here?
         var planet_entity = try data.world.ecz.spawnEntity();
-        const planet_size: u32 = 10;
+        const planet_size: u32 = 30;
         try planet_entity.putComponent(World.component.planet, planet_size);
         try planet_entity.putComponent(World.component.transform, .{});
         try planet_entity.putComponent(World.component.entity_type, .planet);

@@ -95,7 +95,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     // _ = system_context;
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     var planet_vertices: shared.Planet = try .init(self.gpa, size);
-                    defer planet_vertices.vertices.deinit(self.gpa);
+                    defer planet_vertices.deinit(self.gpa);
                     system_context.planet.vertices = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
                     system_context.planet.indices = try .initCapacity(self.gpa, planet_vertices.indices.items.len);
                     system_context.planet.indices.appendSliceAssumeCapacity(planet_vertices.indices.items);

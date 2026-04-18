@@ -351,9 +351,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const entity = info.world.ecz.entityFromId(@intCast(body.user_data));
         const transform = entity.getComponent(system.World.component.transform);
         const up = nz.vec.normalize(transform.position);
-        _ = up;
-        // const force = -up;
-        // body.addForce(nz.vec.scale(force, 1000));
+        // _ = up;
+        const force = up;
+        body.addForce(nz.vec.scale(force, 1000));
         // std.debug.print("GRAVITY {any}\n", .{force});
 
         // const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
