@@ -388,27 +388,34 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         transform.rotation = rotation;
     }
 
-    // Align player transforms AND their cameras so "up" points away from planet center.
-    // Same delta applied to both preserves the camera's yaw/pitch offset relative to the body.
+    // Align body transform to planet, then reset camera to match and apply stored yaw
     var align_query = info.world.ecz.query(&.{ component.transform, component.camera });
     while (align_query.next()) |entity| {
         const transform = entity.getComponentPtr(component.transform);
         const camera = entity.getComponentPtr(component.camera);
 
         const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
-        const current_up: nz.Vec3(f32) = transform.up2();
-        const d: f32 = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
-        if (d < 0.9999) {
-            const axis: nz.Vec3(f32) = if (d > -0.9999)
-                nz.vec.normalize(nz.vec.cross(current_up, desired_up))
-            else
-                // 180° flip: cross is zero, pick any perpendicular axis
-                nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
-            const angle = std.math.acos(d);
-            const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
-            transform.rotation = align_quat.mul(transform.rotation).normalize();
-            camera.rotation = align_quat.mul(camera.rotation).normalize();
+
+        // Align body transform up with planet_up
+        {
+            const current_up: nz.Vec3(f32) = transform.up2();
+            const d: f32 = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
+            if (d < 0.9999) {
+                const axis: nz.Vec3(f32) = if (d > -0.9999)
+                    nz.vec.normalize(nz.vec.cross(current_up, desired_up))
+                else
+                    nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
+                const angle = std.math.acos(d);
+                const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
+                transform.rotation = align_quat.mul(transform.rotation).normalize();
+            }
         }
+
+        // Reset camera to the (now planet-aligned) body transform, then apply stored pitch
+        camera.transform.position = transform.position;
+        camera.transform.rotation = transform.rotation;
+        const pitch_quat: nz.quat.Hamiltonian(f32) = .angleAxis(camera.pitch, nz.Vec3(f32){ 1, 0, 0 });
+        camera.transform.rotation = camera.transform.rotation.mul(pitch_quat).normalize();
     }
 }
 
@@ -417,13 +424,13 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
     var query = info.world.ecz.query(&.{ component.collider, component.input, component.camera, component.transform });
     while (query.next()) |entity| {
         const collider = entity.getComponentPtr(component.collider);
-        const camera: *nz.Transform3D(f32) = entity.getComponentPtr(component.camera);
+        const camera: *system.Camera = entity.getComponentPtr(component.camera);
         const transform: *nz.Transform3D(f32) = entity.getComponentPtr(component.transform);
         const input: shared.net.Command.Input = entity.getComponent(component.input);
 
-        const forward = camera.forward();
-        const right = camera.right();
-        const up = camera.up2();
+        const forward = camera.transform.forward();
+        const right = camera.transform.right();
+        const up = camera.transform.up2();
 
         //Simple free camera rotation
         if (input.mouse_button_right) {
@@ -431,14 +438,13 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
             const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
             const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
 
-            // Yaw around planet-relative up so look direction stays tangent to the surface
+            // Yaw around planet-relative up — flows through the body so align preserves it
             const planet_up = nz.vec.normalize(transform.position);
             const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, planet_up);
-            camera.rotation = yaw_quat.mul(camera.rotation).normalize();
+            camera.transform.rotation = yaw_quat.mul(camera.transform.rotation).normalize();
 
-            // Pitch in camera-local frame
-            const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
-            camera.rotation = camera.rotation.mul(pitch_quat).normalize();
+            // Pitch: store as scalar; applied in the align/reset block on top of body rotation
+            camera.pitch += delta_pitch;
         }
 
         //Collider movement - simple free movement
@@ -462,7 +468,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
             body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
 
             // Rotation is fully user-controlled; DOF lock keeps physics from rotating the body.
-            body.setRotation(id, camera.rotation.toVec(), .activate);
+            body.setRotation(id, camera.transform.rotation.toVec(), .activate);
 
             if (input.r) {
                 camera.* = .{};

@@ -116,10 +116,11 @@ pub const Context = struct {
         if (query.next()) |entity| {
             const camera = entity.getComponentPtr(component.camera);
             const transform = entity.getComponentPtr(component.transform);
+            _ = transform;
             camera.update(info);
             try self.renderer.update(info);
             // std.log.debug("pos {any},  ", .{transform.position});
-            camera.transform.position = transform.position;
+            // camera.transform.position = transform.position;
         }
         try self.asset_server.update();
         try self.network_manager.update(self, info);

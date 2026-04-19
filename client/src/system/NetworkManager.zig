@@ -165,6 +165,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             // _ = camera;
             // camera.transform.rotation = .identity;
             camera.transform.rotation = .fromVec(rotation_command.rotation);
+            camera.transform.position = rotation_command.position;
             // std.log.debug("client rot {any},  ", .{camera.transform.rotation});
             // std.log.debug("server rot {any},  ", .{rotation_command.rotation});
         },
