@@ -11,6 +11,11 @@ pub const Info = struct {
     world: *World,
 };
 
+pub const Camera = struct {
+    transform: nz.Transform3D(f32) = .{},
+    pitch: f32 = 0,
+};
+
 pub const World = struct {
     mutex: std.Io.Mutex = .init,
 
@@ -27,7 +32,7 @@ pub const World = struct {
         pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
         pub const collider: ecz.Component = .{ .name = .collider, .type = Physics.Collider };
         pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
-        pub const camera: ecz.Component = .{ .name = .camera, .type = nz.Transform3D(f32) };
+        pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
         pub const planet: ecz.Component = .{ .name = .planet, .type = u32 };
         pub const entity_type: ecz.Component = .{ .name = .entity_type, .type = shared.EntityType };
     };
@@ -67,7 +72,7 @@ pub const Context = struct {
 
         //TODO: maybe not do planet init here?
         var planet_entity = try data.world.ecz.spawnEntity();
-        const planet_size: u32 = 10;
+        const planet_size: u32 = 100;
         try planet_entity.putComponent(World.component.planet, planet_size);
         try planet_entity.putComponent(World.component.transform, .{});
         try planet_entity.putComponent(World.component.entity_type, .planet);

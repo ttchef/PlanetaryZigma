@@ -83,6 +83,7 @@ pub const Command = union(Opcode) {
     };
     pub const UpdateCameraRotation = struct {
         id: u32,
+        position: @Vector(3, f32),
         rotation: @Vector(4, f32),
     };
 

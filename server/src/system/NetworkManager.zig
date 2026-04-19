@@ -39,7 +39,7 @@ pub const Client = struct {
             const reader = &msg_reader;
 
             const parsed = try shared.net.Command.parse(reader);
-            std.log.debug("Spanned: {any}", .{parsed.command});
+            // std.log.debug("Spanned: {any}", .{parsed.command});
 
             if (parsed.command == .connect) {
                 const connect = parsed.command.connect;
@@ -132,7 +132,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
                     });
                     _ = try entity.putComponent(component.entity_type, .player);
                     _ = try entity.addComponent(component.input);
-                    _ = try entity.putComponent(component.camera, .{ .position = .{ 0, 0, 100 } });
+                    _ = try entity.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 100 } } });
                     client.entity_id = entity.id;
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
                     try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
@@ -188,7 +188,7 @@ pub fn update(self: *@This(), info: *const Info) !void {
         //update camera
         const player_entity = world.ecz.entityFromId(client.entity_id);
         const camera = player_entity.getComponent(component.camera);
-        try client.sendCommand(writer, .{ .update_camera_rotation = .{ .rotation = camera.rotation.toVec(), .id = client.entity_id } });
+        try client.sendCommand(writer, .{ .update_camera_rotation = .{ .position = camera.transform.position, .rotation = camera.transform.rotation.toVec(), .id = client.entity_id } });
 
         //ECS spawns
         if (client.needs_full_sync) {

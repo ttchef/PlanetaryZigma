@@ -95,7 +95,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     // _ = system_context;
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     var planet_vertices: shared.Planet = try .init(self.gpa, size);
-                    defer planet_vertices.vertices.deinit(self.gpa);
+                    defer planet_vertices.deinit(self.gpa);
                     system_context.planet.vertices = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
                     system_context.planet.indices = try .initCapacity(self.gpa, planet_vertices.indices.items.len);
                     system_context.planet.indices.appendSliceAssumeCapacity(planet_vertices.indices.items);
@@ -147,7 +147,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
 
             transform.position = update_transform_command.position;
             transform.rotation = .fromVec(update_transform_command.rotation);
-            // std.log.debug("update rot {any},  ", .{transform.rotation});
+            std.log.debug("update rot {any},  ", .{transform.rotation});
         },
         .update_camera_rotation => {
             const rotation_command = command.update_camera_rotation;
@@ -165,6 +165,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             // _ = camera;
             // camera.transform.rotation = .identity;
             camera.transform.rotation = .fromVec(rotation_command.rotation);
+            camera.transform.position = rotation_command.position;
             // std.log.debug("client rot {any},  ", .{camera.transform.rotation});
             // std.log.debug("server rot {any},  ", .{rotation_command.rotation});
         },
@@ -180,5 +181,4 @@ pub fn sendCommand(self: @This(), writer: *std.Io.Writer, command: shared.net.Co
     writer.end = 0;
     try command.write(writer);
     try self.stream.socket.send(self.io, &self.server_address, writer.buffer);
-    std.log.debug("send to addr {any}", .{self.server_address});
 }
