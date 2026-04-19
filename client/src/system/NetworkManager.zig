@@ -147,7 +147,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
 
             transform.position = update_transform_command.position;
             transform.rotation = .fromVec(update_transform_command.rotation);
-            // std.log.debug("update rot {any},  ", .{transform.rotation});
+            std.log.debug("update rot {any},  ", .{transform.rotation});
         },
         .update_camera_rotation => {
             const rotation_command = command.update_camera_rotation;
@@ -180,5 +180,4 @@ pub fn sendCommand(self: @This(), writer: *std.Io.Writer, command: shared.net.Co
     writer.end = 0;
     try command.write(writer);
     try self.stream.socket.send(self.io, &self.server_address, writer.buffer);
-    std.log.debug("send to addr {any}", .{self.server_address});
 }

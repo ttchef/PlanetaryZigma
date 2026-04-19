@@ -327,6 +327,11 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             defer shape.release();
 
             std.log.debug("XDD", .{});
+            const translation_only: zphy.AllowedDOFs = @enumFromInt(
+                @intFromEnum(zphy.AllowedDOFs.translation_x) |
+                    @intFromEnum(zphy.AllowedDOFs.translation_y) |
+                    @intFromEnum(zphy.AllowedDOFs.translation_z),
+            );
             const body_id = try body_interface.createAndAddBody(.{
                 .position = matrix.vec4Position(),
                 .rotation = transform.rotation.toVec(),
@@ -335,6 +340,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
                 .object_layer = object_layers.moving,
                 .user_data = entity.id,
                 .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+                .allowed_DOFs = translation_only,
                 // .max_angular_velocity = collider.max_angular_velocity,
                 //.allow_sleeping = false,
             }, .activate);
@@ -352,7 +358,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const transform = entity.getComponent(system.World.component.transform);
         const up = nz.vec.normalize(transform.position);
         // _ = up;
-        const force = up;
+        const force = -up;
         body.addForce(nz.vec.scale(force, 1000));
         // std.debug.print("GRAVITY {any}\n", .{force});
 
@@ -367,22 +373,42 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         // std.debug.print("[0]UPDATE\n", .{}); xd
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.ecz.entityFromId(@intCast(body.user_data));
-        const transform = entity.getComponentPtr(system.World.component.transform);
+        const transform: *nz.Transform3D(f32) = entity.getComponentPtr(system.World.component.transform);
         // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
         // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{
-            // 0,
             @as(f32, @floatCast(body.position[0])),
             @as(f32, @floatCast(body.position[1])),
             @as(f32, @floatCast(body.position[2])),
         };
 
         transform.position = position;
+        const rotation: nz.quat.Hamiltonian(f32) = .fromVec(body.rotation);
+        transform.rotation = rotation;
+    }
 
-        // transform.*.position = .{ 0, 0, 100 };
-        // std.log.debug("time: {d}, {d}", .{ info.elapsed_time, @mod(info.elapsed_time, 5) });
-        // if (@mod(info.elapsed_time, 5) > 4) transform.*.position = .{ 0, 0, 100 };
+    // Align player transforms AND their cameras so "up" points away from planet center.
+    // Same delta applied to both preserves the camera's yaw/pitch offset relative to the body.
+    var align_query = info.world.ecz.query(&.{ component.transform, component.camera });
+    while (align_query.next()) |entity| {
+        const transform = entity.getComponentPtr(component.transform);
+        const camera = entity.getComponentPtr(component.camera);
+
+        const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
+        const current_up: nz.Vec3(f32) = transform.up2();
+        const d: f32 = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
+        if (d < 0.9999) {
+            const axis: nz.Vec3(f32) = if (d > -0.9999)
+                nz.vec.normalize(nz.vec.cross(current_up, desired_up))
+            else
+                // 180° flip: cross is zero, pick any perpendicular axis
+                nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
+            const angle = std.math.acos(d);
+            const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
+            transform.rotation = align_quat.mul(transform.rotation).normalize();
+            camera.rotation = align_quat.mul(camera.rotation).normalize();
+        }
     }
 }
 
@@ -405,21 +431,15 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
             const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
             const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
 
-            const world_up = nz.Vec3(f32){ 0, 1, 0 };
-            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, world_up);
+            // Yaw around planet-relative up so look direction stays tangent to the surface
+            const planet_up = nz.vec.normalize(transform.position);
+            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, planet_up);
+            camera.rotation = yaw_quat.mul(camera.rotation).normalize();
 
-            camera.rotation = yaw_quat.mul(camera.rotation);
-            camera.rotation = camera.rotation.normalize();
-
+            // Pitch in camera-local frame
             const pitch_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_pitch, nz.Vec3(f32){ 1, 0, 0 });
-
-            camera.rotation = camera.rotation.mul(pitch_quat);
-            camera.rotation = camera.rotation.normalize();
-            // std.log.debug("rot {any}", .{camera.rotation});
+            camera.rotation = camera.rotation.mul(pitch_quat).normalize();
         }
-
-        //Simple body orientation (just copy camera for now)
-        transform.rotation = camera.rotation;
 
         //Collider movement - simple free movement
         if (collider.body_id) |id| {
@@ -441,12 +461,17 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
 
             body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
 
+            // Rotation is fully user-controlled; DOF lock keeps physics from rotating the body.
+            body.setRotation(id, camera.rotation.toVec(), .activate);
+
             if (input.r) {
                 camera.* = .{};
+                transform.* = .{};
                 body.setLinearVelocity(id, .{ 0, 0, 0 });
                 body.setPosition(id, .{ 0, 0, 0 }, .activate);
                 body.setRotation(id, .{ 1, 0, 0, 0 }, .activate);
             }
+            std.log.debug("rotation {any}", .{transform.rotation});
         }
     }
 }

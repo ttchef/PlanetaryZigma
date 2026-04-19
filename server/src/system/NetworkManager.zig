@@ -39,7 +39,7 @@ pub const Client = struct {
             const reader = &msg_reader;
 
             const parsed = try shared.net.Command.parse(reader);
-            std.log.debug("Spanned: {any}", .{parsed.command});
+            // std.log.debug("Spanned: {any}", .{parsed.command});
 
             if (parsed.command == .connect) {
                 const connect = parsed.command.connect;
