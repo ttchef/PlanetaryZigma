@@ -1,18 +1,12 @@
 const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
+const Spawner = @import("Spawner.zig");
 const Info = system.Info;
 const component = system.World.component;
 
-const SpawnEntity = struct {
-    entity_type: shared.EntityType,
-    id: u32,
-};
-
 gpa: std.mem.Allocator,
 io: std.Io,
-pending_spawn: std.ArrayList(SpawnEntity) = .empty,
-pending_despawn: std.ArrayList(SpawnEntity) = .empty,
 accept_client_future: std.Io.Future(@typeInfo(@TypeOf(Client.accept)).@"fn".return_type.?),
 socket: std.Io.net.Socket,
 clients: std.AutoHashMap(std.Io.net.IpAddress, Client),
@@ -103,7 +97,7 @@ pub fn reload(self: *@This(), pre_reload: bool) !void {
     }
 }
 
-pub fn update(self: *@This(), info: *const Info) !void {
+pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     const world = info.world;
 
     var fixed_writer_buffer: [1024]u8 = undefined;
@@ -122,27 +116,16 @@ pub fn update(self: *@This(), info: *const Info) !void {
             switch (command) {
                 .connect => {
                     std.log.debug("connect ", .{});
-                    var entity = try world.ecz.spawnEntity();
-                    _ = try entity.putComponent(component.transform, .{ .position = .{ 0, 0, 100 } });
-                    _ = try entity.putComponent(component.collider, .{
-                        .shape = .{
-                            .primitive = .box,
-                        },
-                        .motion_type = .dynamic,
-                    });
-                    _ = try entity.putComponent(component.entity_type, .player);
-                    _ = try entity.addComponent(component.input);
-                    _ = try entity.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 100 } } });
-                    client.entity_id = entity.id;
+                    client.entity_id = try spawner.spawnConnectPlayer();
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
-                    try self.pending_spawn.append(self.gpa, .{ .id = entity.id, .entity_type = .player });
                     std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ecz.last_id, client.entity_id });
                 },
                 .disconnect => {
-                    const entity_to_remove = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-                    try entity_to_remove.despawn();
-                    try self.pending_despawn.append(self.gpa, .{ .id = entity_to_remove.id, .entity_type = .player });
                     std.debug.print("enteties in ECS : {d}\n", .{world.ecz.last_id});
+                    try spawner.depspawn(client.entity_id);
+                    // const entity_to_remove = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
+                    // try entity_to_remove.despawn();
+                    // try self.pending_despawn.append(self.gpa, .{ .id = entity_to_remove.id, .entity_type = .player });
                     // try clients_to_remove.append(self.allocator, .{ .ip = client_address, .client = client });
                 },
                 .input => {
@@ -193,7 +176,9 @@ pub fn update(self: *@This(), info: *const Info) !void {
         //ECS spawns
         if (client.needs_full_sync) {
             var query = world.ecz.query(&.{ component.transform, component.entity_type });
+
             while (query.next()) |entity| {
+                std.log.debug("sent id {d}", .{entity.id});
                 const entity_type = entity.getComponent(component.entity_type);
                 var data: [4]u8 = @splat(0);
                 switch (entity_type) {
@@ -214,13 +199,13 @@ pub fn update(self: *@This(), info: *const Info) !void {
             client.needs_full_sync = false;
         } else {
             // std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
-            for (self.pending_spawn.items) |entry| {
+            for (spawner.network_pending_spawn.items) |entry| {
                 try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
             }
         }
         //ECS despawns
-        for (self.pending_despawn.items) |entry| {
-            try client.sendCommand(writer, .{ .despawn_entity = .{ .id = entry.id } });
+        for (spawner.network_pending_despawn.items) |id| {
+            try client.sendCommand(writer, .{ .despawn_entity = .{ .id = id } });
         }
         //Update ECS Transforms
         var query = world.ecz.query(&.{component.transform});
@@ -233,8 +218,8 @@ pub fn update(self: *@This(), info: *const Info) !void {
             } });
         }
     }
-    self.pending_spawn.items.len = 0;
-    self.pending_despawn.items.len = 0;
+    spawner.network_pending_spawn.items.len = 0;
+    spawner.network_pending_despawn.items.len = 0;
 
     // for (clients_to_remove.items) |client| {
     //     _ = self.clients.remove(client.ip.*);

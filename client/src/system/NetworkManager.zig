@@ -115,6 +115,9 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     // try new_entity.putComponent(component.mesh, .{ .id = 0 });
                     try new_entity.putComponent(component.mesh, .{ .id = @intCast(vulkan_mesh_handle) });
                 },
+                .enemy => {
+                    try new_entity.putComponent(component.mesh, .{ .id = 0 });
+                },
             }
 
             try info.world.enitity_mapping.put(self.gpa, command.spawn_entity.id, new_entity.id);
@@ -147,7 +150,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
 
             transform.position = update_transform_command.position;
             transform.rotation = .fromVec(update_transform_command.rotation);
-            std.log.debug("update rot {any},  ", .{transform.rotation});
+            // std.log.debug("update rot {any},  ", .{transform.rotation});
         },
         .update_camera_rotation => {
             const rotation_command = command.update_camera_rotation;
