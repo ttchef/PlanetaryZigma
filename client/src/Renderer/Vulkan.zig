@@ -261,7 +261,8 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = .{
             .color = .{
-                .float32 = .{ (@sin(info.elapsed_time) + 1) / 2, (@cos(info.elapsed_time) + 1) / 2, (@tan(info.elapsed_time) + 1) / 2, 1.0 },
+                // .float32 = .{ (@sin(info.elapsed_time) + 1) / 2, (@cos(info.elapsed_time) + 1) / 2, (@tan(info.elapsed_time) + 1) / 2, 1.0 },
+                .float32 = .{ 0, 0, 1, 1 },
             },
         },
     };
@@ -434,7 +435,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         mesh_id = if (mesh_id >= self.meshes.items.len) 0 else mesh_id;
         const mesh = self.meshes.items[mesh_id];
         const transform = entry.getComponent(comp.transform);
-        std.log.debug("render-quat: {any}", .{transform.rotation});
+        // std.log.debug("render-quat: {any}", .{transform.rotation});
         const matrix = transform.toMat4x4();
         push = .{ .buffer_address = mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };
         c.vkCmdBindIndexBuffer(cmd, mesh.index_buffer.buffer, 0, c.VK_INDEX_TYPE_UINT32);

@@ -1,6 +1,8 @@
 const std = @import("std");
 const shared = @import("shared");
 const NetworkManager = @import("system/NetworkManager.zig");
+const Spawner = @import("system/Spawner.zig");
+const Game = @import("system/Game.zig");
 const nz = shared.numz;
 pub const ecz = shared.ecz;
 const Physics = @import("system/Physics.zig");
@@ -51,6 +53,8 @@ pub const Context = struct {
     world: *World,
     network_manager: NetworkManager,
     physics: Physics,
+    spawner: Spawner,
+    game: Game,
     request_exit: bool = false,
 
     pub const Data = struct {
@@ -64,9 +68,13 @@ pub const Context = struct {
             .gpa = data.gpa,
             .io = data.io,
             .world = data.world,
+            .spawner = undefined,
+            .game = undefined,
             .network_manager = undefined,
             .physics = undefined,
         };
+        try self.spawner.init(data.gpa, data.world);
+        try self.game.init(data.gpa);
         try self.network_manager.init(data.gpa, data.io);
         try self.physics.init(data.gpa, data.io);
 
@@ -97,8 +105,9 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        try self.network_manager.update(info);
+        try self.network_manager.update(info, &self.spawner);
         try self.physics.update(info);
+        try self.game.update(info, &self.spawner);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;
     }

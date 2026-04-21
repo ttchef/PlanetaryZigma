@@ -97,13 +97,14 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *@This()) !void {
+        std.log.debug("DEINIT", .{});
         var fixed_writer_buffer: [1024]u8 = undefined;
         var fixed_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
         const writer = &fixed_writer;
         const disconnect_command: shared.net.Command = .disconnect;
         fixed_writer.end = 0;
         try disconnect_command.write(writer);
-        try self.server_stream.socket.send(self.io, &self.server_stream.socket.address, writer.buffered());
+        try self.server_stream.socket.send(self.io, &self.server_address, writer.buffered());
 
         self.renderer.deinit(self.gpa);
         try self.network_manager.deinit();

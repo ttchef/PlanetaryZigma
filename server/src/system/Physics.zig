@@ -477,7 +477,7 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
                 body.setPosition(id, .{ 0, 0, 0 }, .activate);
                 body.setRotation(id, .{ 1, 0, 0, 0 }, .activate);
             }
-            std.log.debug("rotation {any}", .{transform.rotation});
+            // std.log.debug("rotation {any}", .{transform.rotation});
         }
     }
 }
