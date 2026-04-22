@@ -89,7 +89,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             new_entity.transform = .{ .position = .{ 0, 0, 0 } };
             new_entity.flags = .{ .transform = true, .mesh = true };
 
-            switch (spawn_entity.entity_type) {
+            switch (spawn_entity.kind) {
                 .player => new_entity.mesh = .{ .id = 0 },
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
@@ -113,6 +113,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };
                 },
                 .enemy => new_entity.mesh = .{ .id = 0 },
+                .unknown => @panic("unknown entity type... wtf"),
             }
 
             try info.world.enitity_mapping.put(self.gpa, command.spawn_entity.id, new_entity.id);

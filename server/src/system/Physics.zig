@@ -237,7 +237,7 @@ pub fn deinit(self: *@This()) void {
     zphy.deinit();
 }
 
-pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
+pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
     if (pre_reload) {
         // Serialize body states before destroying
         // TODO: Implement body serialization when you have active bodies
@@ -273,83 +273,19 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
         ) catch unreachable;
         self.physics_system.setGravity(.{ 0, 0, 0 });
         for (world.entities.values()) |*entity| {
-            if (!entity.flags.collider) continue;
+            if (!entity.flags.collider or !entity.flags.transform) continue;
             entity.collider.body_id = null;
+            try self.createBody(entity);
         }
-        // TODO: Restore body states here when you have active bodies
     }
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
-    const body_interface = self.physics_system.getBodyInterfaceMut();
-    for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.collider or !entity.flags.transform) continue;
-        const collider = &entity.collider;
-        const transform = entity.transform;
-        const matrix = transform.toMat4x4();
-        if (collider.body_id == null) {
-            const shape = switch (collider.shape) {
-                .primitive => |primitive_shape| switch (primitive_shape) {
-                    .box => shape: {
-                        const box_shape_settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
-                        defer box_shape_settings.asShapeSettings().release();
-                        const box_shape = try box_shape_settings.asShapeSettings().createShape();
-                        break :shape box_shape;
-                    },
-                    .sphere => shape: {
-                        const sphere_shape_settings = try zphy.SphereShapeSettings.create(1);
-                        defer sphere_shape_settings.asShapeSettings().release();
-                        const sphere_shape = try sphere_shape_settings.asShapeSettings().createShape();
-                        break :shape sphere_shape;
-                    },
-                    .capsule => shape: {
-                        const capsule_shape_settings = try zphy.CapsuleShapeSettings.create(1, 1);
-                        defer capsule_shape_settings.asShapeSettings().release();
-                        const capsule_shape = try capsule_shape_settings.asShapeSettings().createShape();
-                        break :shape capsule_shape;
-                    },
-                },
-                .mesh => |mesh_shape| shape: {
-                    const mesh_shape_setting = try zphy.MeshShapeSettings.create(
-                        mesh_shape.vertices.items.ptr,
-                        @intCast(mesh_shape.vertices.items.len),
-                        @sizeOf([4]f32),
-                        mesh_shape.indices.items,
-                    );
-                    zphy.MeshShapeSettings.sanitize(mesh_shape_setting);
-                    defer mesh_shape_setting.asShapeSettings().release();
-                    const custom_shape = try mesh_shape_setting.asShapeSettings().createShape();
-                    break :shape custom_shape;
-                },
-            };
-            defer shape.release();
-
-            std.log.debug("XDD", .{});
-            const translation_only: zphy.AllowedDOFs = @enumFromInt(
-                @intFromEnum(zphy.AllowedDOFs.translation_x) |
-                    @intFromEnum(zphy.AllowedDOFs.translation_y) |
-                    @intFromEnum(zphy.AllowedDOFs.translation_z),
-            );
-            const body_id = try body_interface.createAndAddBody(.{
-                .position = matrix.vec4Position(),
-                .rotation = transform.rotation.toVec(),
-                .shape = shape,
-                .motion_type = collider.motion_type,
-                .object_layer = object_layers.moving,
-                .user_data = entity.id,
-                .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
-                .allowed_DOFs = translation_only,
-                // .max_angular_velocity = collider.max_angular_velocity,
-                //.allow_sleeping = false,
-            }, .activate);
-            collider.body_id = body_id;
-        }
-    }
-
     try self.playerInput(info);
 
     const bodies = self.physics_system.getBodiesMutUnsafe();
-    // std.debug.print("GRAVITY \n", .{});
+
+    //Force into planet
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
@@ -357,23 +293,15 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         // _ = up;
         const force = -up;
         body.addForce(nz.vec.scale(force, 1000));
-        // std.debug.print("GRAVITY {any}\n", .{force});
-
-        // const distance = nz.vec.distance(transform.position, .{ 0, 0, 0 });
-        // const look_at_pos = nz.vec.scale(nz.vec.forward(nz.Vec3(f32){ 0, 0, 0 }, location_front), distance);
-        // transform.rotation = std.math.radiansToDegrees(nz.vec.forward(transform.position, look_at_pos));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
 
     for (bodies) |body| {
-        // std.debug.print("[0]UPDATE\n", .{}); xd
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const transform: *nz.Transform3D(f32) = &entity.transform;
-        // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
-        // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
         const position: nz.Vec3(f32) = .{
             @as(f32, @floatCast(body.position[0])),
             @as(f32, @floatCast(body.position[1])),
@@ -387,9 +315,8 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
     // Align body transform to planet, then reset camera to match and apply stored yaw
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.transform or !entity.flags.camera) continue;
+        if (!entity.flags.transform) continue;
         const transform = &entity.transform;
-        const camera = &entity.camera;
 
         const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
 
@@ -409,6 +336,8 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         }
 
         // Reset camera to the (now planet-aligned) body transform, then apply stored pitch
+        if (!entity.flags.camera) continue;
+        const camera = &entity.camera;
         camera.transform.position = transform.position;
         camera.transform.rotation = transform.rotation;
         const pitch_quat: nz.quat.Hamiltonian(f32) = .angleAxis(camera.pitch, nz.Vec3(f32){ 1, 0, 0 });
@@ -478,4 +407,65 @@ fn playerInput(self: *@This(), info: *const system.Info) !void {
             // std.log.debug("rotation {any}", .{transform.rotation});
         }
     }
+}
+
+pub fn createBody(self: *@This(), entity: *system.Entity) !void {
+    const collider = &entity.collider;
+    const transform = entity.transform;
+    const matrix = transform.toMat4x4();
+    const body_interface = self.physics_system.getBodyInterfaceMut();
+
+    const shape = switch (collider.shape) {
+        .primitive => |primitive_shape| switch (primitive_shape) {
+            .box => shape: {
+                const settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
+                defer settings.asShapeSettings().release();
+                break :shape try settings.asShapeSettings().createShape();
+            },
+            .sphere => shape: {
+                const settings = try zphy.SphereShapeSettings.create(1);
+                defer settings.asShapeSettings().release();
+                break :shape try settings.asShapeSettings().createShape();
+            },
+            .capsule => shape: {
+                const settings = try zphy.CapsuleShapeSettings.create(1, 1);
+                defer settings.asShapeSettings().release();
+                break :shape try settings.asShapeSettings().createShape();
+            },
+        },
+        .mesh => |mesh_shape| shape: {
+            const settings = try zphy.MeshShapeSettings.create(
+                mesh_shape.vertices.items.ptr,
+                @intCast(mesh_shape.vertices.items.len),
+                @sizeOf([4]f32),
+                mesh_shape.indices.items,
+            );
+            zphy.MeshShapeSettings.sanitize(settings);
+            defer settings.asShapeSettings().release();
+            break :shape try settings.asShapeSettings().createShape();
+        },
+    };
+    defer shape.release();
+
+    const translation_only: zphy.AllowedDOFs = @enumFromInt(
+        @intFromEnum(zphy.AllowedDOFs.translation_x) |
+            @intFromEnum(zphy.AllowedDOFs.translation_y) |
+            @intFromEnum(zphy.AllowedDOFs.translation_z),
+    );
+    const body_id = try body_interface.createAndAddBody(.{
+        .position = matrix.vec4Position(),
+        .rotation = transform.rotation.toVec(),
+        .shape = shape,
+        .motion_type = collider.motion_type,
+        .object_layer = object_layers.moving,
+        .user_data = entity.id,
+        .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
+        .allowed_DOFs = translation_only,
+    }, .activate);
+    collider.body_id = body_id;
+}
+
+pub fn destroyBody(self: *@This(), body_id: zphy.BodyId) void {
+    const body_interface = self.physics_system.getBodyInterfaceMut();
+    body_interface.removeAndDestroyBody(body_id);
 }

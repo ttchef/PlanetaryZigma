@@ -150,20 +150,20 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                 if (!entity.flags.transform) continue;
                 std.log.debug("sent id {d}", .{entity.id});
                 var data: [4]u8 = @splat(0);
-                switch (entity.entity_type) {
+                switch (entity.kind) {
                     .planet => data = @bitCast(entity.planet),
                     else => {},
                 }
                 try client.sendCommand(writer, .{ .spawn_entity = .{
                     .id = entity.id,
-                    .entity_type = entity.entity_type,
+                    .kind = entity.kind,
                     .data = data,
                 } });
             }
             client.needs_full_sync = false;
         } else {
             for (spawner.network_pending_spawn.items) |entry| {
-                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
+                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .kind = entry.kind } });
             }
         }
         //despawns

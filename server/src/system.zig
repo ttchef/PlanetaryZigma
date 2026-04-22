@@ -27,9 +27,9 @@ pub const Entity = struct {
         _pad: u27 = 0,
     };
 
-    id: u32,
+    id: u32 = 0,
     flags: Flags = .{},
-    entity_type: shared.EntityType = .player,
+    kind: shared.EntityKind = .unknown,
 
     transform: nz.Transform3D(f32) = .{},
     collider: Physics.Collider = undefined,
@@ -107,10 +107,10 @@ pub const Context = struct {
             .network_manager = undefined,
             .physics = undefined,
         };
-        try self.spawner.init(data.gpa, data.world);
-        try self.game.init(data.gpa);
-        try self.network_manager.init(data.gpa, data.io);
         try self.physics.init(data.gpa, data.io);
+        try self.spawner.init(data.gpa, data.world, &self.physics);
+        try self.game.init(data.gpa, data.world);
+        try self.network_manager.init(data.gpa, data.io);
         _ = try self.spawner.spawnPlanet();
     }
     pub fn deinit(self: *@This()) !void {
@@ -129,7 +129,7 @@ pub const Context = struct {
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         std.log.debug("before-1", .{});
-        self.physics.reload(pre_reload, self.world);
+        try self.physics.reload(pre_reload, self.world);
         try self.network_manager.reload(pre_reload);
         std.log.debug("before-0", .{});
     }

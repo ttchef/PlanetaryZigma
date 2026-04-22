@@ -8,7 +8,8 @@ pub const Planet = @import("Planet.zig");
 pub const Watcher = @import("watcher.zig");
 pub const AssetServer = @import("AssetServer.zig");
 
-pub const EntityType = enum(u16) {
+pub const EntityKind = enum(u16) {
+    unknown,
     player,
     planet,
     enemy,
