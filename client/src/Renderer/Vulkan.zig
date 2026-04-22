@@ -397,9 +397,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
 
     const aspect: f32 = @as(f32, @floatFromInt(self.swapchain.draw_image.extent.width)) / @as(f32, @floatFromInt(self.swapchain.draw_image.extent.height));
 
-    const comp = system.component;
-    var query = info.world.ecz.query(&.{comp.camera});
-    const camera = query.next().?.getComponent(comp.camera);
+    const camera = camera: {
+        for (info.world.entities.values()) |*entity| {
+            if (entity.flags.camera) break :camera &entity.camera;
+        }
+        return;
+    };
     const view = getViewMatrix(&camera.transform);
     var proj = perspective(camera.fov_rad, aspect, 0.01, 1000);
     const proj_view = proj.mul(view);
@@ -427,14 +430,12 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
     const identity_matrix: nz.Mat4x4(f32) = .identity;
     ext.vkCmdBeginRendering(cmd, &render_info);
     var push: Shader.PushConstant = .{ .buffer_address = undefined, .model_matrix = identity_matrix.d };
-    var query_mesh = info.world.ecz.query(&.{ comp.mesh, comp.transform });
-    while (query_mesh.next()) |entry| {
-        var mesh_id = entry.getComponent(comp.mesh).id;
-        // _ = mesh_id;
-        // const mesh = self.meshes.items[0];
+    for (info.world.entities.values()) |*entry| {
+        if (!entry.flags.mesh or !entry.flags.transform) continue;
+        var mesh_id = entry.mesh.id;
         mesh_id = if (mesh_id >= self.meshes.items.len) 0 else mesh_id;
         const mesh = self.meshes.items[mesh_id];
-        const transform = entry.getComponent(comp.transform);
+        const transform = entry.transform;
         // std.log.debug("render-quat: {any}", .{transform.rotation});
         const matrix = transform.toMat4x4();
         push = .{ .buffer_address = mesh.vertex_buffer.gpu_address, .model_matrix = matrix.d };

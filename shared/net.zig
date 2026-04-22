@@ -1,5 +1,5 @@
 const std = @import("std");
-const EntityType = @import("root.zig").EntityType;
+const EntityKind = @import("root.zig").EntityKind;
 
 pub const address: std.Io.net.IpAddress = .{ .ip4 = .{ .bytes = .{ 127, 0, 0, 1 }, .port = 8080 } };
 pub const data_size: u32 = 1024;
@@ -56,7 +56,7 @@ pub const Command = union(Opcode) {
 
     pub const SpawnEntity = struct {
         id: u32,
-        entity_type: EntityType,
+        kind: EntityKind,
         data: [4]u8 = @splat(0),
     };
     pub const DespawnEntity = struct {

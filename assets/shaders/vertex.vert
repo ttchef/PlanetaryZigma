@@ -36,11 +36,11 @@ void main() {
   // gl_Position = scene_data.proj_view * vec4(x, y, z, 1.0);
 
   vec3 uv = vec3(v.uv_x, v.uv_y, v.uv_x);
-  // vec3 col = 0.5 + 0.5 * cos(scene_data.time + uv + vec3(0, 2, 4));
+  vec3 col = 0.5 + 0.5 * cos(scene_data.time + uv + vec3(0, 2, 4));
   // vec3 col = vec3(0, 0, 1);
 
-  float red = (y > 0) ? 1 : 0;
-  vec3 col = vec3(red, 0, 0);
+  // float red = (y > 0) ? 1 : 0;
+  // vec3 col = vec3(red, 0, 0);
 
   fragColor = vec4(col, 1);
 }

@@ -4,7 +4,6 @@ const NetworkManager = @import("system/NetworkManager.zig");
 const Spawner = @import("system/Spawner.zig");
 const Game = @import("system/Game.zig");
 const nz = shared.numz;
-pub const ecz = shared.ecz;
 const Physics = @import("system/Physics.zig");
 
 pub const Info = struct {
@@ -18,32 +17,67 @@ pub const Camera = struct {
     pitch: f32 = 0,
 };
 
-pub const World = struct {
-    mutex: std.Io.Mutex = .init,
-
-    ecz: ecz.World(&.{
-        component.transform,
-        component.collider,
-        component.input,
-        component.camera,
-        component.planet,
-        component.entity_type,
-    }),
-
-    pub const component = struct {
-        pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
-        pub const collider: ecz.Component = .{ .name = .collider, .type = Physics.Collider };
-        pub const input: ecz.Component = .{ .name = .input, .type = shared.net.Command.Input };
-        pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
-        pub const planet: ecz.Component = .{ .name = .planet, .type = u32 };
-        pub const entity_type: ecz.Component = .{ .name = .entity_type, .type = shared.EntityType };
+pub const Entity = struct {
+    pub const Flags = packed struct(u32) {
+        transform: bool = false,
+        collider: bool = false,
+        input: bool = false,
+        camera: bool = false,
+        planet: bool = false,
+        _pad: u27 = 0,
     };
 
+    id: u32 = 0,
+    flags: Flags = .{},
+    kind: shared.EntityKind = .unknown,
+
+    transform: nz.Transform3D(f32) = .{},
+    collider: Physics.Collider = undefined,
+    input: shared.net.Command.Input = .{},
+    camera: Camera = .{},
+    planet: u32 = 0,
+
+    pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
+        if (self.flags.collider) {
+            switch (self.collider.shape) {
+                .mesh => |*mesh| {
+                    mesh.indices.deinit(gpa);
+                    mesh.vertices.deinit(gpa);
+                },
+                .primitive => {},
+            }
+        }
+    }
+};
+
+pub const World = struct {
+    mutex: std.Io.Mutex = .init,
+    gpa: std.mem.Allocator,
+    entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
+    next_id: u32 = 1,
+
     pub fn init(gpa: std.mem.Allocator) !@This() {
-        return .{ .ecz = .init(gpa) };
+        return .{ .gpa = gpa };
     }
     pub fn deinit(self: *@This()) void {
-        self.ecz.deinit();
+        for (self.entities.values()) |*entity| entity.deinit(self.gpa);
+        self.entities.deinit(self.gpa);
+    }
+
+    pub fn spawn(self: *@This()) !*Entity {
+        const id = self.next_id;
+        self.next_id += 1;
+        try self.entities.put(self.gpa, id, .{ .id = id });
+        return self.entities.getPtr(id).?;
+    }
+
+    pub fn get(self: *@This(), id: u32) ?*Entity {
+        return self.entities.getPtr(id);
+    }
+
+    pub fn despawn(self: *@This(), id: u32) bool {
+        if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
+        return self.entities.swapRemove(id);
     }
 };
 
@@ -73,35 +107,17 @@ pub const Context = struct {
             .network_manager = undefined,
             .physics = undefined,
         };
-        try self.spawner.init(data.gpa, data.world);
-        try self.game.init(data.gpa);
-        try self.network_manager.init(data.gpa, data.io);
         try self.physics.init(data.gpa, data.io);
-
-        //TODO: maybe not do planet init here?
-        var planet_entity = try data.world.ecz.spawnEntity();
-        const planet_size: u32 = 100;
-        try planet_entity.putComponent(World.component.planet, planet_size);
-        try planet_entity.putComponent(World.component.transform, .{});
-        try planet_entity.putComponent(World.component.entity_type, .planet);
-        const planet: shared.Planet = try .init(data.gpa, planet_size);
-        std.log.debug("ptr: {*}, len:{d}", .{ planet.vertices.items.ptr, planet.vertices.items.len });
-
-        try planet_entity.putComponent(World.component.collider, .{
-            .shape = .{
-                .mesh = .{
-                    .indices = planet.indices,
-                    .vertices = planet.vertices,
-                },
-            },
-            .motion_type = .static,
-        });
-        std.log.debug("OK ", .{});
-        //TODO: planet init
+        try self.spawner.init(data.gpa, data.world, &self.physics);
+        try self.game.init(data.gpa, data.world);
+        try self.network_manager.init(data.gpa, data.io);
+        _ = try self.spawner.spawnPlanet();
     }
     pub fn deinit(self: *@This()) !void {
         self.physics.deinit();
         try self.network_manager.deinit();
+        try self.game.deinit();
+        self.spawner.deinit();
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
@@ -113,7 +129,7 @@ pub const Context = struct {
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
         std.log.debug("before-1", .{});
-        self.physics.reload(pre_reload, self.world);
+        try self.physics.reload(pre_reload, self.world);
         try self.network_manager.reload(pre_reload);
         std.log.debug("before-0", .{});
     }

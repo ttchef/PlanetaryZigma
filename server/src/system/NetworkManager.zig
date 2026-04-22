@@ -3,7 +3,6 @@ const shared = @import("shared");
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
 const Info = system.Info;
-const component = system.World.component;
 
 gpa: std.mem.Allocator,
 io: std.Io,
@@ -104,8 +103,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
     const writer = &fix_writer;
 
-    // var clients_to_remove: std.ArrayList(struct { ip: *std.Io.net.IpAddress, client: *Client }) = .empty;
-
     var it = self.clients.iterator();
     while (it.next()) |pair| {
         const client = pair.value_ptr;
@@ -115,24 +112,18 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         for (client.command_queue.commands.items) |command| {
             switch (command) {
                 .connect => {
-                    std.log.debug("connect ", .{});
                     client.entity_id = try spawner.spawnConnectPlayer();
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
-                    std.debug.print("enetiess : {d}: ID {d}\n", .{ world.ecz.last_id, client.entity_id });
+                    std.log.debug("New Player ID: {d}\n", .{client.entity_id});
                 },
                 .disconnect => {
-                    std.debug.print("enteties in ECS : {d}\n", .{world.ecz.last_id});
                     try spawner.depspawn(client.entity_id);
-                    // const entity_to_remove = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-                    // try entity_to_remove.despawn();
-                    // try self.pending_despawn.append(self.gpa, .{ .id = entity_to_remove.id, .entity_type = .player });
-                    // try clients_to_remove.append(self.allocator, .{ .ip = client_address, .client = client });
+                    std.log.debug("player disconnect", .{});
                 },
                 .input => {
-                    const input_entity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-                    const input = input_entity.getComponentPtr(component.input);
-                    input.* = command.input;
-                    // std.debug.print("mouse :{any}\n", .{input.*.mouse_delta});
+                    if (world.get(client.entity_id)) |entity| {
+                        entity.input = command.input;
+                    }
                 },
                 else => {
                     std.log.err("Unhandled command {s}", .{@tagName(command)});
@@ -140,27 +131,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             }
         }
         client.command_queue.commands.items.len = 0;
-        // if (update_game_state == true) {
-        //     std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
-        //     var query = world.ecz.query(&.{component.transform});
-        //     while (query.next()) |entity| {
-        //         if (client.entity_id == entity.id) continue;
-        //         std.debug.print("ent in ecs ID {d}\n", .{entity.id});
-        //         writer.end = 0;
-        //         const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = entity.id } };
-        //         try client.command_queue.commands.append(self.allocator, spawn_entitiy_cmd);
-        //     }
-        // }
-        // writer.end = 0;
-        // const xentity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-        // var xtransform = xentity.getComponentPtr(component.transform);
-        // var xcommand_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = xtransform.position } };
-        // xcommand_update_transform.update_transform.id = client.entity_id;
-        // xtransform.position += .{ 0, 0, -1 };
-        // xcommand_update_transform.update_transform.pos = xtransform.position;
-        // try xcommand_update_transform.write(writer);
-        // try self.socket.send(self.io, client_address, writer.buffered());
-
         client.command_queue.mutex.unlock(self.io);
     }
 
@@ -169,52 +139,44 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         const client = pair.value_ptr;
 
         //update camera
-        const player_entity = world.ecz.entityFromId(client.entity_id);
-        const camera = player_entity.getComponent(component.camera);
-        try client.sendCommand(writer, .{ .update_camera_rotation = .{ .position = camera.transform.position, .rotation = camera.transform.rotation.toVec(), .id = client.entity_id } });
+        if (world.get(client.entity_id)) |player_entity| {
+            const camera = player_entity.camera;
+            try client.sendCommand(writer, .{ .update_camera_rotation = .{ .position = camera.transform.position, .rotation = camera.transform.rotation.toVec(), .id = client.entity_id } });
+        }
 
-        //ECS spawns
+        //spawns
         if (client.needs_full_sync) {
-            var query = world.ecz.query(&.{ component.transform, component.entity_type });
-
-            while (query.next()) |entity| {
+            for (world.entities.values()) |*entity| {
+                if (!entity.flags.transform) continue;
                 std.log.debug("sent id {d}", .{entity.id});
-                const entity_type = entity.getComponent(component.entity_type);
                 var data: [4]u8 = @splat(0);
-                switch (entity_type) {
-                    .planet => {
-                        const planet = entity.getComponent(component.planet);
-                        data = @bitCast(planet);
-                    },
+                switch (entity.kind) {
+                    .planet => data = @bitCast(entity.planet),
                     else => {},
                 }
                 try client.sendCommand(writer, .{ .spawn_entity = .{
                     .id = entity.id,
-                    .entity_type = entity_type,
+                    .kind = entity.kind,
                     .data = data,
                 } });
-                // const entity_type = entity.getComponent(component.entity_type);
-                // try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entity.id, .entity_type = entity_type } });
             }
             client.needs_full_sync = false;
         } else {
-            // std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
             for (spawner.network_pending_spawn.items) |entry| {
-                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .entity_type = entry.entity_type } });
+                try client.sendCommand(writer, .{ .spawn_entity = .{ .id = entry.id, .kind = entry.kind } });
             }
         }
-        //ECS despawns
+        //despawns
         for (spawner.network_pending_despawn.items) |id| {
             try client.sendCommand(writer, .{ .despawn_entity = .{ .id = id } });
         }
-        //Update ECS Transforms
-        var query = world.ecz.query(&.{component.transform});
-        while (query.next()) |entity| {
-            const transform = entity.getComponent(component.transform);
+        //Update Transforms
+        for (world.entities.values()) |*entity| {
+            if (!entity.flags.transform) continue;
             try client.sendCommand(writer, .{ .update_transform = .{
                 .id = entity.id,
-                .position = transform.position,
-                .rotation = transform.rotation.toVec(),
+                .position = entity.transform.position,
+                .rotation = entity.transform.rotation.toVec(),
             } });
         }
     }
