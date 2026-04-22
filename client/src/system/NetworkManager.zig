@@ -1,7 +1,6 @@
 const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
-const component = system.component;
 const World = system.World;
 const Info = system.Info;
 const nz = shared.numz;
@@ -66,33 +65,33 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     var fixed_writer_buffer: [1024]u8 = undefined;
     var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
     const writer = &fix_writer;
-    var query = info.world.ecz.query(&.{ component.camera, component.transform });
-    if (query.next()) |entity| {
-        // std.log.debug("xddd", .{});
-        const camera = entity.getComponentPtr(component.camera);
-        try self.sendCommand(writer, .{ .input = camera.input_map });
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.camera or !entity.flags.transform) continue;
+        try self.sendCommand(writer, .{ .input = entity.camera.input_map });
+        break;
     }
     try self.command_queue.mutex.lock(self.io);
     for (self.command_queue.commands.items) |command| switch (command) {
         .acknowledge => |acknowledge| {
-            var new_player = try info.world.ecz.spawnEntity();
-            try new_player.putComponent(component.camera, .{ .transform = .{ .position = .{ 0, 0, 0 } } });
-            try new_player.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
+            const new_player = try info.world.spawn();
+            new_player.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
+            new_player.transform = .{ .position = .{ 0, 0, 0 } };
+            new_player.flags = .{ .camera = true, .transform = true };
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
-            std.log.debug("ack entities: {d}", .{info.world.ecz.last_id});
+            std.log.debug("ack entities: {d}", .{info.world.next_id});
             std.log.debug("ACK: MY ID: {d}, server ID: {d} ", .{ new_player.id, command.acknowledge.id });
         },
         .spawn_entity => |spawn_entity| {
             const server_id = command.spawn_entity.id;
             if (info.world.enitity_mapping.contains(server_id)) continue; //TODO: maybe dont send entities that exists already?
-            var new_entity = try info.world.ecz.spawnEntity();
-            try new_entity.putComponent(component.transform, .{ .position = .{ 0, 0, 0 } });
+            const new_entity = try info.world.spawn();
+            new_entity.transform = .{ .position = .{ 0, 0, 0 } };
+            new_entity.flags = .{ .transform = true, .mesh = true };
 
             switch (spawn_entity.entity_type) {
-                .player => try new_entity.putComponent(component.mesh, .{ .id = 0 }),
+                .player => new_entity.mesh = .{ .id = 0 },
                 .planet => {
-                    // _ = system_context;
                     const size: u32 = @intCast(spawn_entity.data[0]);
                     var planet_vertices: shared.Planet = try .init(self.gpa, size);
                     defer planet_vertices.deinit(self.gpa);
@@ -104,7 +103,6 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                             .position = vertex[0..3].*,
                         });
                     }
-                    // std.log.debug("SPAWNED: Planet vert: {d}, vk_vert{d}, ind:{d} ", .{ planet_vertices.vertices.items.len, system_context.planet.items.len, planet_vertices.indices.items.len });
                     const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
                         self.gpa,
                         "planet",
@@ -112,16 +110,13 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                         system_context.planet.vertices.items,
                     );
                     std.log.debug("SPAWNED: Planet ", .{});
-                    // try new_entity.putComponent(component.mesh, .{ .id = 0 });
-                    try new_entity.putComponent(component.mesh, .{ .id = @intCast(vulkan_mesh_handle) });
+                    new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };
                 },
-                .enemy => {
-                    try new_entity.putComponent(component.mesh, .{ .id = 0 });
-                },
+                .enemy => new_entity.mesh = .{ .id = 0 },
             }
 
             try info.world.enitity_mapping.put(self.gpa, command.spawn_entity.id, new_entity.id);
-            std.log.debug("spawn entities : {d}", .{info.world.ecz.last_id});
+            std.log.debug("spawn entities : {d}", .{info.world.next_id});
             std.log.debug("SPAWNED: MY ID: {d}, server ID: {d} ", .{ new_entity.id, command.spawn_entity.id });
         },
         .despawn_entity => {
@@ -130,47 +125,22 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                 std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{server_id});
                 continue;
             };
-            const entity = info.world.ecz.entityFromId(my_id);
-            try entity.despawn();
+            _ = info.world.despawn(my_id);
             std.log.debug("DESPAWNED: MY ID: {d}, server ID: {d} ", .{ my_id, server_id });
         },
         .update_transform => {
             const update_transform_command = command.update_transform;
-            // std.log.debug("server ID: {d},  ", .{update_transform_command.id});
-            const id = info.world.enitity_mapping.get(update_transform_command.id);
-            if (id == null) {
-                // std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{update_transform_command.id});
-
-                continue;
-            }
-
-            // std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
-            const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
-            const transform = entity.getComponentPtr(component.transform);
-
-            transform.position = update_transform_command.position;
-            transform.rotation = .fromVec(update_transform_command.rotation);
-            // std.log.debug("update rot {any},  ", .{transform.rotation});
+            const id = info.world.enitity_mapping.get(update_transform_command.id) orelse continue;
+            const entity = info.world.get(id) orelse continue;
+            entity.transform.position = update_transform_command.position;
+            entity.transform.rotation = .fromVec(update_transform_command.rotation);
         },
         .update_camera_rotation => {
             const rotation_command = command.update_camera_rotation;
-            // std.log.debug("server ID: {d},  ", .{update_transform_command.id});
-            const id = info.world.enitity_mapping.get(rotation_command.id);
-            if (id == null) {
-                // std.log.debug("FAILED TO GET- SERVER ID: {d},  ", .{update_transform_command.id});
-
-                continue;
-            }
-
-            // std.log.debug("MY ID: {d},  ", .{update_transform_command.id});
-            const entity = @TypeOf(info.world.ecz).Entity.fromId(&info.world.ecz, id.?);
-            const camera = entity.getComponentPtr(component.camera);
-            // _ = camera;
-            // camera.transform.rotation = .identity;
-            camera.transform.rotation = .fromVec(rotation_command.rotation);
-            camera.transform.position = rotation_command.position;
-            // std.log.debug("client rot {any},  ", .{camera.transform.rotation});
-            // std.log.debug("server rot {any},  ", .{rotation_command.rotation});
+            const id = info.world.enitity_mapping.get(rotation_command.id) orelse continue;
+            const entity = info.world.get(id) orelse continue;
+            entity.camera.transform.rotation = .fromVec(rotation_command.rotation);
+            entity.camera.transform.position = rotation_command.position;
         },
         else => {
             std.log.err("Unhandled command {s}", .{@tagName(command)});

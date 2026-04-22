@@ -103,8 +103,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
     var fix_writer: std.Io.Writer = .fixed(&fixed_writer_buffer);
     const writer = &fix_writer;
 
-    // var clients_to_remove: std.ArrayList(struct { ip: *std.Io.net.IpAddress, client: *Client }) = .empty;
-
     var it = self.clients.iterator();
     while (it.next()) |pair| {
         const client = pair.value_ptr;
@@ -114,14 +112,13 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         for (client.command_queue.commands.items) |command| {
             switch (command) {
                 .connect => {
-                    std.log.debug("connect ", .{});
                     client.entity_id = try spawner.spawnConnectPlayer();
                     try client.sendCommand(writer, .{ .acknowledge = .{ .id = client.entity_id } });
-                    std.debug.print("enetiess : {d}: ID {d}\n", .{ world.next_id, client.entity_id });
+                    std.log.debug("New Player ID: {d}\n", .{client.entity_id});
                 },
                 .disconnect => {
-                    std.debug.print("enteties in world : {d}\n", .{world.next_id});
                     try spawner.depspawn(client.entity_id);
+                    std.log.debug("player disconnect", .{});
                 },
                 .input => {
                     if (world.get(client.entity_id)) |entity| {
@@ -134,27 +131,6 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
             }
         }
         client.command_queue.commands.items.len = 0;
-        // if (update_game_state == true) {
-        //     std.debug.print("SEND enteties in ECS : {d}\n", .{world.ecz.last_id});
-        //     var query = world.ecz.query(&.{component.transform});
-        //     while (query.next()) |entity| {
-        //         if (client.entity_id == entity.id) continue;
-        //         std.debug.print("ent in ecs ID {d}\n", .{entity.id});
-        //         writer.end = 0;
-        //         const spawn_entitiy_cmd: shared.net.Command = .{ .spawn_entity = .{ .id = entity.id } };
-        //         try client.command_queue.commands.append(self.allocator, spawn_entitiy_cmd);
-        //     }
-        // }
-        // writer.end = 0;
-        // const xentity = @TypeOf(world.ecz).Entity.fromId(&world.ecz, client.entity_id);
-        // var xtransform = xentity.getComponentPtr(component.transform);
-        // var xcommand_update_transform: shared.net.Command = .{ .update_transform = .{ .id = client.entity_id, .pos = xtransform.position } };
-        // xcommand_update_transform.update_transform.id = client.entity_id;
-        // xtransform.position += .{ 0, 0, -1 };
-        // xcommand_update_transform.update_transform.pos = xtransform.position;
-        // try xcommand_update_transform.write(writer);
-        // try self.socket.send(self.io, client_address, writer.buffered());
-
         client.command_queue.mutex.unlock(self.io);
     }
 

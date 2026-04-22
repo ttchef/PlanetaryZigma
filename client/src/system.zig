@@ -2,7 +2,6 @@ const std = @import("std");
 const shared = @import("shared");
 const nz = shared.numz;
 const yes = @import("yes");
-pub const ecz = shared.ecz;
 const NetworkManager = @import("system/NetworkManager.zig");
 const AssetServer = @import("shared").AssetServer;
 pub const Renderer = @import("Renderer.zig");
@@ -18,28 +17,58 @@ pub const Info = struct {
     world: *World,
 };
 
-pub const component = struct {
-    pub const transform: ecz.Component = .{ .name = .transform, .type = nz.Transform3D(f32) };
-    pub const camera: ecz.Component = .{ .name = .camera, .type = Camera };
-    pub const mesh: ecz.Component = .{ .name = .mesh, .type = Mesh };
+pub const Entity = struct {
+    pub const Flags = packed struct(u32) {
+        transform: bool = false,
+        camera: bool = false,
+        mesh: bool = false,
+        _pad: u29 = 0,
+    };
+
+    id: u32,
+    flags: Flags = .{},
+
+    transform: nz.Transform3D(f32) = .{},
+    camera: Camera = .{},
+    mesh: Mesh = .{ .id = 0 },
+
+    pub fn deinit(self: *Entity, gpa: std.mem.Allocator) void {
+        _ = self;
+        _ = gpa;
+    }
 };
 
 pub const World = struct {
     mutex: std.Io.Mutex = .init,
-    ecz: ecz.World(&.{
-        component.transform,
-        component.camera,
-        component.mesh,
-    }),
+    gpa: std.mem.Allocator,
+    entities: std.AutoArrayHashMapUnmanaged(u32, Entity) = .empty,
+    next_id: u32 = 1,
     enitity_mapping: std.AutoHashMapUnmanaged(u32, u32) = .empty,
     my_server_id: u32 = 0,
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
-        return .{ .ecz = .init(gpa) };
+        return .{ .gpa = gpa };
     }
     pub fn deinit(self: *@This()) void {
-        self.ecz.deinit();
-        self.enitity_mapping.deinit(self.ecz.gpa);
+        for (self.entities.values()) |*entity| entity.deinit(self.gpa);
+        self.entities.deinit(self.gpa);
+        self.enitity_mapping.deinit(self.gpa);
+    }
+
+    pub fn spawn(self: *@This()) !*Entity {
+        const id = self.next_id;
+        self.next_id += 1;
+        try self.entities.put(self.gpa, id, .{ .id = id });
+        return self.entities.getPtr(id).?;
+    }
+
+    pub fn get(self: *@This(), id: u32) ?*Entity {
+        return self.entities.getPtr(id);
+    }
+
+    pub fn despawn(self: *@This(), id: u32) bool {
+        if (self.entities.getPtr(id)) |entity| entity.deinit(self.gpa);
+        return self.entities.swapRemove(id);
     }
 };
 
@@ -113,15 +142,11 @@ pub const Context = struct {
     }
 
     pub fn update(self: *@This(), info: *const Info) !void {
-        var query = info.world.ecz.query(&.{ component.camera, component.transform });
-        if (query.next()) |entity| {
-            const camera = entity.getComponentPtr(component.camera);
-            const transform = entity.getComponentPtr(component.transform);
-            _ = transform;
-            camera.update(info);
+        for (info.world.entities.values()) |*entity| {
+            if (!entity.flags.camera or !entity.flags.transform) continue;
+            entity.camera.update(info);
             try self.renderer.update(info);
-            // std.log.debug("pos {any},  ", .{transform.position});
-            // camera.transform.position = transform.position;
+            break;
         }
         try self.asset_server.update();
         try self.network_manager.update(self, info);
@@ -129,9 +154,10 @@ pub const Context = struct {
 
     pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
         _ = self;
-        var query = info.world.ecz.query(&.{component.camera});
-        if (query.next()) |entity| {
-            try entity.getComponentPtr(component.camera).eventUpdate(info, event);
+        for (info.world.entities.values()) |*entity| {
+            if (!entity.flags.camera) continue;
+            try entity.camera.eventUpdate(info, event);
+            break;
         }
     }
     fn reload(self: *@This(), pre_reload: bool) !void {
