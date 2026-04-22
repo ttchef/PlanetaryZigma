@@ -2,7 +2,6 @@ const std = @import("std");
 const zphy = @import("zphy");
 const shared = @import("shared");
 const system = @import("../system.zig");
-const component = system.World.component;
 const nz = shared.numz;
 
 gpa: std.mem.Allocator,
@@ -273,21 +272,20 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) void {
             },
         ) catch unreachable;
         self.physics_system.setGravity(.{ 0, 0, 0 });
-        var query = world.ecz.query(&.{system.World.component.collider});
-        while (query.next()) |entity| {
-            const collider = entity.getComponentPtr(system.World.component.collider);
-            collider.body_id = null;
+        for (world.entities.values()) |*entity| {
+            if (!entity.flags.collider) continue;
+            entity.collider.body_id = null;
         }
         // TODO: Restore body states here when you have active bodies
     }
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
-    var query = info.world.ecz.query(&.{ system.World.component.collider, system.World.component.transform });
     const body_interface = self.physics_system.getBodyInterfaceMut();
-    while (query.next()) |entity| {
-        const collider = entity.getComponentPtr(system.World.component.collider);
-        const transform = entity.getComponent(system.World.component.transform);
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.collider or !entity.flags.transform) continue;
+        const collider = &entity.collider;
+        const transform = entity.transform;
         const matrix = transform.toMat4x4();
         if (collider.body_id == null) {
             const shape = switch (collider.shape) {
@@ -354,9 +352,8 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     // std.debug.print("GRAVITY \n", .{});
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.ecz.entityFromId(@intCast(body.user_data));
-        const transform = entity.getComponent(system.World.component.transform);
-        const up = nz.vec.normalize(transform.position);
+        const entity = info.world.get(@intCast(body.user_data)) orelse continue;
+        const up = nz.vec.normalize(entity.transform.position);
         // _ = up;
         const force = -up;
         body.addForce(nz.vec.scale(force, 1000));
@@ -372,8 +369,8 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     for (bodies) |body| {
         // std.debug.print("[0]UPDATE\n", .{}); xd
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
-        const entity = info.world.ecz.entityFromId(@intCast(body.user_data));
-        const transform: *nz.Transform3D(f32) = entity.getComponentPtr(system.World.component.transform);
+        const entity = info.world.get(@intCast(body.user_data)) orelse continue;
+        const transform: *nz.Transform3D(f32) = &entity.transform;
         // std.debug.print("USER_DATA {d}\n", .{body.user_data});
 
         // std.debug.print("ENTRY_ID {d}\n", .{entry.?.getGeneration(world)});
@@ -389,10 +386,10 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
     }
 
     // Align body transform to planet, then reset camera to match and apply stored yaw
-    var align_query = info.world.ecz.query(&.{ component.transform, component.camera });
-    while (align_query.next()) |entity| {
-        const transform = entity.getComponentPtr(component.transform);
-        const camera = entity.getComponentPtr(component.camera);
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.transform or !entity.flags.camera) continue;
+        const transform = &entity.transform;
+        const camera = &entity.camera;
 
         const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
 
@@ -421,12 +418,13 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
 
 fn playerInput(self: *@This(), info: *const system.Info) !void {
     const body = self.physics_system.getBodyInterfaceMut();
-    var query = info.world.ecz.query(&.{ component.collider, component.input, component.camera, component.transform });
-    while (query.next()) |entity| {
-        const collider = entity.getComponentPtr(component.collider);
-        const camera: *system.Camera = entity.getComponentPtr(component.camera);
-        const transform: *nz.Transform3D(f32) = entity.getComponentPtr(component.transform);
-        const input: shared.net.Command.Input = entity.getComponent(component.input);
+    for (info.world.entities.values()) |*entity| {
+        const f = entity.flags;
+        if (!f.collider or !f.input or !f.camera or !f.transform) continue;
+        const collider = &entity.collider;
+        const camera: *system.Camera = &entity.camera;
+        const transform: *nz.Transform3D(f32) = &entity.transform;
+        const input: shared.net.Command.Input = entity.input;
 
         const forward = camera.transform.forward();
         const right = camera.transform.right();
