@@ -1,0 +1,102 @@
+const std = @import("std");
+const shared = @import("shared");
+const system = @import("../system.zig");
+const Physics = @import("Physics.zig");
+const nz = shared.numz;
+
+physics: *Physics,
+
+pub fn init(self: *@This(), physics: *Physics) !void {
+    self.* = .{ .physics = physics };
+}
+
+pub fn deinit(self: *@This()) void {
+    _ = self;
+}
+
+//NOTE: AI generated I have no idea about the math
+
+pub fn update(self: *@This(), info: *const system.Info) !void {
+    const body_interface = self.physics.physics_system.getBodyInterfaceMut();
+
+    for (info.world.entities.values()) |*entity| {
+        const f = entity.flags;
+        if (!f.input or !f.camera or !f.transform or !f.collider) continue;
+
+        const camera = &entity.camera;
+        const transform = &entity.transform;
+        const input = &entity.input;
+
+        // Planet-relative up is derived from the body's world position each frame.
+        const planet_up = nz.vec.normalize(transform.position);
+
+        // --- Look input ---
+        const sensitivity: f32 = 0.01;
+        const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
+        const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
+
+        if (input.mouse_button_right) {
+            // Yaw rotates around the *current* planet-up so looking is always tangent-aligned.
+            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, planet_up);
+            camera.yaw_rotation = yaw_quat.mul(camera.yaw_rotation).normalize();
+            // Pitch stays as a scalar and is composed on top of yaw at render time.
+            const pitch_limit: f32 = std.math.pi / 2.0 - 0.01;
+            camera.pitch = std.math.clamp(camera.pitch + delta_pitch, -pitch_limit, pitch_limit);
+        }
+
+        // Consumed: don't keep applying stale input next frame if the client stops sending packets.
+        input.mouse_delta = .{ 0, 0 };
+
+        // --- Tangent-plane realign ---
+        // The player walks around a sphere, so planet_up drifts over time. Re-project the yaw
+        // rotation so its local up matches the new planet_up (preserves facing direction).
+        const cam_up = nz.vec.normalize(camera.yaw_rotation.rotateVec(.{ 0, 1, 0 }));
+        const d = std.math.clamp(nz.vec.dot(cam_up, planet_up), -1.0, 1.0);
+        if (d < 0.9999) {
+            const cam_fwd_raw = nz.vec.normalize(camera.yaw_rotation.rotateVec(.{ 0, 0, -1 }));
+            const axis: nz.Vec3(f32) = if (d > -0.9999)
+                nz.vec.normalize(nz.vec.cross(cam_up, planet_up))
+            else
+                nz.vec.normalize(nz.vec.cross(cam_up, cam_fwd_raw));
+            const angle = std.math.acos(d);
+            const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
+            camera.yaw_rotation = align_quat.mul(camera.yaw_rotation).normalize();
+        }
+
+        // --- Planet-tangent movement basis ---
+        // Projected camera forward: strips out any up-component so WASD moves over the surface.
+        const cam_fwd = nz.vec.normalize(camera.yaw_rotation.rotateVec(.{ 0, 0, -1 }));
+        const fwd_proj = cam_fwd - nz.vec.scale(planet_up, nz.vec.dot(cam_fwd, planet_up));
+        const move_fwd = if (nz.vec.length(fwd_proj) > 0.0001)
+            nz.vec.normalize(fwd_proj)
+        else
+            nz.vec.normalize(camera.yaw_rotation.rotateVec(.{ 1, 0, 0 }));
+        const move_right = nz.vec.normalize(nz.vec.cross(move_fwd, planet_up));
+
+        // --- Apply to body ---
+        if (entity.collider.body_id) |id| {
+            var move: nz.Vec3(f32) = .{ 0, 0, 0 };
+            const velocity: f32 = 1;
+
+            if (input.forward) move += nz.vec.scale(move_fwd, velocity);
+            if (input.backward) move -= nz.vec.scale(move_fwd, velocity);
+            if (input.right) move += nz.vec.scale(move_right, velocity);
+            if (input.left) move -= nz.vec.scale(move_right, velocity);
+            if (input.up) move += nz.vec.scale(planet_up, velocity);
+            if (input.down) move -= nz.vec.scale(planet_up, velocity);
+
+            body_interface.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
+
+            // Body yaw tracks camera yaw (pitch stays on the camera only).
+            body_interface.setRotation(id, camera.yaw_rotation.toVec(), .activate);
+
+            if (input.r) {
+                camera.* = .{};
+                transform.* = .{};
+                body_interface.setLinearVelocity(id, .{ 0, 0, 0 });
+                body_interface.setPosition(id, .{ 0, 0, 0 }, .activate);
+                body_interface.setRotation(id, .{ 0, 0, 0, 1 }, .activate);
+            }
+        }
+    }
+}

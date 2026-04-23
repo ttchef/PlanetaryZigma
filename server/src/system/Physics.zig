@@ -281,130 +281,64 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
 }
 
 pub fn update(self: *@This(), info: *const system.Info) !void {
-    try self.playerInput(info);
-
     const bodies = self.physics_system.getBodiesMutUnsafe();
 
-    //Force into planet
+    // Pull each dynamic body toward the planet center ("gravity").
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const up = nz.vec.normalize(entity.transform.position);
-        // _ = up;
         const force = -up;
         body.addForce(nz.vec.scale(force, 1000));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
 
+    // Copy simulated body state back onto entity.transform.
     for (bodies) |body| {
         if (!zphy.isValidBodyPointer(body) or body.motion_properties == null) continue;
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const transform: *nz.Transform3D(f32) = &entity.transform;
 
-        const position: nz.Vec3(f32) = .{
+        transform.position = .{
             @as(f32, @floatCast(body.position[0])),
             @as(f32, @floatCast(body.position[1])),
             @as(f32, @floatCast(body.position[2])),
         };
-
-        transform.position = position;
-        const rotation: nz.quat.Hamiltonian(f32) = .fromVec(body.rotation);
-        transform.rotation = rotation;
+        transform.rotation = .fromVec(body.rotation);
     }
 
-    // Align body transform to planet, then reset camera to match and apply stored yaw
+    self.alignToPlanet(info);
+}
+
+/// For entities flagged `align_to_planet`, snap their rotation so local-up tracks
+/// the planet surface normal (normalize(position)). Writes the result to both the
+/// transform and the physics body so the alignment is authoritative.
+/// Assumes these bodies have `translation_only` DOFs — otherwise physics will
+/// fight the imposed rotation.
+fn alignToPlanet(self: *@This(), info: *const system.Info) void {
+    const body_interface = self.physics_system.getBodyInterfaceMut();
+
     for (info.world.entities.values()) |*entity| {
-        if (!entity.flags.transform) continue;
+        if (!entity.flags.align_to_planet or !entity.flags.transform or !entity.flags.collider) continue;
         const transform = &entity.transform;
 
         const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
+        const current_up: nz.Vec3(f32) = transform.up2();
 
-        // Align body transform up with planet_up
-        {
-            const current_up: nz.Vec3(f32) = transform.up2();
-            const d: f32 = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
-            if (d < 0.9999) {
-                const axis: nz.Vec3(f32) = if (d > -0.9999)
-                    nz.vec.normalize(nz.vec.cross(current_up, desired_up))
-                else
-                    nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
-                const angle = std.math.acos(d);
-                const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
-                transform.rotation = align_quat.mul(transform.rotation).normalize();
-            }
-        }
+        const d = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
+        if (d >= 0.9999) continue;
 
-        // Reset camera to the (now planet-aligned) body transform, then apply stored pitch
-        if (!entity.flags.camera) continue;
-        const camera = &entity.camera;
-        camera.transform.position = transform.position;
-        camera.transform.rotation = transform.rotation;
-        const pitch_quat: nz.quat.Hamiltonian(f32) = .angleAxis(camera.pitch, nz.Vec3(f32){ 1, 0, 0 });
-        camera.transform.rotation = camera.transform.rotation.mul(pitch_quat).normalize();
-    }
-}
+        const axis: nz.Vec3(f32) = if (d > -0.9999)
+            nz.vec.normalize(nz.vec.cross(current_up, desired_up))
+        else
+            nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
+        const angle = std.math.acos(d);
+        const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
+        transform.rotation = align_quat.mul(transform.rotation).normalize();
 
-fn playerInput(self: *@This(), info: *const system.Info) !void {
-    const body = self.physics_system.getBodyInterfaceMut();
-    for (info.world.entities.values()) |*entity| {
-        const f = entity.flags;
-        if (!f.collider or !f.input or !f.camera or !f.transform) continue;
-        const collider = &entity.collider;
-        const camera: *system.Camera = &entity.camera;
-        const transform: *nz.Transform3D(f32) = &entity.transform;
-        const input: shared.net.Command.Input = entity.input;
-
-        const forward = camera.transform.forward();
-        const right = camera.transform.right();
-        const up = camera.transform.up2();
-
-        //Simple free camera rotation
-        if (input.mouse_button_right) {
-            const sensitivity: f32 = 0.01;
-            const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
-            const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
-
-            // Yaw around planet-relative up — flows through the body so align preserves it
-            const planet_up = nz.vec.normalize(transform.position);
-            const yaw_quat = nz.quat.Hamiltonian(f32).angleAxis(delta_yaw, planet_up);
-            camera.transform.rotation = yaw_quat.mul(camera.transform.rotation).normalize();
-
-            // Pitch: store as scalar; applied in the align/reset block on top of body rotation
-            camera.pitch += delta_pitch;
-        }
-
-        //Collider movement - simple free movement
-        if (collider.body_id) |id| {
-            var move = nz.Vec3(f32){ 0, 0, 0 };
-            const velocity = 1;
-
-            if (input.forward)
-                move += nz.vec.scale(forward, velocity);
-            if (input.backward)
-                move -= nz.vec.scale(forward, velocity);
-            if (input.left)
-                move -= nz.vec.scale(right, velocity);
-            if (input.right)
-                move += nz.vec.scale(right, velocity);
-            if (input.up)
-                move += nz.vec.scale(up, velocity);
-            if (input.down)
-                move -= nz.vec.scale(up, velocity);
-
-            body.setLinearVelocity(id, nz.vec.scale(move, info.delta_time));
-
-            // Rotation is fully user-controlled; DOF lock keeps physics from rotating the body.
-            body.setRotation(id, camera.transform.rotation.toVec(), .activate);
-
-            if (input.r) {
-                camera.* = .{};
-                transform.* = .{};
-                body.setLinearVelocity(id, .{ 0, 0, 0 });
-                body.setPosition(id, .{ 0, 0, 0 }, .activate);
-                body.setRotation(id, .{ 1, 0, 0, 0 }, .activate);
-            }
-            // std.log.debug("rotation {any}", .{transform.rotation});
+        if (entity.collider.body_id) |id| {
+            body_interface.setRotation(id, transform.rotation.toVec(), .activate);
         }
     }
 }

@@ -5,6 +5,8 @@ const Spawner = @import("system/Spawner.zig");
 const Game = @import("system/Game.zig");
 const nz = shared.numz;
 const Physics = @import("system/Physics.zig");
+const PlayerController = @import("system/PlayerController.zig");
+const CameraController = @import("system/CameraController.zig");
 
 pub const Info = struct {
     delta_time: f32,
@@ -13,8 +15,13 @@ pub const Info = struct {
 };
 
 pub const Camera = struct {
-    transform: nz.Transform3D(f32) = .{},
+    pub const Mode = enum { follow, free };
+
+    mode: Mode = .follow,
+    yaw_rotation: nz.quat.Hamiltonian(f32) = .identity,
     pitch: f32 = 0,
+    boom_offset: nz.Vec3(f32) = .{ 0, 0, 0 },
+    transform: nz.Transform3D(f32) = .{},
 };
 
 pub const Entity = struct {
@@ -24,7 +31,8 @@ pub const Entity = struct {
         input: bool = false,
         camera: bool = false,
         planet: bool = false,
-        _pad: u27 = 0,
+        align_to_planet: bool = false,
+        _pad: u26 = 0,
     };
 
     id: u32 = 0,
@@ -87,6 +95,8 @@ pub const Context = struct {
     world: *World,
     network_manager: NetworkManager,
     physics: Physics,
+    player_controller: PlayerController,
+    camera_controller: CameraController,
     spawner: Spawner,
     game: Game,
     request_exit: bool = false,
@@ -106,8 +116,12 @@ pub const Context = struct {
             .game = undefined,
             .network_manager = undefined,
             .physics = undefined,
+            .player_controller = undefined,
+            .camera_controller = undefined,
         };
         try self.physics.init(data.gpa, data.io);
+        try self.player_controller.init(&self.physics);
+        try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world, &self.physics);
         try self.game.init(data.gpa, data.world);
         try self.network_manager.init(data.gpa, data.io);
@@ -122,7 +136,9 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         try self.network_manager.update(info, &self.spawner);
+        try self.player_controller.update(info);
         try self.physics.update(info);
+        try self.camera_controller.update(info);
         try self.game.update(info, &self.spawner);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;
