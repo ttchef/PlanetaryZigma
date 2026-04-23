@@ -6,7 +6,6 @@ const Game = @import("system/Game.zig");
 const nz = shared.numz;
 const Physics = @import("system/Physics.zig");
 const PlayerController = @import("system/PlayerController.zig");
-const PlanetAlignment = @import("system/PlanetAlignment.zig");
 const CameraController = @import("system/CameraController.zig");
 
 pub const Info = struct {
@@ -32,7 +31,8 @@ pub const Entity = struct {
         input: bool = false,
         camera: bool = false,
         planet: bool = false,
-        _pad: u27 = 0,
+        align_to_planet: bool = false,
+        _pad: u26 = 0,
     };
 
     id: u32 = 0,
@@ -96,7 +96,6 @@ pub const Context = struct {
     network_manager: NetworkManager,
     physics: Physics,
     player_controller: PlayerController,
-    planet_alignment: PlanetAlignment,
     camera_controller: CameraController,
     spawner: Spawner,
     game: Game,
@@ -118,12 +117,10 @@ pub const Context = struct {
             .network_manager = undefined,
             .physics = undefined,
             .player_controller = undefined,
-            .planet_alignment = undefined,
             .camera_controller = undefined,
         };
         try self.physics.init(data.gpa, data.io);
         try self.player_controller.init(&self.physics);
-        try self.planet_alignment.init();
         try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world, &self.physics);
         try self.game.init(data.gpa, data.world);
@@ -141,10 +138,7 @@ pub const Context = struct {
         try self.network_manager.update(info, &self.spawner);
         try self.player_controller.update(info);
         try self.physics.update(info);
-        try self.planet_alignment.update(info);
-        // 5. Derive camera.transform (position + rotation) from body + yaw/pitch/boom.
         try self.camera_controller.update(info);
-        // 6. Gameplay logic: AI, spawn events, etc.
         try self.game.update(info, &self.spawner);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;

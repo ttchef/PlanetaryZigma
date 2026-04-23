@@ -57,7 +57,7 @@ pub fn spawnEnemy(self: *@This()) !u32 {
         .shape = .{ .primitive = .box },
         .motion_type = .dynamic,
     };
-    entity.flags = .{ .transform = true, .collider = true };
+    entity.flags = .{ .transform = true, .collider = true, .align_to_planet = true };
     try self.physics.createBody(entity);
 
     try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = .enemy });

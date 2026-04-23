@@ -307,6 +307,40 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         };
         transform.rotation = .fromVec(body.rotation);
     }
+
+    self.alignToPlanet(info);
+}
+
+/// For entities flagged `align_to_planet`, snap their rotation so local-up tracks
+/// the planet surface normal (normalize(position)). Writes the result to both the
+/// transform and the physics body so the alignment is authoritative.
+/// Assumes these bodies have `translation_only` DOFs — otherwise physics will
+/// fight the imposed rotation.
+fn alignToPlanet(self: *@This(), info: *const system.Info) void {
+    const body_interface = self.physics_system.getBodyInterfaceMut();
+
+    for (info.world.entities.values()) |*entity| {
+        if (!entity.flags.align_to_planet or !entity.flags.transform or !entity.flags.collider) continue;
+        const transform = &entity.transform;
+
+        const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
+        const current_up: nz.Vec3(f32) = transform.up2();
+
+        const d = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
+        if (d >= 0.9999) continue;
+
+        const axis: nz.Vec3(f32) = if (d > -0.9999)
+            nz.vec.normalize(nz.vec.cross(current_up, desired_up))
+        else
+            nz.vec.normalize(nz.vec.cross(current_up, transform.forward()));
+        const angle = std.math.acos(d);
+        const align_quat: nz.quat.Hamiltonian(f32) = .angleAxis(angle, axis);
+        transform.rotation = align_quat.mul(transform.rotation).normalize();
+
+        if (entity.collider.body_id) |id| {
+            body_interface.setRotation(id, transform.rotation.toVec(), .activate);
+        }
+    }
 }
 
 pub fn createBody(self: *@This(), entity: *system.Entity) !void {

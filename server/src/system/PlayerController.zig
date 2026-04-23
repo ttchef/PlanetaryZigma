@@ -14,6 +14,8 @@ pub fn deinit(self: *@This()) void {
     _ = self;
 }
 
+//NOTE: AI generated I have no idea about the math
+
 pub fn update(self: *@This(), info: *const system.Info) !void {
     const body_interface = self.physics.physics_system.getBodyInterfaceMut();
 

@@ -11,6 +11,8 @@ pub fn deinit(self: *@This()) void {
     _ = self;
 }
 
+//NOTE: AI generated! I have no idea about math.
+
 /// Derive each camera's final pose from its persistent state. In follow mode the camera
 /// rides the entity's position (plus a boom offset in camera-local space); in free mode
 /// camera.transform is treated as independent state and left alone.
