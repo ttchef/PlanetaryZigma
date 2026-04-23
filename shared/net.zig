@@ -73,6 +73,7 @@ pub const Command = union(Opcode) {
         r: bool = false,
         mouse_button_left: bool = false,
         mouse_button_right: bool = false,
+        mouse_wheel: f64 = 0,
         mouse_delta: [2]f64 = .{ 0, 0 },
     };
 

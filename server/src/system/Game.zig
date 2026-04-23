@@ -1,30 +1,31 @@
 const std = @import("std");
 const shared = @import("shared");
+const nz = shared.numz;
 const system = @import("../system.zig");
 const Spawner = @import("Spawner.zig");
+const Physics = @import("Physics.zig");
 const Info = system.Info;
 const component = system.World.component;
 
 gpa: std.mem.Allocator,
 world: *system.World,
-value: u32,
 
-pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World) !void {
+pub fn init(self: *@This(), gpa: std.mem.Allocator, world: *system.World, spawner: *Spawner) !void {
     self.* = .{
         .gpa = gpa,
-        .value = 0,
         .world = world,
     };
+    _ = try spawner.spawnPlanet();
+    // for (0..20) |_| {
+    //     _ = try spawner.spawnEnemy();
+    // }
 }
 pub fn deinit(self: *@This()) !void {
     _ = self;
 }
 
-pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
-    if (self.value < 20) {
-        _ = try spawner.spawnEnemy();
-        self.value += 1;
-    }
+pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *const Physics) !void {
+    _ = self;
     var player: *system.Entity = undefined;
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {
@@ -36,11 +37,18 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
         }
     } else return;
 
-    // for (info.world.entities.values()) |*entity| {
-    //     if (entity.id == player.id) continue;
-    //     if (!entity.flags.transform) continue;
-    //     entity.transform.position = player.transform.position;
-    // }
-    // if (entity.flags.transform)
+    const body_interface = physics.physics_system.getBodyInterfaceMut();
 
+    for (info.world.entities.values()) |*entity| {
+        if (entity.kind != .enemy) continue;
+        if (!entity.flags.transform or !entity.flags.collider) continue;
+        const body_id = entity.collider.body_id orelse continue;
+
+        const to_player = player.transform.position - entity.transform.position;
+        const distance = nz.vec.length(to_player);
+        if (distance < 2) continue;
+
+        const dir = nz.vec.scale(to_player, 1.0 / distance);
+        body_interface.addForce(body_id, nz.vec.scale(dir, 1000));
+    }
 }

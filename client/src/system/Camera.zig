@@ -139,6 +139,7 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
         },
         .mouse_scroll => switch (event.mouse_scroll) {
             .vertical => |scroll| {
+                self.input_map.mouse_wheel = scroll;
                 self.speed += @floatCast(scroll);
             },
             .horizontal => {},

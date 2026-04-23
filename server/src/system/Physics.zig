@@ -1,8 +1,9 @@
 const std = @import("std");
-const zphy = @import("zphy");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const nz = shared.numz;
+
+pub const zphy = @import("zphy");
 
 gpa: std.mem.Allocator,
 io: std.Io,

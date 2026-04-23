@@ -31,7 +31,7 @@ pub const Entity = struct {
         input: bool = false,
         camera: bool = false,
         planet: bool = false,
-        align_to_planet: bool = false,
+        align_to_planet: bool = false, //TODO: if not aligned jolt needs DOF awareness for later
         _pad: u26 = 0,
     };
 
@@ -123,9 +123,8 @@ pub const Context = struct {
         try self.player_controller.init(&self.physics);
         try self.camera_controller.init();
         try self.spawner.init(data.gpa, data.world, &self.physics);
-        try self.game.init(data.gpa, data.world);
+        try self.game.init(data.gpa, data.world, &self.spawner);
         try self.network_manager.init(data.gpa, data.io);
-        _ = try self.spawner.spawnPlanet();
     }
     pub fn deinit(self: *@This()) !void {
         self.physics.deinit();
@@ -137,9 +136,9 @@ pub const Context = struct {
     pub fn update(self: *@This(), info: *const Info) !void {
         try self.network_manager.update(info, &self.spawner);
         try self.player_controller.update(info);
+        try self.game.update(info, &self.spawner, &self.physics);
         try self.physics.update(info);
         try self.camera_controller.update(info);
-        try self.game.update(info, &self.spawner);
         // self.request_exit = true;
         // if (info.elapsed_time > 1) self.request_exit = true;
     }
