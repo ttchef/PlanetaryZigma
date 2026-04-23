@@ -76,7 +76,8 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
             const new_player = try info.world.spawn();
             new_player.camera = .{ .transform = .{ .position = .{ 0, 0, 0 } } };
             new_player.transform = .{ .position = .{ 0, 0, 0 } };
-            new_player.flags = .{ .camera = true, .transform = true };
+            new_player.mesh = .{ .id = 0 };
+            new_player.flags = .{ .camera = true, .transform = true, .mesh = true };
             try info.world.enitity_mapping.put(self.gpa, acknowledge.id, new_player.id);
             info.world.my_server_id = acknowledge.id;
             std.log.debug("ack entities: {d}", .{info.world.next_id});
