@@ -44,11 +44,26 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
         if (!entity.flags.transform or !entity.flags.collider) continue;
         const body_id = entity.collider.body_id orelse continue;
 
-        const to_player = player.transform.position - entity.transform.position;
+        var to_player = player.transform.position - entity.transform.position;
         const distance = nz.vec.length(to_player);
         if (distance < 2) continue;
+        std.log.debug("distance: {d}", .{distance});
+        if (distance < 50) {
+            const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
+            body_interface.setRotation(body_id, dir.toVec(), .activate);
+            const force = nz.vec.scale(nz.vec.normalize(to_player), 1000);
+            body_interface.addForce(body_id, force);
+        } else {
+            to_player = -player.transform.position - entity.transform.position;
+            const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
+            body_interface.setRotation(body_id, dir.toVec(), .activate);
+            const force = -nz.vec.scale(nz.vec.normalize(to_player), 1000);
+            body_interface.addForce(body_id, force);
+        }
 
-        const dir = nz.vec.scale(to_player, 1.0 / distance);
-        body_interface.addForce(body_id, nz.vec.scale(dir, 1000));
+        // if (distance < 100) {
+        //     const dir = nz.vec.scale(to_player, 1.0 / distance);
+        //     body_interface.addForce(body_id, nz.vec.scale(dir, 1000));
+        // }
     }
 }

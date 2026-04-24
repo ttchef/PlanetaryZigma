@@ -20,7 +20,7 @@ pub const Camera = struct {
     mode: Mode = .follow,
     yaw_rotation: nz.quat.Hamiltonian(f32) = .identity,
     pitch: f32 = 0,
-    boom_offset: nz.Vec3(f32) = .{ 0, 0, 0 },
+    boom_offset: nz.Vec3(f32) = .{ 0, 0, 40 },
     transform: nz.Transform3D(f32) = .{},
 };
 
