@@ -1,17 +1,17 @@
 const Vertex = @import("../Mesh.zig").Vertex;
 
 pub const vertex_array = [_]Vertex{
-    // Front (+Z)
+    // Back (+Z)
     .{ .position = .{ -1, -1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ 1, -1, 1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ -1, 1, 1 }, .color = .{ 0, 0, 1, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ 1, 1, 1 }, .color = .{ 1, 1, 0, 1 }, .uv_x = 1, .uv_y = 0 },
+    .{ .position = .{ 1, -1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ -1, 1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ 1, 1, 1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
 
-    // Back (-Z)
-    .{ .position = .{ 1, -1, -1 }, .color = .{ 1, 0, 1, 1 }, .uv_x = 0, .uv_y = 1 },
-    .{ .position = .{ -1, -1, -1 }, .color = .{ 0, 1, 1, 1 }, .uv_x = 1, .uv_y = 1 },
-    .{ .position = .{ 1, 1, -1 }, .color = .{ 1, 1, 1, 1 }, .uv_x = 0, .uv_y = 0 },
-    .{ .position = .{ -1, 1, -1 }, .color = .{ 0, 0, 0, 1 }, .uv_x = 1, .uv_y = 0 },
+    // Front (-Z)
+    .{ .position = .{ 1, -1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 1 },
+    .{ .position = .{ -1, -1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 1 },
+    .{ .position = .{ 1, 1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 0, .uv_y = 0 },
+    .{ .position = .{ -1, 1, -1 }, .color = .{ 0, 1, 0, 1 }, .uv_x = 1, .uv_y = 0 },
 
     // Left (-X)
     .{ .position = .{ -1, -1, -1 }, .color = .{ 1, 0, 0, 1 }, .uv_x = 0, .uv_y = 1 },

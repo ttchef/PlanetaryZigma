@@ -5,54 +5,8 @@ const Device = @import("device.zig").Logical;
 const Buffer = @import("Buffer.zig");
 const Vma = @import("Vma.zig");
 
-pub const Planet = @import("Meshes/planet.zig");
+pub const Planet = @import("Meshes/Planet.zig");
 pub const box = @import("Meshes/box.zig");
-
-pub const vertex_array = [_]Vertex{
-    .{
-        .position = .{ 0, 0, -1 },
-        .color = .{ 1, 0, 0, 1 },
-        .uv_x = 0,
-        .uv_y = 0,
-    },
-    .{
-        .position = .{ 1, 0, -1 },
-        .color = .{ 0, 1, 0, 1 },
-        .uv_x = 1,
-        .uv_y = 0,
-    },
-    .{
-        .position = .{ 0, -1, -1 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv_y = 1,
-        .uv_x = 0,
-    },
-    .{
-        .position = .{ 1, -1, -1 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv_y = 1,
-        .uv_x = 1,
-    },
-    .{
-        .position = .{ -0.75, 0.75, -1 },
-        .color = .{ 1, 0, 0, 1 },
-        .uv_x = 0,
-        .uv_y = 0,
-    },
-    .{
-        .position = .{ 0, 0.75, -1 },
-        .color = .{ 0, 1, 0, 1 },
-        .uv_x = 1,
-        .uv_y = 0,
-    },
-    .{
-        .position = .{ -0.75, -0.75, -1 },
-        .color = .{ 0, 0, 1, 1 },
-        .uv_y = 1,
-        .uv_x = 0,
-    },
-};
-pub const indicies_array = [_]u32{ 0, 1, 2, 1, 3, 2, 4, 5, 6 };
 
 // surfaces: std.ArrayList(GeoSurface),
 index_buffer: Buffer,

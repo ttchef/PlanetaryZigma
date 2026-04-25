@@ -2,6 +2,7 @@ const std = @import("std");
 const shared = @import("shared");
 const system = @import("../system.zig");
 const World = system.World;
+const Planet = @import("../Renderer/Vulkan/Mesh.zig").Planet;
 const Info = system.Info;
 const nz = shared.numz;
 
@@ -68,6 +69,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.camera or !entity.flags.transform) continue;
         try self.sendCommand(writer, .{ .input = entity.camera.input_map });
+        entity.camera.input_map.mouse_wheel = 0;
         break;
     }
     try self.command_queue.mutex.lock(self.io);
@@ -94,16 +96,17 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                 .player => new_entity.mesh = .{ .id = 0 },
                 .planet => {
                     const size: u32 = @intCast(spawn_entity.data[0]);
-                    var planet_vertices: shared.Planet = try .init(self.gpa, size);
+                    var planet_vertices: Planet = try .init(self.gpa, size);
                     defer planet_vertices.deinit(self.gpa);
                     system_context.planet.vertices = try .initCapacity(self.gpa, planet_vertices.vertices.items.len);
                     system_context.planet.indices = try .initCapacity(self.gpa, planet_vertices.indices.items.len);
                     system_context.planet.indices.appendSliceAssumeCapacity(planet_vertices.indices.items);
-                    for (planet_vertices.vertices.items) |vertex| {
-                        system_context.planet.vertices.appendAssumeCapacity(.{
-                            .position = vertex[0..3].*,
-                        });
-                    }
+                    system_context.planet.vertices.appendSliceAssumeCapacity(planet_vertices.vertices.items);
+                    // for (planet_vertices.vertices.items) |vertex| {
+                    //     system_context.planet.vertices.appendAssumeCapacity(.{
+                    //         .position = vertex[0..3].*,
+                    //     });
+                    // }
                     const vulkan_mesh_handle = try system_context.renderer.inner.createMesh(
                         self.gpa,
                         "planet",

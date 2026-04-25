@@ -82,6 +82,12 @@ fn marchCube(
     gen_vertices: *std.ArrayList(Vertex),
     gen_indices: *std.ArrayList(u32),
 ) !void {
+    const static = struct {
+        var count: f32 = 0;
+    };
+    static.count += 1;
+    // std.log.debug("count: {d}", .{static.count});
+
     var config_index: u32 = 0;
     const terrain_surface: f32 = 0.5;
     for (0..8) |i| {
@@ -102,7 +108,8 @@ fn marchCube(
                 gpa,
                 .{
                     .position = (vert1 + vert2) / devision,
-                    .color = .{ 1, 0, 0, 1 },
+                    .color = .{ if (postion[1] < 0) 0 else 1, if (postion[0] < 0) 0 else 1, if (postion[2] < 0) 0 else 1, 1 },
+                    // .color = .{ @mod(static.count + 0, 3), @mod(static.count + 1, 3), @mod(static.count + 2, 3), 1 },
                     // .normal = .{ 1, 0, 0 },
                     .uv_x = @floor(@mod(index, 3)),
                     .uv_y = @ceil(@mod(index + 2, 3)),
