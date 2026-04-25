@@ -71,7 +71,8 @@ pub fn spawnPlanet(self: *@This()) !u32 {
     planet_entity.planet = planet_size;
     planet_entity.transform = .{};
     const planet: shared.Planet = try .init(self.gpa, planet_size);
-    std.log.debug("ptr: {*}, len:{d}", .{ planet.vertices.items.ptr, planet.vertices.items.len });
+    std.log.debug("size: {d}", .{@sizeOf(system.Entity)});
+    std.log.debug("vert: {d}, triangles {d}", .{ planet.indices.items.len, planet.indices.items.len / 3 });
 
     planet_entity.collider = .{
         .shape = .{

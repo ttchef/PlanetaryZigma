@@ -39,6 +39,13 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
 
     const body_interface = physics.physics_system.getBodyInterfaceMut();
 
+    var planet_size: f32 = 0;
+    for (info.world.entities.values()) |*entity| {
+        if (entity.flags.planet == true) {
+            planet_size = @floatFromInt(entity.planet);
+            break;
+        }
+    }
     for (info.world.entities.values()) |*entity| {
         if (entity.kind != .enemy) continue;
         if (!entity.flags.transform or !entity.flags.collider) continue;
@@ -47,17 +54,21 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
         var to_player = player.transform.position - entity.transform.position;
         const distance = nz.vec.length(to_player);
         if (distance < 2) continue;
-        std.log.debug("distance: {d}", .{distance});
-        if (distance < 50) {
+        const power: u32 = 1000;
+        // const forward = entity.transform.forward();
+        // const forward: nz.quat.Hamiltonian(f32) = .fromEuler(forward_vec);
+
+        // std.log.debug("distance: {d}", .{distance});
+        if (distance < planet_size / 2) {
             const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
             body_interface.setRotation(body_id, dir.toVec(), .activate);
-            const force = nz.vec.scale(nz.vec.normalize(to_player), 1000);
+            const force = nz.vec.scale(nz.vec.normalize(to_player), power);
             body_interface.addForce(body_id, force);
         } else {
             to_player = -player.transform.position - entity.transform.position;
             const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
             body_interface.setRotation(body_id, dir.toVec(), .activate);
-            const force = -nz.vec.scale(nz.vec.normalize(to_player), 1000);
+            const force = -nz.vec.scale(nz.vec.normalize(to_player), power);
             body_interface.addForce(body_id, force);
         }
 

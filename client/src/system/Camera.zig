@@ -21,6 +21,7 @@ transform: nz.Transform3D(f32) = .{},
 
 pub fn update(self: *@This(), info: *const Info) void {
     _ = info;
+
     self.input_map.mouse_delta[0] = self.mouse_pos[0] - self.mouse_prev_pos[0];
     self.input_map.mouse_delta[1] = self.mouse_pos[1] - self.mouse_prev_pos[1];
     self.mouse_prev_pos[0] = self.mouse_pos[0];
@@ -123,6 +124,7 @@ pub fn update(self: *@This(), info: *const Info) void {
 
 pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.Event) !void {
     _ = info;
+
     switch (event.*) {
         .key => |key| {
             const pressed = key.state == .pressed;
@@ -140,7 +142,6 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
         .mouse_scroll => switch (event.mouse_scroll) {
             .vertical => |scroll| {
                 self.input_map.mouse_wheel = scroll;
-                self.speed += @floatCast(scroll);
             },
             .horizontal => {},
         },

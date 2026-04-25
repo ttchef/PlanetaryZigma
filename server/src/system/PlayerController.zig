@@ -27,6 +27,9 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const transform = &entity.transform;
         const input = &entity.input;
 
+        camera.boom_offset[2] += @floatCast(-input.mouse_wheel);
+        camera.boom_offset[2] = std.math.clamp(camera.boom_offset[2], 0, 1000);
+
         // Planet-relative up is derived from the body's world position each frame.
         const planet_up = nz.vec.normalize(transform.position);
 
