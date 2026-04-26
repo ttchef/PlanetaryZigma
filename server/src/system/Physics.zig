@@ -325,7 +325,7 @@ fn alignToPlanet(self: *@This(), info: *const system.Info) void {
         const transform = &entity.transform;
 
         const desired_up: nz.Vec3(f32) = nz.vec.normalize(transform.position);
-        const current_up: nz.Vec3(f32) = transform.up2();
+        const current_up: nz.Vec3(f32) = transform.up();
 
         const d = std.math.clamp(nz.vec.dot(current_up, desired_up), -1.0, 1.0);
         if (d >= 0.9999) continue;

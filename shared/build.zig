@@ -5,7 +5,6 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
-    const ecz = b.dependency("ecz", .{ .target = target, .optimize = optimize }).module("ecz");
 
     const shared = b.addModule("shared", .{
         .root_source_file = b.path("root.zig"),
@@ -13,7 +12,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "numz", .module = numz },
-            .{ .name = "ecz", .module = ecz },
         },
     });
 

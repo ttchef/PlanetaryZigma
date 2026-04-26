@@ -30,7 +30,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
     for (info.world.entities.values()) |*entity| {
         if (entity.kind == .player) {
             player = entity;
-            if (player.input.mouse_button_left) {
+            if (player.input.mouse_button_left and player.input.mouse_button_right) {
                 _ = try spawner.spawnEnemy();
             }
             break;
@@ -51,27 +51,35 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
         if (!entity.flags.transform or !entity.flags.collider) continue;
         const body_id = entity.collider.body_id orelse continue;
 
-        var to_player = player.transform.position - entity.transform.position;
+        const to_player = player.transform.position - entity.transform.position;
         const distance = nz.vec.length(to_player);
-        if (distance < 2) continue;
+
+        const planet_up = nz.vec.normalize(entity.transform.position);
+        const rot = nz.quat.Hamiltonian(f32).lookAt(to_player, planet_up);
+        body_interface.setRotation(body_id, rot.toVec(), .activate);
+
+        if (distance < 10) continue;
         const power: u32 = 1000;
+        const force = nz.vec.scale(nz.vec.normalize(entity.transform.forward()), power);
+        body_interface.addForce(body_id, force);
+
         // const forward = entity.transform.forward();
         // const forward: nz.quat.Hamiltonian(f32) = .fromEuler(forward_vec);
 
         // std.log.debug("distance: {d}", .{distance});
-        if (distance < planet_size / 2) {
-            const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
-            body_interface.setRotation(body_id, dir.toVec(), .activate);
-            const force = nz.vec.scale(nz.vec.normalize(to_player), power);
-            body_interface.addForce(body_id, force);
-        } else {
-            to_player = -player.transform.position - entity.transform.position;
-            const dir = nz.quat.Hamiltonian(f32).fromEuler(nz.vec.normalize(to_player));
-            body_interface.setRotation(body_id, dir.toVec(), .activate);
-            const force = -nz.vec.scale(nz.vec.normalize(to_player), power);
-            body_interface.addForce(body_id, force);
-        }
-
+        // if (distance < planet_size / 2) {
+        //     const dir = nz.quat.Hamiltonian(f32).fromEuler(to_player);
+        //     body_interface.setRotation(body_id, dir.toVec(), .activate);
+        //     const force = nz.vec.scale(nz.vec.normalize(to_player), power);
+        //     body_interface.addForce(body_id, force);
+        // } else {
+        //     to_player = -player.transform.position - entity.transform.position;
+        //     const dir = nz.quat.Hamiltonian(f32).fromEuler(to_player);
+        //     body_interface.setRotation(body_id, dir.toVec(), .activate);
+        //     const force = -nz.vec.scale(nz.vec.normalize(to_player), power);
+        //     body_interface.addForce(body_id, force);
+        // }
+        //
         // if (distance < 100) {
         //     const dir = nz.vec.scale(to_player, 1.0 / distance);
         //     body_interface.addForce(body_id, nz.vec.scale(dir, 1000));

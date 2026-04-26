@@ -315,6 +315,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     } else {
         ext.vkCmdSetPolygonModeEXT(cmd, c.VK_POLYGON_MODE_FILL);
+
         ext.vkCmdSetCullModeEXT(cmd, c.VK_CULL_MODE_BACK_BIT);
     }
     ext.vkCmdSetFrontFaceEXT(cmd, c.VK_FRONT_FACE_COUNTER_CLOCKWISE);
