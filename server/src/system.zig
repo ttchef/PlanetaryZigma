@@ -65,7 +65,9 @@ pub const World = struct {
     next_id: u32 = 1,
 
     pub fn init(gpa: std.mem.Allocator) !@This() {
-        return .{ .gpa = gpa };
+        return .{
+            .gpa = gpa,
+        };
     }
     pub fn deinit(self: *@This()) void {
         for (self.entities.values()) |*entity| entity.deinit(self.gpa);
@@ -75,7 +77,7 @@ pub const World = struct {
     pub fn spawn(self: *@This()) !*Entity {
         const id = self.next_id;
         self.next_id += 1;
-        try self.entities.put(self.gpa, id, .{ .id = id });
+        self.entities.putAssumeCapacity(id, .{ .id = id });
         return self.entities.getPtr(id).?;
     }
 
@@ -119,6 +121,7 @@ pub const Context = struct {
             .player_controller = undefined,
             .camera_controller = undefined,
         };
+        try self.world.entities.ensureTotalCapacity(data.gpa, 1000);
         try self.physics.init(data.gpa, data.io);
         try self.player_controller.init(&self.physics);
         try self.camera_controller.init();
