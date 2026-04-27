@@ -121,6 +121,7 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner) !void {
                     std.log.debug("player disconnect", .{});
                 },
                 .input => {
+                    // std.log.debug("got input from {d}", .{client.entity_id});
                     if (world.get(client.entity_id)) |entity| {
                         entity.input = command.input;
                     }

@@ -54,13 +54,27 @@ pub fn update(self: *@This(), info: *const Info, spawner: *Spawner, physics: *co
         const to_player = player.transform.position - entity.transform.position;
         const distance = nz.vec.length(to_player);
 
-        const planet_up = nz.vec.normalize(entity.transform.position);
-        const rot = nz.quat.Hamiltonian(f32).lookAt(to_player, planet_up);
-        body_interface.setRotation(body_id, rot.toVec(), .activate);
+        // entity.transform = player.transform;
+
+        // Skip entities at (or near) world origin — planet_up is undefined there
+        // and `nz.vec.normalize` returns the input unchanged on zero length.
+        const up_len = nz.vec.length(entity.transform.position);
+        if (up_len < 0.0001) continue;
+        const planet_up = nz.vec.scale(entity.transform.position, 1.0 / up_len);
+
+        // Project onto the tangent plane so enemies yaw toward the player but never pitch.
+        // Skips when projection is degenerate (player on top of, or along up from, the enemy).
+        const fwd_proj = to_player - nz.vec.scale(planet_up, nz.vec.dot(to_player, planet_up));
+        if (nz.vec.length(fwd_proj) > 0.0001) {
+            const forward = nz.vec.normalize(fwd_proj);
+            const rot = nz.quat.Hamiltonian(f32).lookAt(forward, planet_up).normalize();
+            body_interface.setRotation(body_id, rot.toVec(), .activate);
+        }
 
         if (distance < 10) continue;
-        const power: u32 = 1000;
+        const power: u32 = 100000;
         const force = nz.vec.scale(nz.vec.normalize(entity.transform.forward()), power);
+        // body_interface.addImpulse(body_id, force);
         body_interface.addForce(body_id, force);
 
         // const forward = entity.transform.forward();

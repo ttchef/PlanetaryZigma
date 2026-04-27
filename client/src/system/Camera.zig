@@ -127,6 +127,8 @@ pub fn eventUpdate(self: *@This(), info: *const Info, event: *const yes.Window.E
 
     switch (event.*) {
         .key => |key| {
+            // std.log.debug("pressed", .{});
+
             const pressed = key.state == .pressed;
             switch (key.sym) {
                 .w => self.input_map.forward = pressed,

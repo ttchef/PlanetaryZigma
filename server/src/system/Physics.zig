@@ -180,10 +180,10 @@ pub fn init(self: *@This(), gpa: std.mem.Allocator, io: std.Io) !void {
         @as(*const zphy.ObjectVsBroadPhaseLayerFilter, @ptrCast(@alignCast(object_vs_broad_phase_layer_filter))),
         @as(*const zphy.ObjectLayerPairFilter, @ptrCast(@alignCast(object_layer_pair_filter))),
         .{
-            .max_bodies = 1024,
+            .max_bodies = 4096,
             .num_body_mutexes = 0,
-            .max_body_pairs = 1024,
-            .max_contact_constraints = 1024,
+            .max_body_pairs = 16384,
+            .max_contact_constraints = 8192,
         },
     );
 
@@ -252,7 +252,6 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
         self.global_state_reload = zphy.preReload();
     } else {
         zphy.postReload(self.gpa, self.io, self.global_state_reload);
-        std.log.debug("XDDD", .{});
 
         // Refresh vtable pointers FIRST - before creating physics system
         self.broad_phase_layer_interface.broad_phase_layer_interface = zphy.BroadPhaseLayerInterface.init(BroadPhaseLayerInterface);
@@ -266,10 +265,10 @@ pub fn reload(self: *@This(), pre_reload: bool, world: *system.World) !void {
             @as(*const zphy.ObjectVsBroadPhaseLayerFilter, @ptrCast(@alignCast(self.object_vs_broad_phase_layer_filter))),
             @as(*const zphy.ObjectLayerPairFilter, @ptrCast(@alignCast(self.object_layer_pair_filter))),
             .{
-                .max_bodies = 1024,
+                .max_bodies = 4096,
                 .num_body_mutexes = 0,
-                .max_body_pairs = 1024,
-                .max_contact_constraints = 1024,
+                .max_body_pairs = 16384,
+                .max_contact_constraints = 8192,
             },
         ) catch unreachable;
         self.physics_system.setGravity(.{ 0, 0, 0 });
@@ -290,7 +289,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const entity = info.world.get(@intCast(body.user_data)) orelse continue;
         const up = nz.vec.normalize(entity.transform.position);
         const force = -up;
-        body.addForce(nz.vec.scale(force, 1000));
+        body.addForce(nz.vec.scale(force, 1000000));
     }
 
     self.physics_system.update(info.delta_time, .{}) catch unreachable;
@@ -396,6 +395,9 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
         .user_data = entity.id,
         .angular_velocity = .{ 0.0, 0.0, 0.0, 0 },
         .allowed_DOFs = translation_only,
+        .override_mass_properties = .calc_inertia,
+        .mass_properties_override = .{ .mass = 10000 },
+        .max_linear_velocity = 10000,
     }, .activate);
     collider.body_id = body_id;
 }
