@@ -68,6 +68,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
     const writer = &fix_writer;
     for (info.world.entities.values()) |*entity| {
         if (!entity.flags.camera or !entity.flags.transform) continue;
+
         try self.sendCommand(writer, .{ .input = entity.camera.input_map });
         entity.camera.input_map.mouse_wheel = 0;
         break;

@@ -45,7 +45,7 @@ pub fn main(init: std.process.Init) !void {
         try world.mutex.lock(io);
         count += 1;
 
-        system_table.systemContextUpdate(&system_context, &.{ .delta_time = 1, .elapsed_time = elapsed_time, .world = &world });
+        system_table.systemContextUpdate(&system_context, &.{ .delta_time = time_step, .elapsed_time = elapsed_time, .world = &world });
         if (try watcher.reload(io)) {
             system_table.systemContextReload(&system_context, true);
             std.log.debug("system table updated", .{});

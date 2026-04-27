@@ -75,6 +75,7 @@ pub const World = struct {
     }
 
     pub fn spawn(self: *@This()) !*Entity {
+        std.debug.assert(self.entities.entries.len < 1000);
         const id = self.next_id;
         self.next_id += 1;
         self.entities.putAssumeCapacity(id, .{ .id = id });

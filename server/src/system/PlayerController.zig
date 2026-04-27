@@ -34,7 +34,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         const planet_up = nz.vec.normalize(transform.position);
 
         // --- Look input ---
-        const sensitivity: f32 = 0.01;
+        const sensitivity: f32 = 1;
         const delta_yaw: f32 = @floatCast(-input.mouse_delta[0] * sensitivity * info.delta_time);
         const delta_pitch: f32 = @floatCast(-input.mouse_delta[1] * sensitivity * info.delta_time);
 
@@ -79,7 +79,7 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
         // --- Apply to body ---
         if (entity.collider.body_id) |id| {
             var move: nz.Vec3(f32) = .{ 0, 0, 0 };
-            const velocity: f32 = 1;
+            const velocity: f32 = 1000;
 
             if (input.forward) move += nz.vec.scale(move_fwd, velocity);
             if (input.backward) move -= nz.vec.scale(move_fwd, velocity);

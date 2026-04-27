@@ -262,7 +262,7 @@ pub fn render(self: *@This(), cmd: c.VkCommandBuffer, current_frame: *Swapchain.
         .clearValue = .{
             .color = .{
                 // .float32 = .{ (@sin(info.elapsed_time) + 1) / 2, (@cos(info.elapsed_time) + 1) / 2, (@tan(info.elapsed_time) + 1) / 2, 1.0 },
-                .float32 = .{ 0, 0, 1, 1 },
+                .float32 = .{ 0, 0, 0, 1 },
             },
         },
     };
