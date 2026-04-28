@@ -139,7 +139,7 @@ pub const Context = struct {
 
     pub fn update(self: *@This(), info: *const Info) !void {
         try self.network_manager.update(info, &self.spawner);
-        try self.player_controller.update(info);
+        try self.player_controller.update(info, self);
         try self.game.update(info, &self.spawner, &self.physics);
         try self.physics.update(info);
         try self.camera_controller.update(info);

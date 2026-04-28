@@ -16,7 +16,7 @@ pub fn deinit(self: *@This()) void {
 
 //NOTE: AI generated I have no idea about the math
 
-pub fn update(self: *@This(), info: *const system.Info) !void {
+pub fn update(self: *@This(), info: *const system.Info, system_context: *system.Context) !void {
     const body_interface = self.physics.physics_system.getBodyInterfaceMut();
 
     for (info.world.entities.values()) |*entity| {
@@ -45,6 +45,16 @@ pub fn update(self: *@This(), info: *const system.Info) !void {
             // Pitch stays as a scalar and is composed on top of yaw at render time.
             const pitch_limit: f32 = std.math.pi / 2.0 - 0.01;
             camera.pitch = std.math.clamp(camera.pitch + delta_pitch, -pitch_limit, pitch_limit);
+        }
+        if (input.mouse_button_left) {
+            _ = try system_context.spawner.spawn(
+                .{
+                    .kind = .bullet,
+                    .transform = .{ .position = entity.transform.position, .rotation = camera.transform.rotation },
+                    .collider = .{ .shape = .{ .primitive = .{ .box = .{ .size = 0.1 } } }, .motion_type = .dynamic },
+                    .flags = .{ .transform = true, .collider = true, .align_to_planet = true },
+                },
+            );
         }
 
         // Consumed: don't keep applying stale input next frame if the client stops sending packets.
