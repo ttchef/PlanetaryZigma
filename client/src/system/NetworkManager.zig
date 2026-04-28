@@ -118,6 +118,7 @@ pub fn update(self: *@This(), system_context: *system.Context, info: *const Info
                     new_entity.mesh = .{ .id = @intCast(vulkan_mesh_handle) };
                 },
                 .enemy => new_entity.mesh = .{ .id = 0 },
+                .bullet => new_entity.mesh = .{ .id = 0 },
                 .unknown => @panic("unknown entity type... wtf"),
             }
 

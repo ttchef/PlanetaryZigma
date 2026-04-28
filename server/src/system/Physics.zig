@@ -15,11 +15,18 @@ object_vs_broad_phase_layer_filter: *ObjectVsBroadPhaseLayerFilter,
 contact_listener: *ContactListener,
 
 pub const Collider = struct {
-    const Primitive = enum {
-        capsule,
-        box,
-        sphere,
+    const Primitive = union(enum) {
+        box: struct {
+            size: f32,
+        },
+        capsule: struct {
+            size: f32,
+        },
+        sphere: struct {
+            size: f32,
+        },
     };
+
     const Mesh = struct {
         // render_handle: usize,
         indices: std.ArrayList(u32),
@@ -350,9 +357,9 @@ pub fn createBody(self: *@This(), entity: *system.Entity) !void {
     const body_interface = self.physics_system.getBodyInterfaceMut();
 
     const shape = switch (collider.shape) {
-        .primitive => |primitive_shape| switch (primitive_shape) {
-            .box => shape: {
-                const settings = try zphy.BoxShapeSettings.create(.{ 1, 1, 1 });
+        .primitive => |primitive| switch (primitive) {
+            .box => |box| shape: {
+                const settings = try zphy.BoxShapeSettings.create(.{ box.size, box.size, box.size });
                 defer settings.asShapeSettings().release();
                 break :shape try settings.asShapeSettings().createShape();
             },

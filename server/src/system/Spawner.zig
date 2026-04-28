@@ -33,7 +33,7 @@ pub fn spawnConnectPlayer(self: *@This()) !u32 {
     entity.kind = .player;
     entity.transform = .{ .position = .{ 0, 0, 100 } };
     entity.collider = .{
-        .shape = .{ .primitive = .box },
+        .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
         .motion_type = .dynamic,
     };
     entity.camera = .{ .transform = .{ .position = .{ 0, 0, 100 } } };
@@ -54,7 +54,7 @@ pub fn spawnEnemy(self: *@This()) !u32 {
     entity.kind = .enemy;
     entity.transform = .{ .position = .{ 0, 0, 100 } };
     entity.collider = .{
-        .shape = .{ .primitive = .box },
+        .shape = .{ .primitive = .{ .box = .{ .size = 1 } } },
         .motion_type = .dynamic,
     };
     entity.flags = .{ .transform = true, .collider = true, .align_to_planet = true };
@@ -87,6 +87,18 @@ pub fn spawnPlanet(self: *@This()) !u32 {
     try self.physics.createBody(planet_entity);
     std.log.debug("OK ", .{});
     return planet_entity.id;
+}
+
+pub fn spawn(self: *@This(), entity_info: system.Entity) !u32 {
+    const entity = try self.world.spawn();
+    const id: u32 = entity.id;
+    entity.* = entity_info;
+    entity.id = id;
+    if (entity.flags.collider) {
+        try self.physics.createBody(entity);
+    }
+    try self.network_pending_spawn.append(self.gpa, .{ .id = entity.id, .kind = entity.kind });
+    return entity.id;
 }
 
 pub fn depspawn(self: *@This(), entity_id: u32) !void {

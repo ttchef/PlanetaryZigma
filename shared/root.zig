@@ -12,4 +12,5 @@ pub const EntityKind = enum(u16) {
     player,
     planet,
     enemy,
+    bullet,
 };
